@@ -1,0 +1,15 @@
+appId: com.dmmstudios.os
+productName: DMM OS
+directories:
+  output: dist
+files:
+  - out/**/*
+  - package.json
+extraResources:
+  - from: drizzle
+    to: drizzle
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+mac:
+  category: public.app-category.business
+  target: dir
