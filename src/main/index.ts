@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { createBackupService, installRestore, stageRestore } from './backup'
-import { openDatabase } from './db'
+import { createDatabase, type Conexion } from './db'
 import { registerIpc } from './ipc'
 
 app.setName('DMM OS')
@@ -36,10 +36,12 @@ app.whenReady().then(() => {
   const migrationsFolder = app.isPackaged ? join(process.resourcesPath, 'drizzle') : join(app.getAppPath(), 'drizzle')
   const backupsDir = join(homedir(), 'Desktop', 'Vault', 'Backups', 'DMM OS', 'DB')
 
-  let opened: ReturnType<typeof openDatabase>
+  const database = createDatabase(migrationsFolder)
+
+  let conexion: Conexion
   try {
-    opened = openDatabase(dbPath, migrationsFolder, {
-      beforeMigrate: (s) => createBackupService({ sqlite: s, dir: backupsDir }).backupNow('migracion')
+    conexion = database.abrir(dbPath, {
+      antesDeMigrar: (c) => createBackupService({ conexion: c, dir: backupsDir }).backupNow('migracion')
     })
   } catch (e) {
     // No migration runs without its backup; tell the user instead of exiting silently.
@@ -47,10 +49,10 @@ app.whenReady().then(() => {
     app.exit(1)
     return
   }
-  const { sqlite, close } = opened
+  const close = () => conexion.close()
   app.on('will-quit', close)
 
-  const respaldos = createBackupService({ sqlite, dir: backupsDir })
+  const respaldos = createBackupService({ conexion, dir: backupsDir })
   const scheduled = () => {
     try {
       respaldos.respaldarSiToca()
@@ -81,7 +83,7 @@ app.whenReady().then(() => {
         source = picked.filePaths[0]
       }
       // Stage first: the safety backup below may prune the file being restored.
-      const staged = stageRestore(source, dbPath, migrationsFolder)
+      const staged = stageRestore(source, dbPath, database)
       try {
         respaldos.backupNow('antes-de-restaurar')
       } catch (e) {

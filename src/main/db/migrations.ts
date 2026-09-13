@@ -14,9 +14,3 @@ export function lastApplied(sqlite: Database.Database): number | null {
   const row = sqlite.prepare('select max(created_at) as t from __drizzle_migrations').get() as { t: number | null }
   return row.t
 }
-
-/** True when an already-migrated database has migrations waiting (drizzle applies those newer than the last one). */
-export function hasPendingMigrations(sqlite: Database.Database, migrationsFolder: string): boolean {
-  const last = lastApplied(sqlite)
-  return last !== null && journalTimes(migrationsFolder).some((when) => when > last)
-}
