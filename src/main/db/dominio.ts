@@ -143,22 +143,35 @@ function periodosHasta(
 
 /**
  * Periodo generado: lazily creates Ingreso/Costo rows from definitions up to `periodoActual`.
- * Idempotent (unique on definition + period). Monthly Ingreso series stop once the Proyecto is
- * completed or cancelled.
+ * Idempotent (unique on definition + period). Ingreso series stop once their Proyecto or
+ * Cotización is cancelled; monthly series also stop when the Proyecto is completed.
  */
 export function generarPeriodos(db: Db, periodoActual: string) {
   db.transaction((tx) => {
-    const cerrados = new Set(
+    const proyectosCerrados = new Map(
       tx
-        .select({ id: proyectos.id })
+        .select({ id: proyectos.id, estado: proyectos.estado })
         .from(proyectos)
         .where(inArray(proyectos.estado, ['completado', 'cancelado']))
         .all()
-        .map((p) => p.id)
+        .map((p) => [p.id, p.estado])
+    )
+    const cotizacionesCanceladas = new Set(
+      tx
+        .select({ id: cotizaciones.id })
+        .from(cotizaciones)
+        .where(eq(cotizaciones.estado, 'cancelada'))
+        .all()
+        .map((c) => c.id)
     )
 
     for (const d of tx.select().from(definicionesIngreso).all()) {
-      if (d.tipo === 'mensual' && d.proyectoId !== null && cerrados.has(d.proyectoId)) continue
+      const estadoProyecto = d.proyectoId !== null ? proyectosCerrados.get(d.proyectoId) : undefined
+      const cancelada =
+        estadoProyecto === 'cancelado' ||
+        (d.cotizacionId !== null && cotizacionesCanceladas.has(d.cotizacionId))
+      // Cancelled series stop; monthly series also stop once the Proyecto is completed.
+      if (cancelada || (d.tipo === 'mensual' && estadoProyecto === 'completado')) continue
       const periodos = periodosHasta(
         d.periodoInicio,
         periodoActual,

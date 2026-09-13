@@ -15,6 +15,13 @@
       "when": 1789285286825,
       "tag": "0001_modelo_de_datos",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789285517013,
+      "tag": "0002_revision_modelo",
+      "breakpoints": true
     }
   ]
 }

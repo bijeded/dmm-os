@@ -222,6 +222,26 @@ describe('generarPeriodos', () => {
     expect(db.select().from(ingresos).all()).toHaveLength(1)
   })
 
+  it('stops installment Ingresos once the Cotización is cancelled', () => {
+    const c = contacto()
+    const q = cotizacionAceptada(c.id)
+    db.insert(definicionesIngreso)
+      .values({
+        cotizacionId: q.id,
+        tipo: 'parcialidades',
+        numeroParcialidades: 6,
+        categoria: 'sin_factura',
+        subtotal: 1,
+        total: 1,
+        periodoInicio: '2026-01'
+      })
+      .run()
+    generarPeriodos(db, '2026-01')
+    cancelar(db, 'cotizacion', q.id)
+    generarPeriodos(db, '2026-04')
+    expect(db.select().from(ingresos).all().map((r) => r.estado)).toEqual(['cancelado'])
+  })
+
   it('limits installments and applies Vigencia de precio from its date forward', () => {
     const d = db
       .insert(definicionesCosto)

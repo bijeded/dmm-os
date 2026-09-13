@@ -19,6 +19,9 @@ const creadoEn = () =>
     .notNull()
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`)
 
+const cuadraTotal = (t: { subtotal: AnySQLiteColumn; iva: AnySQLiteColumn; total: AnySQLiteColumn }) =>
+  sql`${t.total} = ${t.subtotal} + ${t.iva}`
+
 const montos = () => ({
   subtotal: integer('subtotal').notNull(),
   iva: integer('iva').notNull().default(0),
@@ -71,7 +74,7 @@ export const cotizaciones = sqliteTable(
       .default('unica'),
     terminos: text('terminos'),
     notas: text('notas'),
-    pdfRuta: text('pdf_ruta'),
+    pdfRutaRelativa: text('pdf_ruta'),
     creadoEn: creadoEn()
   },
   (t) => [
@@ -120,7 +123,7 @@ export const ubicacionesArchivo = sqliteTable(
     id: integer('id').primaryKey({ autoIncrement: true }),
     proyectoId: integer('proyecto_id')
       .notNull()
-      .references(() => proyectos.id, { onDelete: 'cascade' }),
+      .references(() => proyectos.id, { onDelete: 'restrict' }),
     tipo: text('tipo', { enum: ['proyectos', 'hdd_externo', 'google_drive'] }).notNull(),
     rutaRelativa: text('ruta_relativa').notNull(),
     disponible: integer('disponible', { mode: 'boolean' }).notNull().default(true),
@@ -149,6 +152,7 @@ export const definicionesIngreso = sqliteTable(
     creadoEn: creadoEn()
   },
   (t) => [
+    check('definiciones_ingreso_total', cuadraTotal(t)),
     check(
       'definiciones_ingreso_parcialidades',
       sql`(${t.tipo} = 'parcialidades') = (${t.numeroParcialidades} IS NOT NULL)`
@@ -190,7 +194,10 @@ export const vigenciasPrecio = sqliteTable(
     desde: text('desde').notNull(),
     ...montos()
   },
-  (t) => [uniqueIndex('vigencias_definicion_desde_unique').on(t.definicionCostoId, t.desde)]
+  (t) => [
+    uniqueIndex('vigencias_definicion_desde_unique').on(t.definicionCostoId, t.desde),
+    check('vigencias_total', cuadraTotal(t))
+  ]
 )
 
 export const ingresos = sqliteTable(
@@ -230,7 +237,9 @@ export const ingresos = sqliteTable(
       'ingresos_estado_facturacion',
       sql`(${t.categoria} = 'factura') = (${t.estadoFacturacion} IS NOT NULL)`
     ),
-    check('ingresos_reembolso_negativo', sql`${t.reembolsoDeId} IS NULL OR ${t.total} < 0`)
+    check('ingresos_total', cuadraTotal(t)),
+    // Reembolso: negative exactly when linked to the original Ingreso
+    check('ingresos_reembolso_negativo', sql`(${t.reembolsoDeId} IS NOT NULL) = (${t.total} < 0)`)
   ]
 )
 
@@ -262,6 +271,7 @@ export const costos = sqliteTable(
     creadoEn: creadoEn()
   },
   (t) => [
+    check('costos_total', cuadraTotal(t)),
     uniqueIndex('costos_cfdi_unique').on(t.cfdiUuid),
     uniqueIndex('costos_definicion_periodo_unique').on(t.definicionId, t.periodo),
     index('costos_proyecto_idx').on(t.proyectoId)
