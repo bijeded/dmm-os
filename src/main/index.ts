@@ -1,0 +1,45 @@
+import { join } from 'node:path'
+import { homedir } from 'node:os'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { openDatabase } from './db'
+import { registerIpc } from './ipc'
+
+app.setName('DMM OS')
+
+function createWindow(): void {
+  const win = new BrowserWindow({
+    width: 1440,
+    height: 900,
+    minWidth: 960,
+    minHeight: 600,
+    show: false,
+    backgroundColor: '#0A0A0B',
+    titleBarStyle: 'hiddenInset',
+    webPreferences: { preload: join(import.meta.dirname, '../preload/index.mjs'), sandbox: false }
+  })
+  win.once('ready-to-show', () => win.show())
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL)
+  else win.loadFile(join(import.meta.dirname, '../renderer/index.html'))
+}
+
+app.whenReady().then(() => {
+  // ~/Library/Application Support/DMM OS/
+  const dbPath = join(app.getPath('userData'), 'dmm-os.db')
+  const migrationsFolder = app.isPackaged ? join(process.resourcesPath, 'drizzle') : join(app.getAppPath(), 'drizzle')
+  const { close } = openDatabase(dbPath, migrationsFolder)
+  app.on('will-quit', close)
+
+  registerIpc(ipcMain, { version: app.getVersion(), dbPath, dmmOsRoot: join(homedir(), 'Desktop', 'DMM OS') })
+  createWindow()
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+})
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit()
+})

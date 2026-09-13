@@ -1,3 +1,8 @@
 .DS_Store
 .agents/
 .claude/
+node_modules/
+out/
+dist/
+*.db
+*.db-journal
