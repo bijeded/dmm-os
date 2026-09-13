@@ -1,4 +1,6 @@
-import { resolve } from 'node:path'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { openDatabase } from './index'
 import { settings } from './schema'
@@ -14,10 +16,12 @@ describe('openDatabase', () => {
   })
 
   it('is idempotent when opened twice on the same file', () => {
-    const file = resolve(import.meta.dirname, `../../../node_modules/.tmp-test-${process.pid}.db`)
+    const dir = mkdtempSync(join(tmpdir(), 'dmm-os-test-'))
+    const file = join(dir, 'test.db')
     openDatabase(file, migrationsFolder).close()
     const { db, close } = openDatabase(file, migrationsFolder)
     expect(db.select().from(settings).all()).toEqual([])
     close()
+    rmSync(dir, { recursive: true, force: true })
   })
 })

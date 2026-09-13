@@ -19,7 +19,7 @@ function createWindow(): void {
   })
   win.once('ready-to-show', () => win.show())
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    if (/^https?:\/\//.test(url)) shell.openExternal(url)
     return { action: 'deny' }
   })
   if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL)

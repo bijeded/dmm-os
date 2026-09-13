@@ -17,6 +17,10 @@ describe('stored paths (ADR 0001)', () => {
     expect(toAbsolute(root, toRelative(root, abs))).toBe(abs)
   })
 
+  it('accepts names inside the root that start with dots', () => {
+    expect(toRelative(root, '/Users/fv/Desktop/DMM OS/..notas/x.pdf')).toBe('..notas/x.pdf')
+  })
+
   it('rejects locations outside the root', () => {
     expect(() => toRelative(root, '/Users/fv/Desktop/Otro/x.pdf')).toThrow()
     expect(() => toAbsolute(root, '../Otro/x.pdf')).toThrow()
