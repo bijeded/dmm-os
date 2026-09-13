@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { EstadoRespaldos } from '../../../shared/ipc'
+import type { EstadoRespaldos, MotivoRespaldo } from '../../../shared/ipc'
 import { Button } from './ui/button'
 
 const fecha = (iso: string) => new Date(iso).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
 
-const motivos: Record<string, string> = {
+const motivos: Record<MotivoRespaldo, string> = {
   semanal: 'Semanal',
   migracion: 'Antes de migración',
   manual: 'Manual',
@@ -12,7 +12,7 @@ const motivos: Record<string, string> = {
 }
 
 // Electron wraps main-process errors as "Error invoking remote method '…': Error: <message>".
-const mensaje = (e: unknown) => String(e instanceof Error ? e.message : e).replace(/^.*Error: /, '')
+const mensaje = (e: unknown) => String(e instanceof Error ? e.message : e).replace(/^Error invoking remote method '[^']*': (?:Error: )?/, '')
 
 export function Configuracion() {
   const api = window.dmm.respaldos
@@ -102,7 +102,7 @@ export function Configuracion() {
               {estado.respaldos.map((r) => (
                 <li key={r.path} className="flex items-center justify-between gap-3 border-t border-border pt-2 text-[13px]">
                   <span>
-                    {fecha(r.creadoEn)} <span className="text-on-surface-muted">· {motivos[r.motivo] ?? r.motivo} · {Math.ceil(r.bytes / 1024)} KB</span>
+                    {fecha(r.creadoEn)} <span className="text-on-surface-muted">· {motivos[r.motivo]} · {Math.ceil(r.bytes / 1024)} KB</span>
                   </span>
                   <Button variant="ghost" disabled={ocupado} onClick={() => setConfirmar({ path: r.path })}>
                     Restaurar

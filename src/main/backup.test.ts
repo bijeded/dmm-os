@@ -61,6 +61,18 @@ describe('backup service', () => {
     expect(kept[3].creadoEn).toBe('2026-01-04T00:00:00.000Z')
   })
 
+  it('counts retention per motivo so manual backups never push out weekly ones', () => {
+    const { sqlite, close } = openAt(join(dir, 'app.db'))
+    let t = Date.parse('2026-01-01T00:00:00Z')
+    const service = createBackupService({ sqlite, dir: join(dir, 'v'), now: () => new Date((t += day)) })
+    for (let i = 0; i < 4; i++) service.backupNow('semanal')
+    for (let i = 0; i < 5; i++) service.backupNow('manual')
+    close()
+    const kept = listBackups(join(dir, 'v'))
+    expect(kept.filter((b) => b.motivo === 'semanal')).toHaveLength(4)
+    expect(kept.filter((b) => b.motivo === 'manual')).toHaveLength(4)
+  })
+
   it('reads and stores frequency and retention in settings, defaulting to weekly and 4', () => {
     const { sqlite, close } = openAt(join(dir, 'app.db'))
     const service = createBackupService({ sqlite, dir: join(dir, 'v') })
@@ -79,6 +91,11 @@ describe('backup service', () => {
     now = new Date('2026-09-05T00:00:00Z')
     expect(service.respaldarSiToca()).toBeNull()
     now = new Date('2026-09-08T00:00:00Z')
+    expect(service.respaldarSiToca()?.motivo).toBe('semanal')
+    // A manual backup does not reset the weekly clock.
+    now = new Date('2026-09-14T00:00:00Z')
+    service.backupNow('manual')
+    now = new Date('2026-09-15T00:00:00Z')
     expect(service.respaldarSiToca()?.motivo).toBe('semanal')
     close()
   })

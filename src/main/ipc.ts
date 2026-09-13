@@ -12,9 +12,8 @@ export interface RespaldosHandlers {
   restaurar(path?: string): Promise<ResultadoRestaurar>
 }
 
-export function registerIpc(ipc: IpcRegistrar, info: AppInfo, respaldos?: RespaldosHandlers): void {
+export function registerIpc(ipc: IpcRegistrar, info: AppInfo, respaldos: RespaldosHandlers): void {
   ipc.handle(IPC.getAppInfo, () => info)
-  if (!respaldos) return
   ipc.handle(IPC.respaldosEstado, () => respaldos.estado())
   ipc.handle(IPC.respaldosCrear, () => respaldos.crear())
   ipc.handle(IPC.respaldosConfigurar, (_event, config) => respaldos.configurar(config as ConfigRespaldos))

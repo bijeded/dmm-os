@@ -1,3 +1,4 @@
+import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
@@ -35,9 +36,18 @@ app.whenReady().then(() => {
   const migrationsFolder = app.isPackaged ? join(process.resourcesPath, 'drizzle') : join(app.getAppPath(), 'drizzle')
   const backupsDir = join(homedir(), 'Desktop', 'Vault', 'Backups', 'DMM OS', 'DB')
 
-  const { sqlite, close } = openDatabase(dbPath, migrationsFolder, {
-    beforeMigrate: (s) => createBackupService({ sqlite: s, dir: backupsDir }).backupNow('migracion')
-  })
+  let opened: ReturnType<typeof openDatabase>
+  try {
+    opened = openDatabase(dbPath, migrationsFolder, {
+      beforeMigrate: (s) => createBackupService({ sqlite: s, dir: backupsDir }).backupNow('migracion')
+    })
+  } catch (e) {
+    // No migration runs without its backup; tell the user instead of exiting silently.
+    dialog.showErrorBox('DMM OS no pudo abrir la base de datos', `No se pudo respaldar antes de actualizar los datos en ${backupsDir}.\n\n${String(e)}`)
+    app.exit(1)
+    return
+  }
+  const { sqlite, close } = opened
   app.on('will-quit', close)
 
   const respaldos = createBackupService({ sqlite, dir: backupsDir })
@@ -72,7 +82,12 @@ app.whenReady().then(() => {
       }
       // Stage first: the safety backup below may prune the file being restored.
       const staged = stageRestore(source, dbPath, migrationsFolder)
-      respaldos.backupNow('antes-de-restaurar')
+      try {
+        respaldos.backupNow('antes-de-restaurar')
+      } catch (e) {
+        rmSync(staged, { force: true })
+        throw e
+      }
       clearInterval(timer)
       close()
       installRestore(staged, dbPath)

@@ -4,7 +4,7 @@ import { IPC } from '../shared/ipc'
 
 const info = { version: '0.1.0', dbPath: '/db', dmmOsRoot: '/root' }
 
-function register(respaldos?: RespaldosHandlers) {
+function register(respaldos: RespaldosHandlers = {} as RespaldosHandlers) {
   const handlers = new Map<string, (...args: unknown[]) => unknown>()
   registerIpc({ handle: (ch, fn) => handlers.set(ch, fn) }, info, respaldos)
   return handlers

@@ -1,7 +1,8 @@
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
+import { copyFileSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
-import type { EstadoRespaldos, MotivoRespaldo, Respaldo } from '../shared/ipc'
+import { MOTIVOS_RESPALDO, type ConfigRespaldos, type EstadoRespaldos, type MotivoRespaldo, type Respaldo } from '../shared/ipc'
+import { journalTimes, lastApplied } from './db/migrations'
 
 const DEFAULT_FRECUENCIA_DIAS = 7
 const DEFAULT_CONSERVAR = 4
@@ -9,6 +10,7 @@ const KEY_FRECUENCIA = 'respaldos.frecuenciaDias'
 const KEY_CONSERVAR = 'respaldos.conservar'
 const DAY_MS = 24 * 60 * 60 * 1000
 
+const NO_ES_RESPALDO = 'El archivo no es un respaldo de DMM OS'
 const NAME = /^dmm-os-(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})(\d{2})(\d{3})Z-([a-z-]+)\.db$/
 
 function fileName(at: Date, motivo: MotivoRespaldo): string {
@@ -26,7 +28,7 @@ export function listBackups(dir: string): Respaldo[] {
   return names
     .flatMap((archivo) => {
       const m = NAME.exec(archivo)
-      if (!m) return []
+      if (!m || !(MOTIVOS_RESPALDO as readonly string[]).includes(m[6])) return []
       const path = join(dir, archivo)
       const creadoEn = `${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`
       return [{ archivo, path, creadoEn, motivo: m[6] as MotivoRespaldo, bytes: statSync(path).size }]
@@ -61,7 +63,8 @@ export function createBackupService({ sqlite, dir, now = () => new Date() }: Bac
     const path = join(dir, fileName(now(), motivo))
     // VACUUM INTO writes a consistent single-file copy, WAL contents included.
     sqlite.prepare('VACUUM INTO ?').run(path)
-    for (const old of listBackups(dir).slice(conservar())) rmSync(old.path, { force: true })
+    // Retention counts each motivo separately so manual or migration backups never push out the weekly ones.
+    for (const old of listBackups(dir).filter((b) => b.motivo === motivo).slice(conservar())) rmSync(old.path, { force: true })
     return listBackups(dir).find((b) => b.path === path)!
   }
 
@@ -71,7 +74,7 @@ export function createBackupService({ sqlite, dir, now = () => new Date() }: Bac
       const respaldos = listBackups(dir)
       return { dir, frecuenciaDias: frecuenciaDias(), conservar: conservar(), ultimo: respaldos[0]?.creadoEn ?? null, respaldos }
     },
-    configurar({ frecuenciaDias, conservar }: { frecuenciaDias: number; conservar: number }) {
+    configurar({ frecuenciaDias, conservar }: ConfigRespaldos) {
       for (const n of [frecuenciaDias, conservar]) {
         if (!Number.isInteger(n) || n < 1) throw new Error('Frecuencia y respaldos a conservar deben ser enteros mayores a 0')
       }
@@ -80,32 +83,13 @@ export function createBackupService({ sqlite, dir, now = () => new Date() }: Bac
     },
     /** Weekly (configurable) backup; returns null when not yet due. */
     respaldarSiToca(): Respaldo | null {
-      const last = listBackups(dir)[0]
+      const last = listBackups(dir).find((b) => b.motivo === 'semanal')
       return isBackupDue(last && new Date(last.creadoEn), now(), frecuenciaDias()) ? backupNow('semanal') : null
     }
   }
 }
 
 export type BackupService = ReturnType<typeof createBackupService>
-
-function journalTimes(migrationsFolder: string): number[] {
-  const journal = JSON.parse(readFileSync(join(migrationsFolder, 'meta', '_journal.json'), 'utf8')) as { entries: { when: number }[] }
-  return journal.entries.map((e) => e.when)
-}
-
-/** Latest applied migration time, or null when the database was never migrated. */
-function lastApplied(sqlite: Database.Database): number | null {
-  const table = sqlite.prepare("select 1 from sqlite_master where type = 'table' and name = '__drizzle_migrations'").get()
-  if (!table) return null
-  const row = sqlite.prepare('select max(created_at) as t from __drizzle_migrations').get() as { t: number | null }
-  return row.t
-}
-
-/** True when an already-migrated database has migrations waiting (drizzle applies those newer than the last one). */
-export function hasPendingMigrations(sqlite: Database.Database, migrationsFolder: string): boolean {
-  const last = lastApplied(sqlite)
-  return last !== null && journalTimes(migrationsFolder).some((when) => when > last)
-}
 
 /** Copies a backup next to the live database and checks it can be restored. Returns the staged file. */
 export function stageRestore(source: string, dbPath: string, migrationsFolder: string): string {
@@ -116,7 +100,7 @@ export function stageRestore(source: string, dbPath: string, migrationsFolder: s
     try {
       copy = new Database(staged, { readonly: true, fileMustExist: true })
     } catch {
-      throw new Error('El archivo no es un respaldo de DMM OS')
+      throw new Error(NO_ES_RESPALDO)
     }
     try {
       let last: number | null
@@ -126,7 +110,7 @@ export function stageRestore(source: string, dbPath: string, migrationsFolder: s
       } catch {
         last = null
       }
-      if (last === null) throw new Error('El archivo no es un respaldo de DMM OS')
+      if (last === null) throw new Error(NO_ES_RESPALDO)
       if (last > Math.max(...journalTimes(migrationsFolder))) {
         throw new Error('El respaldo es de una versión más nueva de DMM OS; actualiza la app antes de restaurar')
       }

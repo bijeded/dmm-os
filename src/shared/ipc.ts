@@ -6,7 +6,8 @@ export const IPC = {
   respaldosRestaurar: 'respaldos:restaurar'
 } as const
 
-export type MotivoRespaldo = 'semanal' | 'migracion' | 'manual' | 'antes-de-restaurar'
+export const MOTIVOS_RESPALDO = ['semanal', 'migracion', 'manual', 'antes-de-restaurar'] as const
+export type MotivoRespaldo = (typeof MOTIVOS_RESPALDO)[number]
 
 export interface Respaldo {
   archivo: string
@@ -16,10 +17,8 @@ export interface Respaldo {
   bytes: number
 }
 
-export interface EstadoRespaldos {
+export interface EstadoRespaldos extends ConfigRespaldos {
   dir: string
-  frecuenciaDias: number
-  conservar: number
   ultimo: string | null
   respaldos: Respaldo[]
 }
