@@ -1,11 +1,3 @@
-export const IPC = {
-  getAppInfo: 'app:get-info',
-  respaldosEstado: 'respaldos:estado',
-  respaldosCrear: 'respaldos:crear',
-  respaldosConfigurar: 'respaldos:configurar',
-  respaldosRestaurar: 'respaldos:restaurar'
-} as const
-
 export const MOTIVOS_RESPALDO = ['semanal', 'migracion', 'manual', 'antes-de-restaurar'] as const
 export type MotivoRespaldo = (typeof MOTIVOS_RESPALDO)[number]
 
@@ -37,14 +29,60 @@ export interface AppInfo {
   dmmOsRoot: string
 }
 
-/** API exposed to the renderer as `window.dmm`. */
-export interface DmmApi {
-  getAppInfo(): Promise<AppInfo>
+/** One IPC endpoint: its arguments and result, carried in the type only. */
+export interface Canal<A extends unknown[], R> {
+  readonly esCanal: true
+  readonly args?: A
+  readonly resultado?: R
+}
+
+const canal = <A extends unknown[] = [], R = void>(): Canal<A, R> => ({ esCanal: true })
+
+/**
+ * The renderer<->main contract, declared once. Channel names, the preload bridge and the
+ * main-side registration are derived from it: adding an endpoint means adding it here
+ * and implementing its handler.
+ */
+export const contrato = {
+  getAppInfo: canal<[], AppInfo>(),
   respaldos: {
-    estado(): Promise<EstadoRespaldos>
-    crear(): Promise<Respaldo>
-    configurar(config: ConfigRespaldos): Promise<EstadoRespaldos>
+    estado: canal<[], EstadoRespaldos>(),
+    crear: canal<[], Respaldo>(),
+    configurar: canal<[config: ConfigRespaldos], EstadoRespaldos>(),
     /** Without a path the user picks the file. On success the app relaunches. */
-    restaurar(path?: string): Promise<ResultadoRestaurar>
+    restaurar: canal<[path?: string], ResultadoRestaurar>()
   }
+}
+
+/** API exposed to the renderer as `window.dmm`. */
+export type Api<C> = {
+  [K in keyof C]: C[K] extends Canal<infer A, infer R> ? (...args: A) => Promise<R> : Api<C[K]>
+}
+
+/** What main implements for each endpoint. */
+export type Handlers<C> = {
+  [K in keyof C]: C[K] extends Canal<infer A, infer R> ? (...args: A) => R | Promise<R> : Handlers<C[K]>
+}
+
+export type DmmApi = Api<typeof contrato>
+export type DmmHandlers = Handlers<typeof contrato>
+
+/** Visits every endpoint with its channel name (e.g. `respaldos:estado`) and its path in the contract. */
+export function recorrerContrato(nodo: object, visitar: (canal: string, ruta: string[]) => void, ruta: string[] = []): void {
+  for (const [nombre, valor] of Object.entries(nodo)) {
+    const aqui = [...ruta, nombre]
+    if ((valor as { esCanal?: boolean }).esCanal === true) visitar(aqui.join(':'), aqui)
+    else recorrerContrato(valor as object, visitar, aqui)
+  }
+}
+
+/** Builds `window.dmm` from the contract, sending each call through `invoke`. */
+export function crearApi(invoke: (canal: string, ...args: unknown[]) => Promise<unknown>): DmmApi {
+  const api: Record<string, unknown> = {}
+  recorrerContrato(contrato, (canal, ruta) => {
+    let destino = api
+    for (const nombre of ruta.slice(0, -1)) destino = (destino[nombre] ??= {}) as Record<string, unknown>
+    destino[ruta[ruta.length - 1]] = (...args: unknown[]) => invoke(canal, ...args)
+  })
+  return api as DmmApi
 }

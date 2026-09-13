@@ -57,23 +57,27 @@ app.whenReady().then(() => {
   respaldos.conectar(conexion)
   respaldos.iniciar()
 
-  registerIpc(ipcMain, { version: app.getVersion(), dbPath, dmmOsRoot: join(homedir(), 'Desktop', 'DMM OS') }, {
-    estado: respaldos.estado,
-    crear: respaldos.crear,
-    configurar: respaldos.configurar,
-    restaurar: async (path) => {
-      let source = path
-      if (!source) {
-        const picked = await dialog.showOpenDialog({
-          title: 'Restaurar respaldo',
-          defaultPath: backupsDir,
-          properties: ['openFile'],
-          filters: [{ name: 'Respaldo de DMM OS', extensions: ['db'] }]
-        })
-        if (picked.canceled || !picked.filePaths[0]) return { restaurado: false }
-        source = picked.filePaths[0]
+  const info = { version: app.getVersion(), dbPath, dmmOsRoot: join(homedir(), 'Desktop', 'DMM OS') }
+  registerIpc(ipcMain, {
+    getAppInfo: () => info,
+    respaldos: {
+      estado: respaldos.estado,
+      crear: respaldos.crear,
+      configurar: respaldos.configurar,
+      restaurar: async (path) => {
+        let source = path
+        if (!source) {
+          const picked = await dialog.showOpenDialog({
+            title: 'Restaurar respaldo',
+            defaultPath: backupsDir,
+            properties: ['openFile'],
+            filters: [{ name: 'Respaldo de DMM OS', extensions: ['db'] }]
+          })
+          if (picked.canceled || !picked.filePaths[0]) return { restaurado: false }
+          source = picked.filePaths[0]
+        }
+        return respaldos.restaurar(source)
       }
-      return respaldos.restaurar(source)
     }
   })
   createWindow()
