@@ -84,6 +84,37 @@ describe('generarPeriodos', () => {
     expect(db.select().from(ingresos).all().map((r) => r.estado)).toEqual(['cancelado'])
   })
 
+  it('stops monthly Costos when their Proyecto closes; MSI Costos run to their end', () => {
+    const c = contacto()
+    const cerrado = proyecto(c.id, null)
+    const cancelado = proyecto(c.id, null)
+    const definicion = (proyectoId: number, tipo: 'mensual' | 'msi') =>
+      db
+        .insert(definicionesCosto)
+        .values({
+          nombre: `${tipo}-${proyectoId}`,
+          tipo,
+          numeroParcialidades: tipo === 'msi' ? 3 : null,
+          proyectoId,
+          periodoInicio: '2026-01'
+        })
+        .returning()
+        .get()
+    for (const d of [definicion(cerrado.id, 'mensual'), definicion(cancelado.id, 'mensual'), definicion(cancelado.id, 'msi')]) {
+      db.insert(vigenciasPrecio).values({ definicionCostoId: d.id, desde: '2026-01', subtotal: 100, total: 100 }).run()
+    }
+
+    generarPeriodos(db, '2026-01')
+    db.update(proyectos).set({ estado: 'completado' }).where(eq(proyectos.id, cerrado.id)).run()
+    db.update(proyectos).set({ estado: 'cancelado' }).where(eq(proyectos.id, cancelado.id)).run()
+    generarPeriodos(db, '2026-06')
+
+    const porDefinicion = (nombre: string) => db.select().from(costos).all().filter((r) => r.nombre === nombre).length
+    expect(porDefinicion(`mensual-${cerrado.id}`)).toBe(1)
+    expect(porDefinicion(`mensual-${cancelado.id}`)).toBe(1)
+    expect(porDefinicion(`msi-${cancelado.id}`)).toBe(3)
+  })
+
   it('limits installments and applies Vigencia de precio from its date forward', () => {
     const d = db
       .insert(definicionesCosto)
