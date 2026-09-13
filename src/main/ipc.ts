@@ -1,21 +1,14 @@
-import { IPC, type AppInfo, type ConfigRespaldos, type EstadoRespaldos, type Respaldo, type ResultadoRestaurar } from '../shared/ipc'
+import { contrato, recorrerContrato, type DmmHandlers } from '../shared/ipc'
 
 interface IpcRegistrar {
-  handle(channel: string, listener: (...args: unknown[]) => unknown): void
+  handle(channel: string, listener: (event: unknown, ...args: unknown[]) => unknown): void
 }
 
-export interface RespaldosHandlers {
-  estado(): EstadoRespaldos
-  crear(): Respaldo
-  configurar(config: ConfigRespaldos): EstadoRespaldos
-  /** Without a path the user picks the file. */
-  restaurar(path?: string): Promise<ResultadoRestaurar>
-}
-
-export function registerIpc(ipc: IpcRegistrar, info: AppInfo, respaldos: RespaldosHandlers): void {
-  ipc.handle(IPC.getAppInfo, () => info)
-  ipc.handle(IPC.respaldosEstado, () => respaldos.estado())
-  ipc.handle(IPC.respaldosCrear, () => respaldos.crear())
-  ipc.handle(IPC.respaldosConfigurar, (_event, config) => respaldos.configurar(config as ConfigRespaldos))
-  ipc.handle(IPC.respaldosRestaurar, (_event, path) => respaldos.restaurar(path as string | undefined))
+/** Registers a handler for every endpoint in the contract; throws if one is missing. */
+export function registerIpc(ipc: IpcRegistrar, handlers: DmmHandlers): void {
+  recorrerContrato(contrato, (canal, ruta) => {
+    const handler = ruta.reduce<unknown>((h, nombre) => (h as Record<string, unknown> | undefined)?.[nombre], handlers)
+    if (typeof handler !== 'function') throw new Error(`Falta el handler de IPC para ${canal}`)
+    ipc.handle(canal, (_event, ...args) => handler(...args))
+  })
 }
