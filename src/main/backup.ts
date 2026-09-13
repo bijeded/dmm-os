@@ -1,6 +1,6 @@
 import { copyFileSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { MOTIVOS_RESPALDO, type ConfigRespaldos, type EstadoRespaldos, type MotivoRespaldo, type Respaldo } from '../shared/ipc'
+import { MOTIVOS_RESPALDO, type ConfigRespaldos, type EstadoRespaldos, type MotivoRespaldo, type Respaldo, type ResultadoRestaurar } from '../shared/ipc'
 import type { Conexion, DatabaseModule } from './db'
 
 const DEFAULT_FRECUENCIA_DIAS = 7
@@ -38,70 +38,138 @@ export function isBackupDue(last: Date | undefined, now: Date, frecuenciaDias: n
   return !last || now.getTime() - last.getTime() >= frecuenciaDias * DAY_MS
 }
 
-interface BackupServiceOptions {
-  conexion: Conexion
+/** Schedules `fn` to repeat; returns a function that stops it. */
+export type Programar = (fn: () => void, ms: number) => () => void
+
+interface RespaldosOptions {
   dir: string
+  /** The live database file that a Restauración replaces. */
+  dbPath: string
+  database: DatabaseModule
+  /** Restarts the app so the restored database opens and migrates. */
+  relaunch: () => void
   now?: () => Date
+  programar?: Programar
 }
 
-export function createBackupService({ conexion, dir, now = () => new Date() }: BackupServiceOptions) {
-  const readSetting = (key: string, fallback: number): number => {
-    const n = Number(conexion.ajustes.leer(key))
+const HOUR_MS = 60 * 60 * 1000
+
+const programarConIntervalo: Programar = (fn, ms) => {
+  const timer = setInterval(fn, ms)
+  return () => clearInterval(timer)
+}
+
+/**
+ * Respaldos: dated copies of the database in Vault, kept per motivo, plus Restauración.
+ * Bind the live Conexion with `conectar` before using anything but `antesDeMigrar`.
+ */
+export function createRespaldos({ dir, dbPath, database, relaunch, now = () => new Date(), programar = programarConIntervalo }: RespaldosOptions) {
+  let conexion: Conexion | null = null
+  let detenerProgramacion: (() => void) | null = null
+
+  const conectada = (): Conexion => {
+    if (!conexion) throw new Error('Respaldos sin base de datos conectada')
+    return conexion
+  }
+
+  const readSetting = (c: Conexion, key: string, fallback: number): number => {
+    const n = Number(c.ajustes.leer(key))
     return Number.isInteger(n) && n > 0 ? n : fallback
   }
-  const writeSetting = (key: string, value: number) => conexion.ajustes.escribir(key, String(value))
 
-  const frecuenciaDias = () => readSetting(KEY_FRECUENCIA, DEFAULT_FRECUENCIA_DIAS)
-  const conservar = () => readSetting(KEY_CONSERVAR, DEFAULT_CONSERVAR)
-
-  function backupNow(motivo: MotivoRespaldo): Respaldo {
+  function respaldar(c: Conexion, motivo: MotivoRespaldo): Respaldo {
     mkdirSync(dir, { recursive: true })
     const path = join(dir, fileName(now(), motivo))
-    conexion.copiarA(path)
+    c.copiarA(path)
     // Retention counts each motivo separately so manual or migration backups never push out the weekly ones.
-    for (const old of listBackups(dir).filter((b) => b.motivo === motivo).slice(conservar())) rmSync(old.path, { force: true })
+    const conservar = readSetting(c, KEY_CONSERVAR, DEFAULT_CONSERVAR)
+    for (const old of listBackups(dir).filter((b) => b.motivo === motivo).slice(conservar)) rmSync(old.path, { force: true })
     return listBackups(dir).find((b) => b.path === path)!
   }
 
+  function estado(): EstadoRespaldos {
+    const c = conectada()
+    const respaldos = listBackups(dir)
+    return {
+      dir,
+      frecuenciaDias: readSetting(c, KEY_FRECUENCIA, DEFAULT_FRECUENCIA_DIAS),
+      conservar: readSetting(c, KEY_CONSERVAR, DEFAULT_CONSERVAR),
+      ultimo: respaldos[0]?.creadoEn ?? null,
+      respaldos
+    }
+  }
+
+  /** Weekly (configurable) backup; returns null when not yet due. */
+  function respaldarSiToca(): Respaldo | null {
+    const c = conectada()
+    const last = listBackups(dir).find((b) => b.motivo === 'semanal')
+    const frecuencia = readSetting(c, KEY_FRECUENCIA, DEFAULT_FRECUENCIA_DIAS)
+    return isBackupDue(last && new Date(last.creadoEn), now(), frecuencia) ? respaldar(c, 'semanal') : null
+  }
+
+  function detener() {
+    detenerProgramacion?.()
+    detenerProgramacion = null
+  }
+
   return {
-    backupNow,
-    estado(): EstadoRespaldos {
-      const respaldos = listBackups(dir)
-      return { dir, frecuenciaDias: frecuenciaDias(), conservar: conservar(), ultimo: respaldos[0]?.creadoEn ?? null, respaldos }
+    /** Pass as `antesDeMigrar` when opening the database. */
+    antesDeMigrar: (c: Conexion) => void respaldar(c, 'migracion'),
+    conectar(c: Conexion) {
+      conexion = c
     },
-    configurar({ frecuenciaDias, conservar }: ConfigRespaldos) {
+    /** Runs the scheduled backup now and then hourly. Failures are logged, never thrown. */
+    iniciar() {
+      detener()
+      const tick = () => {
+        try {
+          respaldarSiToca()
+        } catch (e) {
+          console.error('[respaldos] scheduled backup failed', e)
+        }
+      }
+      tick()
+      detenerProgramacion = programar(tick, HOUR_MS)
+    },
+    detener,
+    estado,
+    respaldarSiToca,
+    crear: () => respaldar(conectada(), 'manual'),
+    configurar({ frecuenciaDias, conservar }: ConfigRespaldos): EstadoRespaldos {
       for (const n of [frecuenciaDias, conservar]) {
         if (!Number.isInteger(n) || n < 1) throw new Error('Frecuencia y respaldos a conservar deben ser enteros mayores a 0')
       }
-      writeSetting(KEY_FRECUENCIA, frecuenciaDias)
-      writeSetting(KEY_CONSERVAR, conservar)
+      const c = conectada()
+      c.ajustes.escribir(KEY_FRECUENCIA, String(frecuenciaDias))
+      c.ajustes.escribir(KEY_CONSERVAR, String(conservar))
+      return estado()
     },
-    /** Weekly (configurable) backup; returns null when not yet due. */
-    respaldarSiToca(): Respaldo | null {
-      const last = listBackups(dir).find((b) => b.motivo === 'semanal')
-      return isBackupDue(last && new Date(last.creadoEn), now(), frecuenciaDias()) ? backupNow('semanal') : null
+    /**
+     * Restauración: replaces the live database with `source` and relaunches.
+     * Order matters: stage first (the safety backup may prune `source`), then the safety
+     * backup (abort and clean up if it fails), then stop the schedule, close, swap in.
+     */
+    restaurar(source: string): ResultadoRestaurar {
+      const c = conectada()
+      const staged = `${dbPath}.restaurar`
+      copyFileSync(source, staged)
+      try {
+        database.verificarRestaurable(staged)
+        respaldar(c, 'antes-de-restaurar')
+      } catch (e) {
+        rmSync(staged, { force: true })
+        throw e
+      }
+      detener()
+      c.close()
+      conexion = null
+      rmSync(`${dbPath}-wal`, { force: true })
+      rmSync(`${dbPath}-shm`, { force: true })
+      renameSync(staged, dbPath)
+      relaunch()
+      return { restaurado: true }
     }
   }
 }
 
-export type BackupService = ReturnType<typeof createBackupService>
-
-/** Copies a backup next to the live database and checks it can be restored. Returns the staged file. */
-export function stageRestore(source: string, dbPath: string, database: DatabaseModule): string {
-  const staged = `${dbPath}.restaurar`
-  copyFileSync(source, staged)
-  try {
-    database.verificarRestaurable(staged)
-    return staged
-  } catch (e) {
-    rmSync(staged, { force: true })
-    throw e
-  }
-}
-
-/** Swaps the staged backup in. The live database must be closed first; migrations run on next open. */
-export function installRestore(staged: string, dbPath: string): void {
-  rmSync(`${dbPath}-wal`, { force: true })
-  rmSync(`${dbPath}-shm`, { force: true })
-  renameSync(staged, dbPath)
-}
+export type Respaldos = ReturnType<typeof createRespaldos>

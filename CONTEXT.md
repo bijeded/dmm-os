@@ -84,6 +84,13 @@ The share of an AI subscription Costo attributed to a Proyecto in a month, by to
 **Cancelación con pagos**:
 When a Proyecto/Cotización is cancelled, paid Ingresos stay paid, pending Ingresos become cancelled or uncollectible, pending estimated Costos are cancelled.
 
+**Respaldo**:
+A dated copy of the whole database in Vault, labelled by motivo (semanal, migración, manual, antes de restaurar). Retention counts each motivo separately. No migration runs without one.
+_Avoid_: backup (in UI copy)
+
+**Restauración**:
+Replacing the live database with a Respaldo, then relaunching. Always takes a Respaldo *antes de restaurar* first; a Respaldo from a newer app version is refused.
+
 ## Relationships
 
 - A **Contacto** has many **Cotizaciones** and **Proyectos**

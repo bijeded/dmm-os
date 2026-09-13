@@ -1,14 +1,11 @@
-import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { createBackupService, installRestore, stageRestore } from './backup'
+import { createRespaldos } from './backup'
 import { createDatabase, type Conexion } from './db'
 import { registerIpc } from './ipc'
 
 app.setName('DMM OS')
-
-const HOUR_MS = 60 * 60 * 1000
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -37,39 +34,33 @@ app.whenReady().then(() => {
   const backupsDir = join(homedir(), 'Desktop', 'Vault', 'Backups', 'DMM OS', 'DB')
 
   const database = createDatabase(migrationsFolder)
+  const respaldos = createRespaldos({
+    dir: backupsDir,
+    dbPath,
+    database,
+    relaunch: () => {
+      app.relaunch()
+      app.exit(0)
+    }
+  })
 
   let conexion: Conexion
   try {
-    conexion = database.abrir(dbPath, {
-      antesDeMigrar: (c) => createBackupService({ conexion: c, dir: backupsDir }).backupNow('migracion')
-    })
+    conexion = database.abrir(dbPath, { antesDeMigrar: respaldos.antesDeMigrar })
   } catch (e) {
     // No migration runs without its backup; tell the user instead of exiting silently.
     dialog.showErrorBox('DMM OS no pudo abrir la base de datos', `No se pudo respaldar antes de actualizar los datos en ${backupsDir}.\n\n${String(e)}`)
     app.exit(1)
     return
   }
-  const close = () => conexion.close()
-  app.on('will-quit', close)
-
-  const respaldos = createBackupService({ conexion, dir: backupsDir })
-  const scheduled = () => {
-    try {
-      respaldos.respaldarSiToca()
-    } catch (e) {
-      console.error('[respaldos] scheduled backup failed', e)
-    }
-  }
-  scheduled()
-  const timer = setInterval(scheduled, HOUR_MS)
+  app.on('will-quit', () => conexion.close())
+  respaldos.conectar(conexion)
+  respaldos.iniciar()
 
   registerIpc(ipcMain, { version: app.getVersion(), dbPath, dmmOsRoot: join(homedir(), 'Desktop', 'DMM OS') }, {
-    estado: () => respaldos.estado(),
-    crear: () => respaldos.backupNow('manual'),
-    configurar: (config) => {
-      respaldos.configurar(config)
-      return respaldos.estado()
-    },
+    estado: respaldos.estado,
+    crear: respaldos.crear,
+    configurar: respaldos.configurar,
     restaurar: async (path) => {
       let source = path
       if (!source) {
@@ -82,20 +73,7 @@ app.whenReady().then(() => {
         if (picked.canceled || !picked.filePaths[0]) return { restaurado: false }
         source = picked.filePaths[0]
       }
-      // Stage first: the safety backup below may prune the file being restored.
-      const staged = stageRestore(source, dbPath, database)
-      try {
-        respaldos.backupNow('antes-de-restaurar')
-      } catch (e) {
-        rmSync(staged, { force: true })
-        throw e
-      }
-      clearInterval(timer)
-      close()
-      installRestore(staged, dbPath)
-      app.relaunch()
-      app.exit(0)
-      return { restaurado: true }
+      return respaldos.restaurar(source)
     }
   })
   createWindow()
