@@ -1,7 +1,7 @@
 import { resolve } from 'node:path'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { openDatabase, type Db } from './index'
+import { createDatabase, type Db } from './index'
 import {
   asignarCosto,
   borrar,
@@ -25,7 +25,7 @@ const migrationsFolder = resolve(import.meta.dirname, '../../../drizzle')
 let db: Db
 
 beforeEach(() => {
-  db = openDatabase(':memory:', migrationsFolder).db
+  db = createDatabase(migrationsFolder).abrir(':memory:').db
 })
 
 function contacto(nombre = 'Estudio Ocho') {

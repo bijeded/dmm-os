@@ -1,8 +1,7 @@
 import { copyFileSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import Database from 'better-sqlite3'
 import { MOTIVOS_RESPALDO, type ConfigRespaldos, type EstadoRespaldos, type MotivoRespaldo, type Respaldo } from '../shared/ipc'
-import { journalTimes, lastApplied } from './db/migrations'
+import type { Conexion, DatabaseModule } from './db'
 
 const DEFAULT_FRECUENCIA_DIAS = 7
 const DEFAULT_CONSERVAR = 4
@@ -10,7 +9,6 @@ const KEY_FRECUENCIA = 'respaldos.frecuenciaDias'
 const KEY_CONSERVAR = 'respaldos.conservar'
 const DAY_MS = 24 * 60 * 60 * 1000
 
-const NO_ES_RESPALDO = 'El archivo no es un respaldo de DMM OS'
 const NAME = /^dmm-os-(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})(\d{2})(\d{3})Z-([a-z-]+)\.db$/
 
 function fileName(at: Date, motivo: MotivoRespaldo): string {
@@ -41,19 +39,17 @@ export function isBackupDue(last: Date | undefined, now: Date, frecuenciaDias: n
 }
 
 interface BackupServiceOptions {
-  sqlite: Database.Database
+  conexion: Conexion
   dir: string
   now?: () => Date
 }
 
-export function createBackupService({ sqlite, dir, now = () => new Date() }: BackupServiceOptions) {
+export function createBackupService({ conexion, dir, now = () => new Date() }: BackupServiceOptions) {
   const readSetting = (key: string, fallback: number): number => {
-    const row = sqlite.prepare('select value from settings where key = ?').get(key) as { value: string } | undefined
-    const n = Number(row?.value)
+    const n = Number(conexion.ajustes.leer(key))
     return Number.isInteger(n) && n > 0 ? n : fallback
   }
-  const writeSetting = (key: string, value: number) =>
-    sqlite.prepare('insert into settings (key, value) values (?, ?) on conflict(key) do update set value = excluded.value').run(key, String(value))
+  const writeSetting = (key: string, value: number) => conexion.ajustes.escribir(key, String(value))
 
   const frecuenciaDias = () => readSetting(KEY_FRECUENCIA, DEFAULT_FRECUENCIA_DIAS)
   const conservar = () => readSetting(KEY_CONSERVAR, DEFAULT_CONSERVAR)
@@ -61,8 +57,7 @@ export function createBackupService({ sqlite, dir, now = () => new Date() }: Bac
   function backupNow(motivo: MotivoRespaldo): Respaldo {
     mkdirSync(dir, { recursive: true })
     const path = join(dir, fileName(now(), motivo))
-    // VACUUM INTO writes a consistent single-file copy, WAL contents included.
-    sqlite.prepare('VACUUM INTO ?').run(path)
+    conexion.copiarA(path)
     // Retention counts each motivo separately so manual or migration backups never push out the weekly ones.
     for (const old of listBackups(dir).filter((b) => b.motivo === motivo).slice(conservar())) rmSync(old.path, { force: true })
     return listBackups(dir).find((b) => b.path === path)!
@@ -92,31 +87,11 @@ export function createBackupService({ sqlite, dir, now = () => new Date() }: Bac
 export type BackupService = ReturnType<typeof createBackupService>
 
 /** Copies a backup next to the live database and checks it can be restored. Returns the staged file. */
-export function stageRestore(source: string, dbPath: string, migrationsFolder: string): string {
+export function stageRestore(source: string, dbPath: string, database: DatabaseModule): string {
   const staged = `${dbPath}.restaurar`
   copyFileSync(source, staged)
   try {
-    let copy: Database.Database
-    try {
-      copy = new Database(staged, { readonly: true, fileMustExist: true })
-    } catch {
-      throw new Error(NO_ES_RESPALDO)
-    }
-    try {
-      let last: number | null
-      try {
-        const ok = copy.pragma('integrity_check', { simple: true })
-        last = ok === 'ok' ? lastApplied(copy) : null
-      } catch {
-        last = null
-      }
-      if (last === null) throw new Error(NO_ES_RESPALDO)
-      if (last > Math.max(...journalTimes(migrationsFolder))) {
-        throw new Error('El respaldo es de una versión más nueva de DMM OS; actualiza la app antes de restaurar')
-      }
-    } finally {
-      copy.close()
-    }
+    database.verificarRestaurable(staged)
     return staged
   } catch (e) {
     rmSync(staged, { force: true })
