@@ -45,7 +45,8 @@ function periodosHasta(
  * Periodo generado: lazily creates Ingreso/Costo rows from definitions up to `periodoActual`.
  * Idempotent (unique on definition + period). Ingreso series stop once their Proyecto or
  * Cotización is cancelled; monthly series also stop when the Proyecto is completed.
- * Costo series only stop at their end date or installment count, even if their Proyecto closes.
+ * Monthly Costo series stop when their Proyecto is completed or cancelled; MSI and annual
+ * Costo series run to their end date or installment count regardless.
  */
 export function generarPeriodos(db: Db, periodoActual: string) {
   db.transaction((tx) => {
@@ -103,6 +104,8 @@ export function generarPeriodos(db: Db, periodoActual: string) {
     }
 
     for (const d of tx.select().from(definicionesCosto).all()) {
+      // Monthly Costos stop with their Proyecto; MSI and annual ones are committed and run to their end.
+      if (d.tipo === 'mensual' && d.proyectoId !== null && proyectosCerrados.has(d.proyectoId)) continue
       const periodos = periodosHasta(
         d.periodoInicio,
         periodoActual,

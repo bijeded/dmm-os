@@ -26,7 +26,7 @@ Proyecto status meaning work is active, or delivered but not fully paid. A Proye
 _Avoid_: active (for projects)
 
 **Periodo generado**:
-A dated Ingreso or Costo created from a monthly/installment definition, produced up to the current month only. A monthly series ends when its Proyecto is completed or cancelled, or at its end date.
+A dated Ingreso or Costo created from a monthly/installment definition, produced up to the current month only. A monthly series (Ingreso or Costo) ends when its Proyecto is completed or cancelled, or at its end date. MSI and annual Costos are already committed, so they run to their end even after the Proyecto closes.
 
 **Catálogo**:
 Products and services with default prices, kept in Configuración. A Cotización copies prices at creation; later edits don't touch past quotes.
