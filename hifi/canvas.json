@@ -1,0 +1,104 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1190,
+      "title": "Panel de Control"
+    },
+    {
+      "file": "Contactos.dc.html",
+      "x": 1560,
+      "y": 0,
+      "w": 1440,
+      "h": 780
+    },
+    {
+      "file": "FichaContacto.dc.html",
+      "x": 3120,
+      "y": 0,
+      "w": 1440,
+      "h": 1010,
+      "title": "Contactos · Ficha"
+    },
+    {
+      "file": "Cotizaciones.dc.html",
+      "x": 0,
+      "y": 1350,
+      "w": 1440,
+      "h": 780
+    },
+    {
+      "file": "NuevaCotizacion.dc.html",
+      "x": 1560,
+      "y": 1350,
+      "w": 1440,
+      "h": 950,
+      "title": "Cotizaciones · Nueva"
+    },
+    {
+      "file": "Proyectos.dc.html",
+      "x": 3120,
+      "y": 1350,
+      "w": 1440,
+      "h": 780
+    },
+    {
+      "file": "AI.dc.html",
+      "x": 0,
+      "y": 2460,
+      "w": 1440,
+      "h": 1400
+    },
+    {
+      "file": "Finanzas.dc.html",
+      "x": 1560,
+      "y": 2460,
+      "w": 1440,
+      "h": 1220
+    },
+    {
+      "file": "NuevoCosto.dc.html",
+      "x": 3120,
+      "y": 2460,
+      "w": 1440,
+      "h": 1110,
+      "title": "Finanzas · Nuevo costo"
+    },
+    {
+      "file": "Lab.dc.html",
+      "x": 0,
+      "y": 4020,
+      "w": 1440,
+      "h": 780
+    },
+    {
+      "file": "Configuracion.dc.html",
+      "x": 1560,
+      "y": 4020,
+      "w": 1440,
+      "h": 1200
+    },
+    {
+      "file": "MainMovil.dc.html",
+      "x": 0,
+      "y": 5380,
+      "w": 390,
+      "h": 2960,
+      "title": "Panel de Control · móvil"
+    },
+    {
+      "file": "NuevoCostoMovil.dc.html",
+      "x": 510,
+      "y": 5380,
+      "w": 390,
+      "h": 2180,
+      "title": "Finanzas · Nuevo costo · móvil"
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

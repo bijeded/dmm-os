@@ -1,0 +1,88 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1500,
+      "title": "Panel de Control"
+    },
+    {
+      "file": "Contactos.dc.html",
+      "x": 1560,
+      "y": 0,
+      "w": 1440,
+      "h": 1320
+    },
+    {
+      "file": "FichaContacto.dc.html",
+      "x": 3120,
+      "y": 0,
+      "w": 1440,
+      "h": 1320,
+      "title": "Contactos · Ficha"
+    },
+    {
+      "file": "Cotizaciones.dc.html",
+      "x": 0,
+      "y": 1660,
+      "w": 1440,
+      "h": 1180
+    },
+    {
+      "file": "NuevaCotizacion.dc.html",
+      "x": 1560,
+      "y": 1660,
+      "w": 1440,
+      "h": 1180,
+      "title": "Cotizaciones · Nueva"
+    },
+    {
+      "file": "Proyectos.dc.html",
+      "x": 3120,
+      "y": 1660,
+      "w": 1440,
+      "h": 1180
+    },
+    {
+      "file": "AI.dc.html",
+      "x": 0,
+      "y": 3000,
+      "w": 1440,
+      "h": 1780
+    },
+    {
+      "file": "Finanzas.dc.html",
+      "x": 1560,
+      "y": 3000,
+      "w": 1440,
+      "h": 1500
+    },
+    {
+      "file": "Lab.dc.html",
+      "x": 3120,
+      "y": 3000,
+      "w": 1440,
+      "h": 980
+    },
+    {
+      "file": "Configuracion.dc.html",
+      "x": 4680,
+      "y": 3000,
+      "w": 1440,
+      "h": 1380
+    },
+    {
+      "file": "NuevoCosto.dc.html",
+      "x": 1560,
+      "y": 4940,
+      "w": 1440,
+      "h": 1180,
+      "title": "Finanzas · Nuevo costo"
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}
