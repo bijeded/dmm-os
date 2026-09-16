@@ -1,21 +1,37 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { importarCarpetaProyecto, importarCotizacion, proyectosDeCotizacionesAceptadas, resolverContacto } from './db/carpetas'
+import { escanearCarpetas } from './importacion'
 import { pendientes, responder } from './sugerencias'
 import { contactos, costos, cotizaciones, ingresos, proyectos, sugerenciasImportacion, ubicacionesArchivo } from './db/schema'
 import { db, ingresoBase, reiniciarDb } from './db/test-db'
 
-beforeEach(reiniciarDb)
+let root: string
 
-const cotizacionEnDisco = (nombre = 'Sonrieme', folio = 475) =>
-  importarCotizacion(db, {
-    folio,
-    sufijo: null,
-    nombre,
-    fecha: null,
-    anio: 2025,
-    rutaRelativa: `Cotizaciones/2025/DMM - ${folio} - ${nombre}.pdf`
-  })
+beforeEach(() => {
+  reiniciarDb()
+  root = mkdtempSync(join(tmpdir(), 'dmm-sugerencias-'))
+})
+afterEach(() => rmSync(root, { recursive: true, force: true }))
+
+const escanear = () => escanearCarpetas(db, root)
+
+const cotizacionEnDisco = (nombre = 'Sonrieme', folio = 475) => {
+  mkdirSync(join(root, 'Cotizaciones', '2025'), { recursive: true })
+  writeFileSync(join(root, 'Cotizaciones', '2025', `DMM - ${folio} - ${nombre}.pdf`), '%PDF-1.4')
+  escanear()
+  return { cotizacionId: db.select().from(cotizaciones).where(eq(cotizaciones.folio, folio)).get()!.id }
+}
+
+const proyectoLlamado = (nombre: string) => db.select().from(proyectos).where(eq(proyectos.nombre, nombre)).get()!.id
+
+const carpetaEnDisco = (nombre = 'Sonrieme') => {
+  mkdirSync(join(root, 'Proyectos', nombre), { recursive: true })
+  escanear()
+  return { proyectoId: proyectoLlamado(nombre) }
+}
 
 const unaSugerencia = () => {
   const [s] = pendientes(db)
@@ -28,7 +44,7 @@ const contacto = (nombre: string) => db.insert(contactos).values({ nombre }).ret
 describe('listar las sugerencias pendientes', () => {
   it('names the record and what accepting it would link to', () => {
     cotizacionEnDisco()
-    importarCarpetaProyecto(db, { nombre: 'Sonrieme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Sonrieme' })
+    carpetaEnDisco()
     const s = unaSugerencia()
     expect(s.accion).toBe('vincular')
     expect(s.registro).toContain('475')
@@ -38,7 +54,7 @@ describe('listar las sugerencias pendientes', () => {
 
   it('leaves out the ones already answered', () => {
     cotizacionEnDisco()
-    importarCarpetaProyecto(db, { nombre: 'Sonrieme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Sonrieme' })
+    carpetaEnDisco()
     responder(db, unaSugerencia().id, 'aceptada')
     expect(pendientes(db)).toHaveLength(0)
   })
@@ -85,7 +101,7 @@ describe('vincular', () => {
 
   it('undoes the inferred link and the inferred aceptada when a Cotización link is rejected', () => {
     const { cotizacionId } = cotizacionEnDisco()
-    const { proyectoId } = importarCarpetaProyecto(db, { nombre: 'Sonrieme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Sonrieme' })
+    const { proyectoId } = carpetaEnDisco()
     expect(db.select().from(cotizaciones).get()!.estado).toBe('aceptada')
 
     responder(db, unaSugerencia().id, 'rechazada')
@@ -95,7 +111,7 @@ describe('vincular', () => {
 
   it('keeps notas written after the import when a Cotización link is rejected', () => {
     cotizacionEnDisco()
-    const { proyectoId } = importarCarpetaProyecto(db, { nombre: 'Sonrieme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Sonrieme' })
+    const { proyectoId } = carpetaEnDisco()
     db.update(proyectos).set({ notas: 'Pendiente de entrega final' }).where(eq(proyectos.id, proyectoId)).run()
 
     responder(db, unaSugerencia().id, 'rechazada')
@@ -104,7 +120,7 @@ describe('vincular', () => {
 
   it('keeps a user note that starts with "Cotización " when a link that wrote no note is rejected', () => {
     cotizacionEnDisco()
-    const { proyectoId } = importarCarpetaProyecto(db, { nombre: 'Sonrieme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Sonrieme' })
+    const { proyectoId } = carpetaEnDisco()
     db.update(proyectos).set({ notas: 'Cotización revisada con el cliente' }).where(eq(proyectos.id, proyectoId)).run()
 
     responder(db, unaSugerencia().id, 'rechazada')
@@ -113,7 +129,7 @@ describe('vincular', () => {
 
   it('removes the note the link wrote when it is rejected', () => {
     cotizacionEnDisco('Sonrieme, Casa Luna')
-    const { proyectoId } = importarCarpetaProyecto(db, { nombre: 'Sonrieme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Sonrieme' })
+    const { proyectoId } = carpetaEnDisco()
     expect(db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()!.notas).toContain('Casa Luna')
 
     responder(db, unaSugerencia().id, 'rechazada')
@@ -122,7 +138,7 @@ describe('vincular', () => {
 
   it('leaves notas untouched when rejecting a Sugerencia recorded without an undo', () => {
     cotizacionEnDisco('Sonrieme, Casa Luna')
-    const { proyectoId } = importarCarpetaProyecto(db, { nombre: 'Sonrieme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Sonrieme' })
+    const { proyectoId } = carpetaEnDisco()
     db.update(sugerenciasImportacion).set({ deshacer: null }).run()
 
     responder(db, unaSugerencia().id, 'rechazada')
@@ -132,7 +148,7 @@ describe('vincular', () => {
 
   it('keeps the link when a Cotización link is accepted', () => {
     const { cotizacionId } = cotizacionEnDisco()
-    const { proyectoId } = importarCarpetaProyecto(db, { nombre: 'Sonrieme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Sonrieme' })
+    const { proyectoId } = carpetaEnDisco()
     responder(db, unaSugerencia().id, 'aceptada')
     expect(db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()!.cotizacionId).toBe(cotizacionId)
     expect(db.select().from(cotizaciones).get()!.estado).toBe('aceptada')
@@ -141,10 +157,12 @@ describe('vincular', () => {
 
 describe('fusionar', () => {
   const dosParecidos = () => {
-    const original = resolverContacto(db, 'Círculo Medio')
-    const duplicado = resolverContacto(db, 'Circulo Media')
-    expect(duplicado.creado).toBe(true)
-    return { original: original.contactoId, duplicado: duplicado.contactoId }
+    mkdirSync(join(root, 'Clientes', 'Círculo Medio'), { recursive: true })
+    escanear()
+    mkdirSync(join(root, 'Clientes', 'Circulo Media'), { recursive: true })
+    expect(escanear().contactos.creados).toBe(1)
+    const id = (nombre: string) => db.select().from(contactos).where(eq(contactos.nombre, nombre)).get()!.id
+    return { original: id('Círculo Medio'), duplicado: id('Circulo Media') }
   }
 
   it('moves everything to the Contacto it resembles and keeps the Nombre canónico', () => {
@@ -201,8 +219,8 @@ describe('ubicación', () => {
   const sinCarpeta = () => {
     cotizacionEnDisco('Hotel Aura', 300)
     db.update(cotizaciones).set({ estado: 'aceptada' }).run()
-    const [proyectoId] = proyectosDeCotizacionesAceptadas(db)
-    return proyectoId
+    escanear()
+    return proyectoLlamado('Hotel Aura')
   }
 
   it('records an archive location when answered Archivado', () => {
@@ -234,7 +252,7 @@ describe('ubicación', () => {
 describe('answering twice', () => {
   it('refuses a Sugerencia that was already answered', () => {
     cotizacionEnDisco()
-    importarCarpetaProyecto(db, { nombre: 'Sonrieme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Sonrieme' })
+    carpetaEnDisco()
     const { id } = unaSugerencia()
     responder(db, id, 'aceptada')
     expect(() => responder(db, id, 'rechazada')).toThrow()

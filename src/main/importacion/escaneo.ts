@@ -1,17 +1,17 @@
 import { readdirSync, type Dirent } from 'node:fs'
 import { join, posix } from 'node:path'
-import type { LogCarpetas } from '../shared/ipc'
-import { leerNombreArchivo } from './cotizaciones'
-import type { Db } from './db'
+import type { LogCarpetas } from '../../shared/ipc'
+import { leerNombreArchivo } from '../cotizaciones'
+import type { Db } from '../db'
+import { carpetaDeProyectos, rutaDeProyecto, type TipoCarpetaProyecto } from '../paths'
 import {
   importarCarpetaProyecto,
   importarCotizacion,
   marcarHddNoDisponible,
   proyectosDeCotizacionesAceptadas,
   resolverContacto,
-  type TipoUbicacion
-} from './db/carpetas'
-import { contactos, sugerenciasImportacion } from './db/schema'
+  type Aportes
+} from './carpetas'
 
 /**
  * The rescan: reads `Cotizaciones/`, `Clientes/`, `Proyectos/` and `Archivo/Proyectos/` into
@@ -50,8 +50,11 @@ function logVacio(): LogCarpetas {
   }
 }
 
-const cuentaSugerencias = (db: Db) => db.select().from(sugerenciasImportacion).all().length
-const cuentaContactos = (db: Db) => db.select().from(contactos).all().length
+/** A Contacto or Sugerencia may come from any file or folder, so each adds its share here. */
+function sumar(log: LogCarpetas, aportes: Aportes): void {
+  log.contactos.creados += aportes.contactosCreados
+  log.sugerencias += aportes.sugerencias
+}
 
 /**
  * `hddRoot` is the external HDD, organised exactly like the main root. When it is absent its
@@ -59,25 +62,21 @@ const cuentaContactos = (db: Db) => db.select().from(contactos).all().length
  */
 export function escanearCarpetas(db: Db, root: string, hddRoot?: string): LogCarpetas {
   const log = logVacio()
-  const sugerenciasAntes = cuentaSugerencias(db)
-  // A Contacto is created wherever its name first turns up — a quote, a folder, either root —
-  // so the run's total is counted here rather than at any one of those places.
-  const contactosAntes = cuentaContactos(db)
 
   cotizacionesDeDisco(db, root, log)
   contactosDeDisco(db, root, log)
-  proyectosDeDisco(db, root, 'Proyectos', 'proyectos', log)
-  proyectosDeDisco(db, root, posix.join('Archivo', 'Proyectos'), 'archivo', log)
+  proyectosDeDisco(db, root, 'proyectos', log)
+  proyectosDeDisco(db, root, 'archivo', log)
 
   if (hddRoot) {
-    const encontrados = proyectosDeDisco(db, hddRoot, 'Proyectos', 'hdd_externo', log)
+    const encontrados = proyectosDeDisco(db, hddRoot, 'hdd_externo', log)
     log.hddConectado = encontrados !== null
     if (!log.hddConectado) marcarHddNoDisponible(db)
   }
 
-  log.proyectosSinCarpeta = proyectosDeCotizacionesAceptadas(db).length
-  log.sugerencias = cuentaSugerencias(db) - sugerenciasAntes
-  log.contactos.creados = cuentaContactos(db) - contactosAntes
+  const sinCarpeta = proyectosDeCotizacionesAceptadas(db)
+  log.proyectosSinCarpeta = sinCarpeta.proyectos
+  log.sugerencias += sinCarpeta.sugerencias
   return log
 }
 
@@ -101,6 +100,7 @@ function cotizacionesDeDisco(db: Db, root: string, log: LogCarpetas): void {
         })
         if (r.resultado === 'importado') log.cotizaciones.importadas++
         else log.cotizaciones.duplicadas++
+        sumar(log, r)
       } catch (e) {
         log.errores.push({ archivo: posix.join(carpeta, archivo), error: mensaje(e) })
       }
@@ -118,7 +118,7 @@ function contactosDeDisco(db: Db, root: string, log: LogCarpetas): void {
   for (const nombre of nombres) {
     try {
       // A Cliente folder names a Contacto only; it must not invent a Proyecto for it.
-      resolverContacto(db, nombre)
+      sumar(log, db.transaction((tx) => resolverContacto(tx, nombre)))
     } catch (e) {
       log.errores.push({ archivo: posix.join('Clientes', nombre), error: mensaje(e) })
     }
@@ -129,10 +129,10 @@ function contactosDeDisco(db: Db, root: string, log: LogCarpetas): void {
 function proyectosDeDisco(
   db: Db,
   root: string,
-  rutaRelativa: string,
-  tipo: TipoUbicacion,
+  tipo: TipoCarpetaProyecto,
   log: LogCarpetas
 ): string[] | null {
+  const rutaRelativa = carpetaDeProyectos(tipo)
   const nombres = subcarpetas(root, rutaRelativa)
   if (nombres === null) {
     log.noDisponibles.push(tipo === 'hdd_externo' ? `${rutaRelativa} (HDD externo)` : rutaRelativa)
@@ -143,10 +143,11 @@ function proyectosDeDisco(
       const r = importarCarpetaProyecto(db, {
         nombre,
         tipo,
-        rutaRelativa: posix.join(rutaRelativa, nombre)
+        rutaRelativa: rutaDeProyecto(tipo, nombre)
       })
       if (r.creado) log.proyectos.creados++
       else log.proyectos.actualizados++
+      sumar(log, r)
     } catch (e) {
       log.errores.push({ archivo: posix.join(rutaRelativa, nombre), error: mensaje(e) })
     }

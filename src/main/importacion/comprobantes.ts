@@ -1,8 +1,8 @@
 import { and, eq, isNull, or, sql } from 'drizzle-orm'
 import { leerCfdi, type Cfdi } from '../cfdi'
-import type { Db } from './index'
+import type { Db } from '../db'
 import { proponer } from '../sugerencias'
-import { contactos, costos, cotizaciones, ingresos, proyectos } from './schema'
+import { contactos, costos, cotizaciones, ingresos, proyectos } from '../db/schema'
 
 /** Which folder the CFDI came from: `Facturas/Emitidas` or `Facturas/Recibidas`. */
 export type Direccion = 'emitida' | 'recibida'
@@ -38,7 +38,7 @@ function montos(cfdi: Cfdi) {
 }
 
 /** A CFDI is imported once, whichever folder it turns up in. */
-function yaImportado(db: Db | Tx, uuid: string): boolean {
+function yaImportado(db: Tx, uuid: string): boolean {
   const existe = (tabla: typeof ingresos | typeof costos) =>
     db.select({ id: tabla.id }).from(tabla).where(eq(tabla.cfdiUuid, uuid)).get() !== undefined
   return existe(ingresos) || existe(costos)
@@ -56,24 +56,26 @@ export function importarCfdi(db: Db, xml: string, direccion: Direccion): Resulta
   // Only ingreso vouchers carry new money; pagos, nóminas and traslados restate what exists.
   // Egresos (notas de crédito) are Reembolsos, which are entered against their original Ingreso.
   if (cfdi.tipo !== 'I') return { ...vacio, resultado: 'ignorado' }
-  if (yaImportado(db, cfdi.uuid)) return { ...vacio, resultado: 'duplicado' }
-
-  const rfc = direccion === 'emitida' ? cfdi.receptor.rfc : cfdi.emisor.rfc
-  const contacto = db.select().from(contactos).where(eq(contactos.rfc, rfc)).get()
 
   return db.transaction((tx) => {
+    if (yaImportado(tx, cfdi.uuid)) return { ...vacio, resultado: 'duplicado' as const }
+
+    const rfc = direccion === 'emitida' ? cfdi.receptor.rfc : cfdi.emisor.rfc
+    const contacto = tx.select().from(contactos).where(eq(contactos.rfc, rfc)).get()
     const id =
       direccion === 'emitida' ? registrarIngreso(tx, cfdi, contacto?.id) : registrarCosto(tx, cfdi)
 
-    const sugerencia = contacto ? adivinarProyecto(tx, contacto.id, cfdi.total, cfdi.fecha) : null
-    if (sugerencia) {
+    const adivinado = contacto ? adivinarProyecto(tx, contacto.id, cfdi.total, cfdi.fecha) : null
+    const sugerencia =
+      adivinado &&
       proponer(tx, {
         entidad: direccion === 'emitida' ? 'ingreso' : 'costo',
         entidadId: id,
-        proyectoId: sugerencia.proyectoId,
-        motivo: sugerencia.motivo
+        proyectoId: adivinado.proyectoId,
+        motivo: adivinado.motivo
       })
-    }
+        ? adivinado
+        : null
 
     return {
       resultado: 'importado' as const,

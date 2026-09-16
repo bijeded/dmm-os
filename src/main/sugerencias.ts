@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import type { Sugerencia, RespuestaSugerencia } from '../shared/ipc'
 import { mejorEscrito } from './nombres'
+import { rutaDeProyecto } from './paths'
 import type { Db } from './db/index'
 import {
   contactos,
@@ -184,7 +185,7 @@ function ubicacion(tx: Tx, proyectoId: number, respuesta: RespuestaSugerencia): 
     .values({
       proyectoId,
       tipo: archivado ? 'archivo' : 'proyectos',
-      rutaRelativa: `${archivado ? 'Archivo/Proyectos' : 'Proyectos'}/${proyecto.nombre}`,
+      rutaRelativa: rutaDeProyecto(archivado ? 'archivo' : 'proyectos', proyecto.nombre),
       disponible: false,
       verificadoEn: new Date().toISOString().slice(0, 10)
     })
