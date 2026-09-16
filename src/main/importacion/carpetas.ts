@@ -1,9 +1,9 @@
 import { and, eq, isNull } from 'drizzle-orm'
 import { nombresDeProyecto, type NombreCotizacion } from '../cotizaciones'
 import { clave, mejorEscrito, parecidos } from '../nombres'
-import type { Db } from './index'
+import type { Db } from '../db'
 import { proponer } from '../sugerencias'
-import { contactos, cotizaciones, proyectos, ubicacionesArchivo } from './schema'
+import { contactos, cotizaciones, proyectos, ubicacionesArchivo } from '../db/schema'
 
 /**
  * Importing what the folders say: a Cotización per archived PDF (keyed by its Folio), a
@@ -17,27 +17,26 @@ export type TipoUbicacion = (typeof ubicacionesArchivo.$inferSelect)['tipo']
 
 /** A transaction, which reads and writes exactly like the database itself. */
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
-type Escritor = Db | Tx
 
-export interface ResultadoContacto {
-  contactoId: number
-  creado: boolean
-  /** The Contacto this one may be a misspelling of, left for the user to confirm. */
-  fusionarCon: number | null
+/** What one file or folder added, summed into the run's log. */
+export interface Aportes {
+  contactosCreados: number
+  sugerencias: number
 }
 
-export interface ResultadoCotizacion {
+export interface ResultadoContacto extends Aportes {
+  contactoId: number
+}
+
+export interface ResultadoCotizacion extends Aportes {
   /** `duplicado` means that Folio was already imported and nothing changed. */
   resultado: 'importado' | 'duplicado'
   cotizacionId: number
-  contactoId: number
 }
 
-export interface ResultadoCarpeta {
+export interface ResultadoCarpeta extends Aportes {
   proyectoId: number
   creado: boolean
-  /** The Cotización this folder was taken to be the delivery of. */
-  cotizacionId: number | null
 }
 
 /** A Cotización as its archived PDF names it, plus where the file sits. */
@@ -54,11 +53,19 @@ export interface EntradaCarpeta {
 }
 
 /**
- * A legacy Cotización naming several projects becomes one Proyecto; the names it does not
- * become are kept in that Proyecto's notes, which is the only place they survive.
+ * A legacy Cotización naming several projects becomes one Proyecto: `elegido` if given, else
+ * the first name. The names it does not become are kept in that Proyecto's notes, which is
+ * the only place they survive. `nombre` is undefined when the quote names no such project.
  */
-function notasDeOtrosNombres(folio: number | null, otros: string[]): string | null {
-  return otros.length > 0 ? `Cotización ${folio} también incluye: ${otros.join(', ')}` : null
+function repartirNombres(
+  cotizacion: { folio: number | null; nombre: string | null },
+  elegido?: string
+): { nombre: string | undefined; notas: string | null } {
+  const nombres = nombresDeProyecto(cotizacion.nombre ?? '')
+  const nombre = elegido === undefined ? nombres[0] : nombres.find((n) => clave(n) === clave(elegido))
+  const otros = nombres.filter((n) => n !== nombre)
+  const notas = otros.length > 0 ? `Cotización ${cotizacion.folio} también incluye: ${otros.join(', ')}` : null
+  return { nombre, notas }
 }
 
 /**
@@ -67,7 +74,7 @@ function notasDeOtrosNombres(folio: number | null, otros: string[]): string | nu
  * that is merely *close* to an existing one gets its own Contacto and a merge suggestion:
  * near-duplicates are merged only after the suggestion is accepted.
  */
-export function resolverContacto(db: Escritor, nombre: string): ResultadoContacto {
+export function resolverContacto(db: Tx, nombre: string): ResultadoContacto {
   const todos = db.select().from(contactos).all()
   const igual = todos.find((c) => clave(c.nombre) === clave(nombre))
   if (igual) {
@@ -75,12 +82,13 @@ export function resolverContacto(db: Escritor, nombre: string): ResultadoContact
     if (mejor !== igual.nombre) {
       db.update(contactos).set({ nombre: mejor }).where(eq(contactos.id, igual.id)).run()
     }
-    return { contactoId: igual.id, creado: false, fusionarCon: null }
+    return { contactoId: igual.id, contactosCreados: 0, sugerencias: 0 }
   }
 
   const parecido = todos.find((c) => parecidos(c.nombre, nombre))
   const creado = db.insert(contactos).values({ nombre }).returning().get()
-  if (parecido) {
+  const sugerido =
+    parecido !== undefined &&
     proponer(db, {
       entidad: 'contacto',
       entidadId: creado.id,
@@ -88,8 +96,7 @@ export function resolverContacto(db: Escritor, nombre: string): ResultadoContact
       contactoId: parecido.id,
       motivo: `nombre parecido a "${parecido.nombre}"`
     })
-  }
-  return { contactoId: creado.id, creado: true, fusionarCon: parecido?.id ?? null }
+  return { contactoId: creado.id, contactosCreados: 1, sugerencias: sugerido ? 1 : 0 }
 }
 
 /**
@@ -98,20 +105,21 @@ export function resolverContacto(db: Escritor, nombre: string): ResultadoContact
  * status its Folio allows. Re-importing the same Folio changes nothing.
  */
 export function importarCotizacion(db: Db, entrada: EntradaCotizacion): ResultadoCotizacion {
+  return db.transaction((tx) => {
   const sufijo = entrada.sufijo ?? ''
-  const existente = db
+  const existente = tx
     .select()
     .from(cotizaciones)
     .where(and(eq(cotizaciones.folio, entrada.folio), eq(cotizaciones.folioSufijo, sufijo)))
     .get()
   if (existente) {
-    return { resultado: 'duplicado', cotizacionId: existente.id, contactoId: existente.contactoId }
+    return { resultado: 'duplicado', cotizacionId: existente.id, contactosCreados: 0, sugerencias: 0 }
   }
 
   // The old filenames carry no date; the year the file is filed under is all the disk knows.
   const fecha = entrada.fecha ?? `${entrada.anio}-01-01`
-  const { contactoId } = resolverContacto(db, nombresDeProyecto(entrada.nombre)[0] ?? entrada.nombre)
-  const cotizacion = db
+  const { contactoId, ...aportes } = resolverContacto(tx, nombresDeProyecto(entrada.nombre)[0] ?? entrada.nombre)
+  const cotizacion = tx
     .insert(cotizaciones)
     .values({
       folio: entrada.folio,
@@ -125,7 +133,8 @@ export function importarCotizacion(db: Db, entrada: EntradaCotizacion): Resultad
     })
     .returning()
     .get()
-  return { resultado: 'importado', cotizacionId: cotizacion.id, contactoId }
+  return { resultado: 'importado', cotizacionId: cotizacion.id, ...aportes }
+  })
 }
 
 /**
@@ -135,7 +144,7 @@ export function importarCotizacion(db: Db, entrada: EntradaCotizacion): Resultad
  */
 export function importarCarpetaProyecto(db: Db, entrada: EntradaCarpeta): ResultadoCarpeta {
   return db.transaction((tx) => {
-    const { contactoId } = resolverContacto(tx, entrada.nombre)
+    const { contactoId, ...aportes } = resolverContacto(tx, entrada.nombre)
     // Matched by Nombre canónico, so the same Proyecto foldered `Sonrieme` in one root and
     // `Sonríeme` in another is one Proyecto with two locations, not two Proyectos.
     const existente = tx
@@ -172,10 +181,13 @@ export function importarCarpetaProyecto(db: Db, entrada: EntradaCarpeta): Result
       })
       .run()
 
-    const cotizacionId = existente
-      ? proyecto.cotizacionId
-      : vincularCotizacion(tx, proyecto.id, contactoId, entrada.nombre)
-    return { proyectoId: proyecto.id, creado: !existente, cotizacionId }
+    const vinculada = !existente && vincularCotizacion(tx, proyecto.id, contactoId, entrada.nombre)
+    return {
+      proyectoId: proyecto.id,
+      creado: !existente,
+      contactosCreados: aportes.contactosCreados,
+      sugerencias: aportes.sugerencias + (vinculada ? 1 : 0)
+    }
   })
 }
 
@@ -184,7 +196,7 @@ export function importarCarpetaProyecto(db: Db, entrada: EntradaCarpeta): Result
  * unlinked match is taken. The inference *is* written — that is what "inferred status" means
  * here — and a Sugerencia records that it was inferred, so rejecting it can undo the link.
  */
-function vincularCotizacion(db: Escritor, proyectoId: number, contactoId: number, nombre: string): number | null {
+function vincularCotizacion(db: Tx, proyectoId: number, contactoId: number, nombre: string): boolean {
   const candidata = db
     .select()
     .from(cotizaciones)
@@ -193,13 +205,11 @@ function vincularCotizacion(db: Escritor, proyectoId: number, contactoId: number
     .orderBy(cotizaciones.folio)
     .all()
     .map((r) => r.cotizaciones)
-    .find((c) => nombresDeProyecto(c.nombre ?? '').some((n) => clave(n) === clave(nombre)))
-  if (!candidata) return null
+    .find((c) => repartirNombres(c, nombre).nombre !== undefined)
+  if (!candidata) return false
 
-  const otros = nombresDeProyecto(candidata.nombre ?? '').filter((n) => clave(n) !== clave(nombre))
   const notasAntes = db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()?.notas ?? null
-  // A legacy quote listing several projects becomes one Proyecto; the rest are kept as notes.
-  const notasEscritas = notasDeOtrosNombres(candidata.folio, otros)
+  const notasEscritas = repartirNombres(candidata, nombre).notas
   db.update(cotizaciones).set({ estado: 'aceptada' }).where(eq(cotizaciones.id, candidata.id)).run()
   db.update(proyectos)
     .set({
@@ -208,7 +218,7 @@ function vincularCotizacion(db: Escritor, proyectoId: number, contactoId: number
     })
     .where(eq(proyectos.id, proyectoId))
     .run()
-  proponer(db, {
+  return proponer(db, {
     entidad: 'cotizacion',
     entidadId: candidata.id,
     accion: 'vincular',
@@ -219,7 +229,6 @@ function vincularCotizacion(db: Escritor, proyectoId: number, contactoId: number
       proyecto: { notasAntes, notasEscritas }
     }
   })
-  return candidata.id
 }
 
 /**
@@ -227,7 +236,7 @@ function vincularCotizacion(db: Escritor, proyectoId: number, contactoId: number
  * Proyecto whose files are somewhere the app cannot see. Whether that is Archivado or No
  * disponible is the one thing the disk cannot say, so it is asked once.
  */
-export function proyectosDeCotizacionesAceptadas(db: Db): number[] {
+export function proyectosDeCotizacionesAceptadas(db: Db): { proyectos: number; sugerencias: number } {
   const huerfanas = db
     .select()
     .from(cotizaciones)
@@ -236,29 +245,32 @@ export function proyectosDeCotizacionesAceptadas(db: Db): number[] {
     .all()
     .map((r) => r.cotizaciones)
 
-  return huerfanas.map((c) => {
-    const nombres = nombresDeProyecto(c.nombre ?? '')
-    const otros = nombres.slice(1)
-    const proyecto = db
+  let sugerencias = 0
+  for (const c of huerfanas) {
+    db.transaction((tx) => {
+    const { nombre, notas } = repartirNombres(c)
+    const proyecto = tx
       .insert(proyectos)
       .values({
-        nombre: nombres[0] ?? `Cotización ${c.folio}`,
+        nombre: nombre ?? `Cotización ${c.folio}`,
         contactoId: c.contactoId,
         cotizacionId: c.id,
         categoria: c.categoria,
         estado: 'completado',
-        notas: notasDeOtrosNombres(c.folio, otros)
+        notas
       })
       .returning()
       .get()
-    proponer(db, {
+    const sugerido = proponer(tx, {
       entidad: 'proyecto',
       entidadId: proyecto.id,
       accion: 'ubicacion',
       motivo: `cotización ${c.folio} aceptada sin carpeta: ¿archivado o no disponible?`
     })
-    return proyecto.id
-  })
+    if (sugerido) sugerencias++
+    })
+  }
+  return { proyectos: huerfanas.length, sugerencias }
 }
 
 /**

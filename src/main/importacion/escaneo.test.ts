@@ -2,9 +2,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { escanearCarpetas } from './escaneo'
-import { contactos, cotizaciones, proyectos, sugerenciasImportacion, ubicacionesArchivo } from './db/schema'
-import { db, reiniciarDb } from './db/test-db'
+import { escanearCarpetas } from '.'
+import { contactos, cotizaciones, proyectos, sugerenciasImportacion, ubicacionesArchivo } from '../db/schema'
+import { db, reiniciarDb } from '../db/test-db'
 
 let root: string
 let hdd: string
@@ -153,5 +153,130 @@ describe('cotización aceptada sin carpeta', () => {
     expect(escanearCarpetas(db, root).proyectosSinCarpeta).toBe(0)
     const s = db.select().from(sugerenciasImportacion).all().filter((x) => x.accion === 'ubicacion')
     expect(s).toHaveLength(1)
+  })
+})
+
+describe('el Contacto por nombre canónico', () => {
+  it('upgrades the stored name to the better-written spelling', () => {
+    carpeta(root, 'Clientes', 'Sonrieme')
+    escanearCarpetas(db, root)
+    carpeta(hdd, 'Proyectos', 'Sonríeme')
+    const log = escanearCarpetas(db, root, hdd)
+    expect(log.contactos.creados).toBe(0)
+    expect(db.select().from(contactos).all().map((c) => c.nombre)).toEqual(['Sonríeme'])
+  })
+
+  it('leaves a near-duplicate as its own Contacto and suggests the merge once', () => {
+    carpeta(root, 'Clientes', 'Sublime')
+    carpeta(root, 'Clientes', 'Sublime Inspiración')
+    const log = escanearCarpetas(db, root)
+    expect(log.contactos.creados).toBe(2)
+    expect(log.sugerencias).toBe(1)
+    expect(db.select().from(sugerenciasImportacion).get()).toMatchObject({ entidad: 'contacto', accion: 'fusionar', estado: 'pendiente' })
+
+    expect(escanearCarpetas(db, root)).toMatchObject({ sugerencias: 0, contactos: { creados: 0 } })
+    expect(db.select().from(sugerenciasImportacion).all()).toHaveLength(1)
+  })
+})
+
+describe('una Cotización desde su PDF', () => {
+  it('records it as enviada, with its Folio and its PDF, dated from the folder year', () => {
+    pdf(root, '2025', 'DMM - 475 - Sonrieme.pdf')
+    escanearCarpetas(db, root)
+    expect(db.select().from(cotizaciones).get()).toMatchObject({
+      folio: 475,
+      folioSufijo: '',
+      estado: 'enviada',
+      fecha: '2025-01-01',
+      pdfRutaRelativa: 'Cotizaciones/2025/DMM - 475 - Sonrieme.pdf'
+    })
+  })
+
+  it('dates it from the filename when the new format carries a date', () => {
+    pdf(root, '2026', '260114-DMM520-Hospital Jardín.pdf')
+    escanearCarpetas(db, root)
+    expect(db.select().from(cotizaciones).get()!.fecha).toBe('2026-01-14')
+  })
+
+  it('keeps two quotes sharing a Folio apart by their letter', () => {
+    pdf(root, '2025', 'DMM - 475a- SMPP.pdf')
+    pdf(root, '2025', 'DMM - 475b- SMPP.pdf')
+    escanearCarpetas(db, root)
+    expect(db.select().from(cotizaciones).all().map((c) => c.folioSufijo).sort()).toEqual(['a', 'b'])
+  })
+})
+
+describe('la carpeta de un Proyecto', () => {
+  it('records where it was found', () => {
+    carpeta(root, 'Archivo', 'Proyectos', 'Versa')
+    escanearCarpetas(db, root)
+    expect(db.select().from(ubicacionesArchivo).get()).toMatchObject({
+      tipo: 'archivo',
+      rutaRelativa: 'Archivo/Proyectos/Versa',
+      disponible: true
+    })
+  })
+
+  it('is one Proyecto when the two roots spell its folder differently', () => {
+    carpeta(root, 'Proyectos', 'Sonríeme')
+    carpeta(hdd, 'Proyectos', 'Sonrieme')
+    escanearCarpetas(db, root, hdd)
+    expect(db.select().from(proyectos).all()).toHaveLength(1)
+    expect(db.select().from(ubicacionesArchivo).all()).toHaveLength(2)
+  })
+
+  it('changes nothing when the same folder is scanned again', () => {
+    carpeta(root, 'Proyectos', 'Clicme')
+    escanearCarpetas(db, root)
+    expect(escanearCarpetas(db, root).proyectos).toEqual({ creados: 0, actualizados: 1 })
+    expect(db.select().from(ubicacionesArchivo).all()).toHaveLength(1)
+  })
+
+  it('suggests the link to the Cotización of the same name, once', () => {
+    pdf(root, '2025', 'DMM - 475 - Clicme.pdf')
+    carpeta(root, 'Proyectos', 'Clicme')
+    expect(escanearCarpetas(db, root).sugerencias).toBe(1)
+    expect(db.select().from(sugerenciasImportacion).get()).toMatchObject({
+      entidad: 'cotizacion',
+      entidadId: db.select().from(cotizaciones).get()!.id,
+      accion: 'vincular',
+      proyectoId: db.select().from(proyectos).get()!.id
+    })
+    expect(escanearCarpetas(db, root).sugerencias).toBe(0)
+  })
+
+  it('keeps the extra names of a legacy multi-project quote in the notes', () => {
+    pdf(root, '2025', 'DMM - 475 - Clicme + Branding.pdf')
+    carpeta(root, 'Proyectos', 'Clicme')
+    escanearCarpetas(db, root)
+    expect(db.select().from(proyectos).get()!.notas).toContain('Branding')
+  })
+
+  it('links one Proyecto only, leaving a second matching quote alone', () => {
+    pdf(root, '2025', 'DMM - 1 - Clicme.pdf')
+    pdf(root, '2025', 'DMM - 2 - Clicme.pdf')
+    escanearCarpetas(db, root)
+    carpeta(root, 'Proyectos', 'Clicme')
+    escanearCarpetas(db, root)
+    expect(db.select().from(cotizaciones).all().filter((c) => c.estado === 'aceptada')).toHaveLength(1)
+  })
+})
+
+describe('el log cuenta lo que la corrida agregó', () => {
+  it('ignores Sugerencias left pending by earlier runs', () => {
+    carpeta(root, 'Clientes', 'Sublime')
+    carpeta(root, 'Clientes', 'Sublime Inspiración')
+    escanearCarpetas(db, root)
+    carpeta(root, 'Proyectos', 'Clicme')
+    expect(escanearCarpetas(db, root)).toMatchObject({ sugerencias: 0, contactos: { creados: 1 } })
+  })
+
+  it('counts the one-time location question for a quote accepted with no folder', () => {
+    pdf(root, '2025', 'DMM - 475 - Versa.pdf')
+    escanearCarpetas(db, root)
+    db.update(cotizaciones).set({ estado: 'aceptada' }).run()
+    const log = escanearCarpetas(db, root)
+    expect(log.sugerencias).toBe(1)
+    expect(db.select().from(proyectos).get()).toMatchObject({ nombre: 'Versa', estado: 'completado' })
   })
 })

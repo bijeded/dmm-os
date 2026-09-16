@@ -1,8 +1,8 @@
 import { readdirSync, readFileSync, type Dirent } from 'node:fs'
 import { join, posix } from 'node:path'
-import type { Db } from './db'
-import { importarCfdi, type Direccion } from './db/importacion'
-import type { LogImportacion } from '../shared/ipc'
+import type { Db } from '../db'
+import type { LogImportacion } from '../../shared/ipc'
+import { importarCfdi, type Direccion } from './comprobantes'
 
 const CARPETAS: Record<Direccion, string> = {
   emitida: posix.join('Facturas', 'Emitidas'),
