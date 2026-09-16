@@ -39,6 +39,24 @@ export interface LogImportacion {
   noDisponibles: string[]
 }
 
+/** What one rescan of `Cotizaciones/`, `Clientes/` and `Proyectos/` found. */
+export interface LogCarpetas {
+  /** Keyed by Folio: `duplicadas` were already imported and changed nothing. */
+  cotizaciones: { importadas: number; duplicadas: number }
+  /** Contactos created from a folder name; existing ones are matched, never duplicated. */
+  contactos: { creados: number }
+  proyectos: { creados: number; actualizados: number }
+  /** Proyectos created for an accepted Cotización whose folder was found nowhere. */
+  proyectosSinCarpeta: number
+  /** Sugerencias de importación this run left waiting for accept/reject. */
+  sugerencias: number
+  /** The external HDD is a secondary source; when absent its locations are No disponible. */
+  hddConectado: boolean
+  errores: { archivo: string; error: string }[]
+  /** Folders the app knows but could not read on this run (No disponible). */
+  noDisponibles: string[]
+}
+
 /** Whether a year's Costos are known at all; a year without them shows Sin datos. */
 export interface CoberturaAnual {
   anio: number
@@ -76,7 +94,12 @@ export const contrato = {
   },
   importacion: {
     /** Re-reads `Facturas/Emitidas` and `Facturas/Recibidas`; safe to run again at any time. */
-    facturas: canal<[], LogImportacion>()
+    facturas: canal<[], LogImportacion>(),
+    /**
+     * Re-reads `Cotizaciones/`, `Clientes/`, `Proyectos/` and `Archivo/Proyectos/`, with the
+     * external HDD as a secondary source. Safe to run again at any time.
+     */
+    carpetas: canal<[], LogCarpetas>()
   },
   finanzas: {
     /** Which years show Sin datos because their Costos were never imported. */

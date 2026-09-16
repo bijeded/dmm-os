@@ -5,6 +5,16 @@ import { registerIpc } from './ipc'
 const info = { version: '0.1.0', dbPath: '/db', dmmOsRoot: '/root' }
 const estado = { dir: '/v', frecuenciaDias: 7, conservar: 4, ultimo: null, respaldos: [] }
 const log = { importados: 0, duplicados: 0, ignorados: 0, sugerencias: 0, rfcsDesconocidos: [], errores: [], noDisponibles: [] }
+const logCarpetas = {
+  cotizaciones: { importadas: 0, duplicadas: 0 },
+  contactos: { creados: 0 },
+  proyectos: { creados: 0, actualizados: 0 },
+  proyectosSinCarpeta: 0,
+  sugerencias: 0,
+  hddConectado: false,
+  errores: [],
+  noDisponibles: []
+}
 
 function handlers() {
   return {
@@ -16,7 +26,8 @@ function handlers() {
       restaurar: vi.fn(async () => ({ restaurado: false }))
     },
     importacion: {
-      facturas: vi.fn(() => log)
+      facturas: vi.fn(() => log),
+      carpetas: vi.fn(() => logCarpetas)
     },
     finanzas: {
       coberturaCostos: vi.fn(() => [{ anio: 2025, sinDatos: true }])
