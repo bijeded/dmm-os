@@ -99,7 +99,7 @@ export interface Rutas {
 }
 
 /** A folder the app can reveal in Finder. */
-export type CarpetaAbrible = 'raiz' | 'entrada' | 'hdd'
+export type CarpetaAbrible = 'raiz' | 'entrada'
 
 /** Whether a year's Costos are known at all; a year without them shows Sin datos. */
 export interface CoberturaAnual {
@@ -153,8 +153,8 @@ export const contrato = {
   },
   rutas: {
     leer: canal<[], Rutas>(),
-    /** Points at the external HDD; without a path the user picks the folder. */
-    elegirHdd: canal<[path?: string], Rutas>(),
+    /** Points at the external HDD: the user picks the folder. */
+    elegirHdd: canal<[], Rutas>(),
     /** Forgets the external HDD; its Proyectos stay, as No disponible. */
     olvidarHdd: canal<[], Rutas>(),
     /** Reveals the folder in Finder. */

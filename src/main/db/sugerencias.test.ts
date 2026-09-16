@@ -93,6 +93,15 @@ describe('vincular', () => {
     expect(db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()!.cotizacionId).toBe(null)
   })
 
+  it('keeps notas written after the import when a Cotización link is rejected', () => {
+    cotizacionEnDisco()
+    const { proyectoId } = importarCarpetaProyecto(db, { nombre: 'Sonrieme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Sonrieme' })
+    db.update(proyectos).set({ notas: 'Pendiente de entrega final' }).where(eq(proyectos.id, proyectoId)).run()
+
+    responder(db, unaSugerencia().id, 'rechazada')
+    expect(db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()!.notas).toBe('Pendiente de entrega final')
+  })
+
   it('keeps the link when a Cotización link is accepted', () => {
     const { cotizacionId } = cotizacionEnDisco()
     const { proyectoId } = importarCarpetaProyecto(db, { nombre: 'Sonrieme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Sonrieme' })
@@ -136,6 +145,22 @@ describe('fusionar', () => {
     expect(db.select().from(contactos).where(eq(contactos.id, original)).get()!.rfc).toBe('CME010101AAA')
   })
 
+  it('keeps another pending merge that pointed at the duplicate', () => {
+    const { original, duplicado } = dosParecidos()
+    const tercero = db.insert(contactos).values({ nombre: 'Circulo Medios' }).returning().get()
+    db.insert(sugerenciasImportacion)
+      .values({ entidad: 'contacto', entidadId: tercero.id, accion: 'fusionar', contactoId: duplicado, motivo: 'nombre parecido' })
+      .run()
+
+    responder(db, unaSugerencia().id, 'aceptada')
+
+    const restante = pendientes(db)
+    expect(restante).toHaveLength(1)
+    expect(restante[0].destino).toBe('Círculo Medio')
+    expect(db.select().from(contactos).all()).toHaveLength(2)
+    expect(original).toBeGreaterThan(0)
+  })
+
   it('keeps both Contactos when rejected', () => {
     dosParecidos()
     responder(db, unaSugerencia().id, 'rechazada')
@@ -158,6 +183,15 @@ describe('ubicación', () => {
     const u = db.select().from(ubicacionesArchivo).where(eq(ubicacionesArchivo.proyectoId, proyectoId)).get()!
     expect(u.tipo).toBe('archivo')
     expect(u.disponible).toBe(false)
+  })
+
+  it('keeps the answer even when the Proyecto already had that location', () => {
+    const proyectoId = sinCarpeta()
+    db.insert(ubicacionesArchivo)
+      .values({ proyectoId, tipo: 'archivo', rutaRelativa: 'Archivo/Proyectos/Hotel Aura', disponible: true })
+      .run()
+    responder(db, unaSugerencia().id, 'aceptada')
+    expect(db.select().from(ubicacionesArchivo).where(eq(ubicacionesArchivo.proyectoId, proyectoId)).get()!.disponible).toBe(false)
   })
 
   it('records the missing working folder when answered No disponible', () => {

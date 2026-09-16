@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Rutas } from '../../../shared/ipc'
-import { Aviso, Datos, Fila, Seccion, mensaje, monoCls } from './Seccion'
+import { Aviso, Datos, Fila, Seccion, mensaje, monoCls, useAccion } from './Seccion'
 import { Button } from './ui/button'
 
 /**
@@ -11,25 +11,18 @@ import { Button } from './ui/button'
 export function Ubicacion() {
   const api = window.dmm.rutas
   const [rutas, setRutas] = useState<Rutas | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [ocupado, setOcupado] = useState(false)
+  const { error, setError, ocupado, correr } = useAccion()
 
   useEffect(() => {
     api.leer().then(setRutas, (e) => setError(mensaje(e)))
-  }, [api])
+  }, [api, setError])
 
-  const run = async (fn: () => Promise<Rutas | void>) => {
-    setError(null)
-    setOcupado(true)
-    try {
+  // Every action answers with the rutas as they are afterwards, except opening a folder.
+  const run = (fn: () => Promise<Rutas | void>) =>
+    correr(async () => {
       const r = await fn()
       if (r) setRutas(r)
-    } catch (e) {
-      setError(mensaje(e))
-    } finally {
-      setOcupado(false)
-    }
-  }
+    })
 
   return (
     <Seccion id="ubicacion" titulo="Ubicación">

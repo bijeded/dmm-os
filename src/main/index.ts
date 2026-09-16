@@ -5,6 +5,7 @@ import { createRespaldos } from './backup'
 import { importarFacturas } from './facturas'
 import { escanearCarpetas } from './escaneo'
 import { coberturaCostos } from './db/cobertura'
+import { marcarHddNoDisponible } from './db/carpetas'
 import { pendientes, responder } from './db/sugerencias'
 import { leerRutas } from './rutas'
 import type { CarpetaAbrible, EstadoImportacion } from '../shared/ipc'
@@ -73,7 +74,7 @@ app.whenReady().then(() => {
   const ultimo: EstadoImportacion = { facturas: null, carpetas: null }
   const ahora = () => new Date().toISOString()
   const carpetaDe = (carpeta: CarpetaAbrible) =>
-    carpeta === 'hdd' ? hddRoot() : carpeta === 'entrada' ? join(info.dmmOsRoot, 'Entrada') : info.dmmOsRoot
+    carpeta === 'entrada' ? join(info.dmmOsRoot, 'Entrada') : info.dmmOsRoot
 
   registerIpc(ipcMain, {
     getAppInfo: () => info,
@@ -116,27 +117,26 @@ app.whenReady().then(() => {
     },
     rutas: {
       leer: rutas,
-      elegirHdd: async (path) => {
-        let elegido = path
-        if (!elegido) {
-          const picked = await dialog.showOpenDialog({
-            title: 'Disco externo',
-            message: 'Elige la carpeta del disco externo, organizada como DMM OS',
-            properties: ['openDirectory']
-          })
-          if (picked.canceled || !picked.filePaths[0]) return rutas()
-          elegido = picked.filePaths[0]
-        }
-        conexion.ajustes.escribir('hdd.root', elegido)
+      elegirHdd: async () => {
+        const picked = await dialog.showOpenDialog({
+          title: 'Disco externo',
+          message: 'Elige la carpeta del disco externo, organizada como DMM OS',
+          properties: ['openDirectory']
+        })
+        if (picked.canceled || !picked.filePaths[0]) return rutas()
+        conexion.ajustes.escribir('hdd.root', picked.filePaths[0])
         return rutas()
       },
       olvidarHdd: () => {
         conexion.ajustes.escribir('hdd.root', '')
-        return leerRutas(info.dmmOsRoot)
+        // Its Proyectos stay; without a drive to look at, their locations are No disponible.
+        marcarHddNoDisponible(conexion.db)
+        return rutas()
       },
-      abrir: (carpeta) => {
-        const path = carpetaDe(carpeta)
-        if (path) shell.openPath(path)
+      // `openPath` answers with why it could not open, or '' when it did.
+      abrir: async (carpeta) => {
+        const error = await shell.openPath(carpetaDe(carpeta))
+        if (error) throw new Error(error)
       }
     },
     finanzas: {

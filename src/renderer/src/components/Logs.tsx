@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Corrida, EstadoImportacion, LogCarpetas, LogImportacion, RespuestaSugerencia, Sugerencia } from '../../../shared/ipc'
-import { Aviso, Seccion, fecha, mensaje } from './Seccion'
+import { Aviso, Seccion, fecha, mensaje, useAccion } from './Seccion'
 import { Button } from './ui/button'
 
 /**
@@ -12,49 +12,32 @@ export function Logs() {
   const api = window.dmm.importacion
   const [estado, setEstado] = useState<EstadoImportacion>({ facturas: null, carpetas: null })
   const [sugerencias, setSugerencias] = useState<Sugerencia[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const [ocupado, setOcupado] = useState(false)
+  const { error, setError, ocupado, correr } = useAccion()
 
   useEffect(() => {
     Promise.all([api.estado(), api.sugerencias()]).then(([e, s]) => {
       setEstado(e)
       setSugerencias(s)
     }, (e) => setError(mensaje(e)))
-  }, [api])
+  }, [api, setError])
 
-  const run = async (fn: () => Promise<unknown>) => {
-    setError(null)
-    setOcupado(true)
-    try {
+  const importar = (fn: () => Promise<unknown>) =>
+    correr(async () => {
       await fn()
       setEstado(await api.estado())
       setSugerencias(await api.sugerencias())
-    } catch (e) {
-      setError(mensaje(e))
-    } finally {
-      setOcupado(false)
-    }
-  }
+    })
 
-  const contestar = async (id: number, respuesta: RespuestaSugerencia) => {
-    setError(null)
-    setOcupado(true)
-    try {
-      setSugerencias(await api.responder(id, respuesta))
-    } catch (e) {
-      setError(mensaje(e))
-    } finally {
-      setOcupado(false)
-    }
-  }
+  const contestar = (id: number, respuesta: RespuestaSugerencia) =>
+    correr(async () => setSugerencias(await api.responder(id, respuesta)))
 
   return (
     <Seccion id="logs" titulo="Logs">
       <div className="flex flex-wrap gap-2">
-        <Button disabled={ocupado} onClick={() => run(() => api.carpetas())}>
+        <Button disabled={ocupado} onClick={() => importar(() => api.carpetas())}>
           Re-escanear carpetas
         </Button>
-        <Button variant="secondary" disabled={ocupado} onClick={() => run(() => api.facturas())}>
+        <Button variant="secondary" disabled={ocupado} onClick={() => importar(() => api.facturas())}>
           Importar facturas
         </Button>
       </div>

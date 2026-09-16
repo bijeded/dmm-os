@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { EstadoRespaldos, MotivoRespaldo } from '../../../shared/ipc'
-import { Aviso, Datos, Fila, Seccion, fecha, inputCls, mensaje, monoCls } from './Seccion'
+import { Aviso, Datos, Fila, Seccion, fecha, inputCls, mensaje, monoCls, useAccion } from './Seccion'
 import { Button } from './ui/button'
 
 const motivos: Record<MotivoRespaldo, string> = {
@@ -17,8 +17,7 @@ export function Exportar() {
   const [frecuencia, setFrecuencia] = useState('')
   const [conservar, setConservar] = useState('')
   const [confirmar, setConfirmar] = useState<{ path?: string } | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [ocupado, setOcupado] = useState(false)
+  const { error, setError, ocupado, correr } = useAccion()
 
   const cargar = (e: EstadoRespaldos) => {
     setEstado(e)
@@ -28,20 +27,13 @@ export function Exportar() {
 
   useEffect(() => {
     api.estado().then(cargar, (e) => setError(mensaje(e)))
-  }, [api])
+  }, [api, setError])
 
-  const run = async (fn: () => Promise<unknown>) => {
-    setError(null)
-    setOcupado(true)
-    try {
+  const run = (fn: () => Promise<unknown>) =>
+    correr(async () => {
       await fn()
       cargar(await api.estado())
-    } catch (e) {
-      setError(mensaje(e))
-    } finally {
-      setOcupado(false)
-    }
-  }
+    })
 
   return (
     <Seccion id="exportar" titulo="Exportar">

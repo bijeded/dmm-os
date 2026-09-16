@@ -112,9 +112,13 @@ function vincular(tx: Tx, s: Fila, respuesta: RespuestaSugerencia): void {
   } else if (s.entidad === 'costo' && respuesta === 'aceptada') {
     tx.update(costos).set({ proyectoId }).where(eq(costos.id, s.entidadId)).run()
   } else if (s.entidad === 'cotizacion' && respuesta === 'rechazada') {
+    // `enviada` is what the PDF alone says: a quote whose file exists was at least sent. That is
+    // the status the importer gave it before inferring `aceptada` from the folder.
     tx.update(cotizaciones).set({ estado: 'enviada' }).where(eq(cotizaciones.id, s.entidadId)).run()
-    // The notas are the other project names that same quote listed; without the link they say nothing.
-    tx.update(proyectos).set({ cotizacionId: null, notas: null }).where(eq(proyectos.id, proyectoId)).run()
+    const proyecto = tx.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()
+    // Only the note the link itself wrote goes; anything written since is the user's.
+    const notas = proyecto?.notas?.startsWith('Cotización ') ? null : (proyecto?.notas ?? null)
+    tx.update(proyectos).set({ cotizacionId: null, notas }).where(eq(proyectos.id, proyectoId)).run()
   }
 }
 
@@ -128,10 +132,17 @@ function fusionar(tx: Tx, duplicadoId: number, originalId: number): void {
   const original = tx.select().from(contactos).where(eq(contactos.id, originalId)).get()
   if (!duplicado || !original) throw new Error('No se puede fusionar: falta uno de los Contactos')
 
+  // Costos reach a Contacto through their Proyecto or Cotización, so moving those moves them.
   for (const tabla of [cotizaciones, proyectos, ingresos, definicionesIngreso]) {
     tx.update(tabla).set({ contactoId: originalId }).where(eq(tabla.contactoId, duplicadoId)).run()
   }
-  // The duplicate goes first: it may hold the RFC, which only one Contacto may claim.
+  // Another pending merge may point at the duplicate; it now points at the Contacto that remains.
+  tx.update(sugerenciasImportacion)
+    .set({ contactoId: originalId })
+    .where(eq(sugerenciasImportacion.contactoId, duplicadoId))
+    .run()
+  // The duplicate is deleted before the original is updated: it may hold the RFC, which only
+  // one Contacto may claim.
   tx.delete(contactos).where(eq(contactos.id, duplicadoId)).run()
   tx.update(contactos)
     .set({
@@ -163,6 +174,9 @@ function ubicacion(tx: Tx, proyectoId: number, respuesta: RespuestaSugerencia): 
       disponible: false,
       verificadoEn: new Date().toISOString().slice(0, 10)
     })
-    .onConflictDoNothing()
+    .onConflictDoUpdate({
+      target: [ubicacionesArchivo.proyectoId, ubicacionesArchivo.tipo],
+      set: { disponible: false }
+    })
     .run()
 }

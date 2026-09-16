@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 /** The pieces every Configuración card is built from, so each section only says what it shows. */
 
@@ -11,6 +11,29 @@ export const mensaje = (e: unknown) =>
 export const inputCls = 'h-9 w-24 rounded-control border border-border-strong bg-surface-sunken px-2 font-mono text-[12px] text-on-surface'
 
 export const monoCls = 'font-mono text-[12px] break-all'
+
+/**
+ * Running one action of a section: nothing else runs while it does, and whatever main answers
+ * with — including why it refused — is what the section shows.
+ */
+export function useAccion() {
+  const [error, setError] = useState<string | null>(null)
+  const [ocupado, setOcupado] = useState(false)
+
+  const correr = async (fn: () => Promise<unknown>) => {
+    setError(null)
+    setOcupado(true)
+    try {
+      await fn()
+    } catch (e) {
+      setError(mensaje(e))
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  return { error, setError, ocupado, correr }
+}
 
 export function Seccion({ id, titulo, children }: { id: string; titulo: string; children: ReactNode }) {
   return (
