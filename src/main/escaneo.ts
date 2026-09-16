@@ -20,26 +20,22 @@ import { contactos, sugerenciasImportacion } from './db/schema'
  * nothing. A folder that cannot be read is No disponible, never empty.
  */
 
-/** Direct subfolders of `rutaRelativa`; `null` means the folder itself could not be read. */
-function subcarpetas(root: string, rutaRelativa: string): string[] | null {
+/**
+ * The visible entries of `rutaRelativa` that `quiere` accepts, by name. `null` means the
+ * folder itself could not be read: No disponible, not empty.
+ */
+function entradas(root: string, rutaRelativa: string, quiere: (e: Dirent) => boolean): string[] | null {
   let entries: Dirent[]
   try {
     entries = readdirSync(join(root, rutaRelativa), { withFileTypes: true })
   } catch {
     return null
   }
-  return entries.filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => e.name)
+  return entries.filter((e) => quiere(e) && !e.name.startsWith('.')).map((e) => e.name)
 }
 
-function archivos(root: string, rutaRelativa: string): string[] | null {
-  let entries: Dirent[]
-  try {
-    entries = readdirSync(join(root, rutaRelativa), { withFileTypes: true })
-  } catch {
-    return null
-  }
-  return entries.filter((e) => e.isFile() && !e.name.startsWith('.')).map((e) => e.name)
-}
+const subcarpetas = (root: string, ruta: string) => entradas(root, ruta, (e) => e.isDirectory())
+const archivos = (root: string, ruta: string) => entradas(root, ruta, (e) => e.isFile())
 
 function logVacio(): LogCarpetas {
   return {

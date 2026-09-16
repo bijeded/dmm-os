@@ -62,8 +62,9 @@ app.whenReady().then(() => {
 
   const info = { version: app.getVersion(), dbPath, dmmOsRoot: join(homedir(), 'Desktop', 'DMM OS') }
   // The external HDD is organised like the main root, and is usually disconnected. Its path is
-  // configured once; when the drive is absent its Proyectos become No disponible, never lost.
-  const hddRoot = conexion.ajustes.leer('hdd.root')
+  // read per rescan, so plugging the drive in needs no restart; when it is absent its Proyectos
+  // become No disponible, never lost.
+  const hddRoot = () => conexion.ajustes.leer('hdd.root')
   registerIpc(ipcMain, {
     getAppInfo: () => info,
     respaldos: {
@@ -87,7 +88,7 @@ app.whenReady().then(() => {
     },
     importacion: {
       facturas: () => importarFacturas(conexion.db, info.dmmOsRoot),
-      carpetas: () => escanearCarpetas(conexion.db, info.dmmOsRoot, hddRoot)
+      carpetas: () => escanearCarpetas(conexion.db, info.dmmOsRoot, hddRoot())
     },
     finanzas: {
       coberturaCostos: (desde, hasta) => coberturaCostos(conexion.db, desde, hasta)

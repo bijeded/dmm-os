@@ -76,7 +76,7 @@ A negative Ingreso linked to the original Ingreso, counted in the period the mon
 Always derived from Cotizaciones and Proyectos, never set by hand. A Contacto with no Cotización is a cold lead.
 
 **Sugerencia de importación**:
-A link the importer guessed (e.g. CFDI → Proyecto by amount/date, or a Proyecto created for an accepted legacy quote) that waits in Logs for a one-time accept/reject.
+Something the importer guessed that waits in Logs for a one-time accept/reject. Three kinds: *vincular* a record to a Proyecto (e.g. CFDI → Proyecto by amount/date, or a folder taken to deliver a quote of the same name), *fusionar* two Contactos whose names are near-duplicates, and *ubicación* — asking whether a completed Proyecto with no folder is Archivado or No disponible. A guessed status is written so the record is usable; the suggestion is what makes it reversible.
 
 **Asignación de costo**:
 The share of an AI subscription Costo attributed to a Proyecto in a month, by token usage (even split if no data). The Costo itself is never duplicated.

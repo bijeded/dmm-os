@@ -131,6 +131,13 @@ describe('importar la carpeta de un Proyecto', () => {
     ])
   })
 
+  it('is one Proyecto when the two roots spell its folder differently', () => {
+    const a = importarCarpetaProyecto(db, { nombre: 'Sonríeme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Sonríeme' })
+    const b = importarCarpetaProyecto(db, { nombre: 'Sonrieme', tipo: 'hdd_externo', rutaRelativa: 'Proyectos/Sonrieme' })
+    expect(b.proyectoId).toBe(a.proyectoId)
+    expect(db.select().from(proyectos).all()).toHaveLength(1)
+  })
+
   it('changes nothing when the same folder is scanned again', () => {
     importarCarpetaProyecto(db, { nombre: 'Clicme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Clicme' })
     const otra = importarCarpetaProyecto(db, { nombre: 'Clicme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Clicme' })

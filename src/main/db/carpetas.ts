@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { nombresDeProyecto, type NombreCotizacion } from '../cotizaciones'
 import { clave, mejorEscrito, parecidos } from '../nombres'
 import type { Db } from './index'
@@ -13,6 +13,10 @@ import { contactos, cotizaciones, proyectos, sugerenciasImportacion, ubicaciones
 
 /** Where a Proyecto's folder was found. */
 export type TipoUbicacion = (typeof ubicacionesArchivo.$inferSelect)['tipo']
+
+/** A transaction, which reads and writes exactly like the database itself. */
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
+type Escritor = Db | Tx
 
 export interface ResultadoContacto {
   contactoId: number
@@ -48,9 +52,17 @@ export interface EntradaCarpeta {
   rutaRelativa: string
 }
 
+/**
+ * A legacy Cotización naming several projects becomes one Proyecto; the names it does not
+ * become are kept in that Proyecto's notes, which is the only place they survive.
+ */
+function notasDeOtrosNombres(folio: number | null, otros: string[]): string | null {
+  return otros.length > 0 ? `Cotización ${folio} también incluye: ${otros.join(', ')}` : null
+}
+
 /** A guess is recorded once; running the importer again asks nothing twice. */
 function sugerir(
-  db: Db,
+  db: Escritor,
   s: {
     entidad: (typeof sugerenciasImportacion.$inferInsert)['entidad']
     entidadId: number
@@ -69,7 +81,7 @@ function sugerir(
  * that is merely *close* to an existing one gets its own Contacto and a merge suggestion:
  * near-duplicates are merged only after the suggestion is accepted.
  */
-export function resolverContacto(db: Db, nombre: string): ResultadoContacto {
+export function resolverContacto(db: Escritor, nombre: string): ResultadoContacto {
   const todos = db.select().from(contactos).all()
   const igual = todos.find((c) => clave(c.nombre) === clave(nombre))
   if (igual) {
@@ -136,49 +148,57 @@ export function importarCotizacion(db: Db, entrada: EntradaCotizacion): Resultad
  * several places, and each is recorded as its own location.
  */
 export function importarCarpetaProyecto(db: Db, entrada: EntradaCarpeta): ResultadoCarpeta {
-  const { contactoId } = resolverContacto(db, entrada.nombre)
-  const existente = db
-    .select()
-    .from(proyectos)
-    .where(and(eq(proyectos.contactoId, contactoId), sql`${proyectos.nombre} = ${entrada.nombre}`))
-    .get()
+  return db.transaction((tx) => {
+    const { contactoId } = resolverContacto(tx, entrada.nombre)
+    // Matched by Nombre canónico, so the same Proyecto foldered `Sonrieme` in one root and
+    // `Sonríeme` in another is one Proyecto with two locations, not two Proyectos.
+    const existente = tx
+      .select()
+      .from(proyectos)
+      .where(eq(proyectos.contactoId, contactoId))
+      .all()
+      .find((p) => clave(p.nombre) === clave(entrada.nombre))
 
-  const proyecto =
-    existente ??
-    db
-      .insert(proyectos)
+    const proyecto =
+      existente ??
+      tx
+        .insert(proyectos)
+        .values({
+          nombre: entrada.nombre,
+          contactoId,
+          categoria: 'other',
+          estado: entrada.tipo === 'proyectos' ? 'en_curso' : 'completado'
+        })
+        .returning()
+        .get()
+
+    tx.insert(ubicacionesArchivo)
       .values({
-        nombre: entrada.nombre,
-        contactoId,
-        categoria: 'other',
-        estado: entrada.tipo === 'proyectos' ? 'en_curso' : 'completado'
+        proyectoId: proyecto.id,
+        tipo: entrada.tipo,
+        rutaRelativa: entrada.rutaRelativa,
+        disponible: true,
+        verificadoEn: new Date().toISOString().slice(0, 10)
       })
-      .returning()
-      .get()
+      .onConflictDoUpdate({
+        target: [ubicacionesArchivo.proyectoId, ubicacionesArchivo.tipo],
+        set: { rutaRelativa: entrada.rutaRelativa, disponible: true }
+      })
+      .run()
 
-  db.insert(ubicacionesArchivo)
-    .values({
-      proyectoId: proyecto.id,
-      tipo: entrada.tipo,
-      rutaRelativa: entrada.rutaRelativa,
-      disponible: true,
-      verificadoEn: new Date().toISOString().slice(0, 10)
-    })
-    .onConflictDoUpdate({
-      target: [ubicacionesArchivo.proyectoId, ubicacionesArchivo.tipo],
-      set: { rutaRelativa: entrada.rutaRelativa, disponible: true }
-    })
-    .run()
-
-  const cotizacionId = existente ? proyecto.cotizacionId : vincularCotizacion(db, proyecto.id, contactoId, entrada.nombre)
-  return { proyectoId: proyecto.id, creado: !existente, cotizacionId }
+    const cotizacionId = existente
+      ? proyecto.cotizacionId
+      : vincularCotizacion(tx, proyecto.id, contactoId, entrada.nombre)
+    return { proyectoId: proyecto.id, creado: !existente, cotizacionId }
+  })
 }
 
 /**
  * A folder delivering a quote of the same name means that quote was accepted. The oldest
- * unlinked match is taken, and the inference waits in Logs: it is a guess, not a record.
+ * unlinked match is taken. The inference *is* written — that is what "inferred status" means
+ * here — and a Sugerencia records that it was inferred, so rejecting it can undo the link.
  */
-function vincularCotizacion(db: Db, proyectoId: number, contactoId: number, nombre: string): number | null {
+function vincularCotizacion(db: Escritor, proyectoId: number, contactoId: number, nombre: string): number | null {
   const candidata = db
     .select()
     .from(cotizaciones)
@@ -196,7 +216,7 @@ function vincularCotizacion(db: Db, proyectoId: number, contactoId: number, nomb
     .set({
       cotizacionId: candidata.id,
       // A legacy quote listing several projects becomes one Proyecto; the rest are kept as notes.
-      notas: otros.length > 0 ? `Cotización ${candidata.folio} también incluye: ${otros.join(', ')}` : null
+      notas: notasDeOtrosNombres(candidata.folio, otros)
     })
     .where(eq(proyectos.id, proyectoId))
     .run()
@@ -235,7 +255,7 @@ export function proyectosDeCotizacionesAceptadas(db: Db): number[] {
         cotizacionId: c.id,
         categoria: c.categoria,
         estado: 'completado',
-        notas: otros.length > 0 ? `Cotización ${c.folio} también incluye: ${otros.join(', ')}` : null
+        notas: notasDeOtrosNombres(c.folio, otros)
       })
       .returning()
       .get()
