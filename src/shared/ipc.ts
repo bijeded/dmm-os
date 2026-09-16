@@ -23,6 +23,22 @@ export interface ConfigRespaldos {
 /** `restaurado: false` means the user cancelled the file picker. On success the app relaunches. */
 export type ResultadoRestaurar = { restaurado: boolean }
 
+/** What one import run found, shown in Configuración → Logs. */
+export interface LogImportacion {
+  importados: number
+  /** CFDIs whose UUID was already in the database; re-running changed nothing. */
+  duplicados: number
+  /** Vouchers that carry no new money (pago, nómina, traslado). */
+  ignorados: number
+  /** Sugerencias de importación left waiting for accept/reject. */
+  sugerencias: number
+  /** RFCs no Contacto claims, so their Ingresos and Costos stayed unlinked. */
+  rfcsDesconocidos: string[]
+  errores: { archivo: string; error: string }[]
+  /** Folders the app knows but could not read on this run (No disponible). */
+  noDisponibles: string[]
+}
+
 export interface AppInfo {
   version: string
   dbPath: string
@@ -51,6 +67,10 @@ export const contrato = {
     configurar: canal<[config: ConfigRespaldos], EstadoRespaldos>(),
     /** Without a path the user picks the file. On success the app relaunches. */
     restaurar: canal<[path?: string], ResultadoRestaurar>()
+  },
+  importacion: {
+    /** Re-reads `Facturas/Emitidas` and `Facturas/Recibidas`; safe to run again at any time. */
+    facturas: canal<[], LogImportacion>()
   }
 }
 

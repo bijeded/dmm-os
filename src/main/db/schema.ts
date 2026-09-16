@@ -36,16 +36,22 @@ export const settings = sqliteTable('settings', {
 })
 
 // Estado de Contacto is derived from Cotizaciones and Proyectos; no column.
-export const contactos = sqliteTable('contactos', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  nombre: text('nombre').notNull(),
-  empresa: text('empresa'),
-  email: text('email'),
-  telefono: text('telefono'),
-  direccion: text('direccion'),
-  notas: text('notas'),
-  creadoEn: creadoEn()
-})
+export const contactos = sqliteTable(
+  'contactos',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    nombre: text('nombre').notNull(),
+    empresa: text('empresa'),
+    // RFC as it appears in the CFDI; how the importer recognises a Contacto.
+    rfc: text('rfc'),
+    email: text('email'),
+    telefono: text('telefono'),
+    direccion: text('direccion'),
+    notas: text('notas'),
+    creadoEn: creadoEn()
+  },
+  (t) => [uniqueIndex('contactos_rfc_unique').on(t.rfc)]
+)
 
 export const cotizaciones = sqliteTable(
   'cotizaciones',
@@ -293,4 +299,25 @@ export const asignacionesCosto = sqliteTable(
     monto: integer('monto').notNull()
   },
   (t) => [uniqueIndex('asignaciones_costo_proyecto_unique').on(t.costoId, t.proyectoId)]
+)
+
+// Sugerencia de importación: a link the importer guessed, waiting in Logs for a one-time
+// accept/reject. The record it points at is already saved; only the link is in doubt.
+export const sugerenciasImportacion = sqliteTable(
+  'sugerencias_importacion',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    entidad: text('entidad', { enum: ['ingreso', 'costo'] }).notNull(),
+    entidadId: integer('entidad_id').notNull(),
+    proyectoId: integer('proyecto_id')
+      .notNull()
+      .references(() => proyectos.id, { onDelete: 'cascade' }),
+    /** Why the importer guessed this link, shown in Logs. */
+    motivo: text('motivo').notNull(),
+    estado: text('estado', { enum: ['pendiente', 'aceptada', 'rechazada'] })
+      .notNull()
+      .default('pendiente'),
+    creadoEn: creadoEn()
+  },
+  (t) => [uniqueIndex('sugerencias_entidad_unique').on(t.entidad, t.entidadId)]
 )
