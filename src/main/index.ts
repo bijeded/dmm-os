@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { createRespaldos } from './backup'
 import { importarFacturas } from './facturas'
+import { escanearCarpetas } from './escaneo'
 import { coberturaCostos } from './db/cobertura'
 import { createDatabase, type Conexion } from './db'
 import { registerIpc } from './ipc'
@@ -60,6 +61,9 @@ app.whenReady().then(() => {
   respaldos.iniciar()
 
   const info = { version: app.getVersion(), dbPath, dmmOsRoot: join(homedir(), 'Desktop', 'DMM OS') }
+  // The external HDD is organised like the main root, and is usually disconnected. Its path is
+  // configured once; when the drive is absent its Proyectos become No disponible, never lost.
+  const hddRoot = conexion.ajustes.leer('hdd.root')
   registerIpc(ipcMain, {
     getAppInfo: () => info,
     respaldos: {
@@ -82,7 +86,8 @@ app.whenReady().then(() => {
       }
     },
     importacion: {
-      facturas: () => importarFacturas(conexion.db, info.dmmOsRoot)
+      facturas: () => importarFacturas(conexion.db, info.dmmOsRoot),
+      carpetas: () => escanearCarpetas(conexion.db, info.dmmOsRoot, hddRoot)
     },
     finanzas: {
       coberturaCostos: (desde, hasta) => coberturaCostos(conexion.db, desde, hasta)

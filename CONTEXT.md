@@ -15,7 +15,7 @@ The agency's customer a Proyecto is built for (e.g. Hospital Jardín). A label o
 A priced offer to a Contacto, identified by its **Folio**. Leads to at most one Proyecto; cancelling either cancels the other.
 
 **Folio**:
-The single continuous number identifying a Cotización across old and new filename formats.
+The single continuous number identifying a Cotización across old and new filename formats. Two quotes may share a number and be told apart by a trailing letter (`475a`, `475b`); the number and that letter together are the key an import is idempotent on.
 
 **Proyecto**:
 One unit of work with its own status and billing. A follow-on phase (e.g. monthly maintenance after a design build) is a new Proyecto.
@@ -64,7 +64,7 @@ An invoiced, unpaid Ingreso older than the configured number of days (default 30
 What a period shows for margin or profit when its Costos were never imported. Never estimated.
 
 **Archivado**:
-A completed Proyecto whose files have left `Proyectos/` for long-term storage (external HDD and/or Google Drive). Its record stays; the app shows it as archived, not as a broken link.
+A completed Proyecto whose files have left `Proyectos/` for long-term storage (`Archivo/`, external HDD and/or Google Drive). Its record stays; the app shows it as archived, not as a broken link.
 
 **No disponible**:
 A file location the app knows but cannot currently reach (e.g. external HDD disconnected, or folder never found). Distinct from **Archivado**.

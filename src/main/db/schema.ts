@@ -58,6 +58,11 @@ export const cotizaciones = sqliteTable(
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
     folio: integer('folio'),
+    // Two quotes may share a Folio and be told apart by a letter (`475a`, `475b`). Empty,
+    // never null, so the Folio stays a single unique key.
+    folioSufijo: text('folio_sufijo').notNull().default(''),
+    /** What the quote is for, as its archived PDF names it. A legacy one may list several. */
+    nombre: text('nombre'),
     contactoId: integer('contacto_id')
       .notNull()
       .references(() => contactos.id, { onDelete: 'restrict' }),
@@ -84,7 +89,7 @@ export const cotizaciones = sqliteTable(
     creadoEn: creadoEn()
   },
   (t) => [
-    uniqueIndex('cotizaciones_folio_unique').on(t.folio),
+    uniqueIndex('cotizaciones_folio_unique').on(t.folio, t.folioSufijo),
     index('cotizaciones_contacto_idx').on(t.contactoId),
     check('cotizaciones_folio_borrador', sql`(${t.estado} = 'borrador') = (${t.folio} IS NULL)`)
   ]
@@ -130,7 +135,9 @@ export const ubicacionesArchivo = sqliteTable(
     proyectoId: integer('proyecto_id')
       .notNull()
       .references(() => proyectos.id, { onDelete: 'restrict' }),
-    tipo: text('tipo', { enum: ['proyectos', 'hdd_externo', 'google_drive'] }).notNull(),
+    tipo: text('tipo', {
+      enum: ['proyectos', 'archivo', 'hdd_externo', 'google_drive']
+    }).notNull(),
     rutaRelativa: text('ruta_relativa').notNull(),
     disponible: integer('disponible', { mode: 'boolean' }).notNull().default(true),
     verificadoEn: text('verificado_en')
@@ -307,17 +314,35 @@ export const sugerenciasImportacion = sqliteTable(
   'sugerencias_importacion',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
-    entidad: text('entidad', { enum: ['ingreso', 'costo'] }).notNull(),
+    // The record whose link is in doubt; `proyectoId` / `contactoId` name what it would link to.
+    entidad: text('entidad', {
+      enum: ['ingreso', 'costo', 'cotizacion', 'proyecto', 'contacto']
+    }).notNull(),
     entidadId: integer('entidad_id').notNull(),
-    proyectoId: integer('proyecto_id')
+    /**
+     * What accepting it would do: attach the record to a Proyecto, merge two Contactos under
+     * one Nombre canónico, or settle whether a Proyecto's files are Archivado or No disponible.
+     */
+    accion: text('accion', { enum: ['vincular', 'fusionar', 'ubicacion'] })
       .notNull()
-      .references(() => proyectos.id, { onDelete: 'cascade' }),
-    /** Why the importer guessed this link, shown in Logs. */
+      .default('vincular'),
+    proyectoId: integer('proyecto_id').references(() => proyectos.id, { onDelete: 'cascade' }),
+    /** The Contacto a `fusionar` suggestion would merge into. */
+    contactoId: integer('contacto_id').references(() => contactos.id, { onDelete: 'cascade' }),
+    /** Why the importer guessed this, shown in Logs. */
     motivo: text('motivo').notNull(),
     estado: text('estado', { enum: ['pendiente', 'aceptada', 'rechazada'] })
       .notNull()
       .default('pendiente'),
     creadoEn: creadoEn()
   },
-  (t) => [uniqueIndex('sugerencias_entidad_unique').on(t.entidad, t.entidadId)]
+  (t) => [
+    // One pending guess of each kind per record: re-running the importer asks nothing twice.
+    uniqueIndex('sugerencias_entidad_unique').on(t.entidad, t.entidadId, t.accion),
+    check(
+      'sugerencias_destino',
+      sql`(${t.accion} = 'fusionar') = (${t.contactoId} IS NOT NULL)
+          AND (${t.accion} = 'vincular') = (${t.proyectoId} IS NOT NULL)`
+    )
+  ]
 )

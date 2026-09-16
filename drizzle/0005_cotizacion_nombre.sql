@@ -1,0 +1,1 @@
+ALTER TABLE `cotizaciones` ADD `nombre` text;

@@ -29,6 +29,20 @@
       "when": 1789541090567,
       "tag": "0003_importacion_cfdi",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789542399369,
+      "tag": "0004_importacion_carpetas",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1789542562458,
+      "tag": "0005_cotizacion_nombre",
+      "breakpoints": true
     }
   ]
 }
