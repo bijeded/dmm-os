@@ -4,6 +4,7 @@ import { registerIpc } from './ipc'
 
 const info = { version: '0.1.0', dbPath: '/db', dmmOsRoot: '/root' }
 const estado = { dir: '/v', frecuenciaDias: 7, conservar: 4, ultimo: null, respaldos: [] }
+const log = { importados: 0, duplicados: 0, ignorados: 0, sugerencias: 0, rfcsDesconocidos: [], errores: [], noDisponibles: [] }
 
 function handlers() {
   return {
@@ -13,6 +14,12 @@ function handlers() {
       crear: vi.fn(() => ({ archivo: 'a.db', path: '/v/a.db', creadoEn: '2026-09-13T00:00:00.000Z', motivo: 'manual' as const, bytes: 1 })),
       configurar: vi.fn(() => estado),
       restaurar: vi.fn(async () => ({ restaurado: false }))
+    },
+    importacion: {
+      facturas: vi.fn(() => log)
+    },
+    finanzas: {
+      coberturaCostos: vi.fn(() => [{ anio: 2025, sinDatos: true }])
     }
   } satisfies DmmHandlers
 }

@@ -2,6 +2,8 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { createRespaldos } from './backup'
+import { importarFacturas } from './facturas'
+import { coberturaCostos } from './db/cobertura'
 import { createDatabase, type Conexion } from './db'
 import { registerIpc } from './ipc'
 
@@ -78,6 +80,12 @@ app.whenReady().then(() => {
         }
         return respaldos.restaurar(source)
       }
+    },
+    importacion: {
+      facturas: () => importarFacturas(conexion.db, info.dmmOsRoot)
+    },
+    finanzas: {
+      coberturaCostos: (desde, hasta) => coberturaCostos(conexion.db, desde, hasta)
     }
   })
   createWindow()

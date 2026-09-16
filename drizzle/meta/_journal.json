@@ -22,6 +22,13 @@
       "when": 1789285517013,
       "tag": "0002_revision_modelo",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789541090567,
+      "tag": "0003_importacion_cfdi",
+      "breakpoints": true
     }
   ]
 }
