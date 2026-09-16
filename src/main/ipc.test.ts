@@ -16,6 +16,8 @@ const logCarpetas = {
   noDisponibles: []
 }
 
+const rutas = { dmmOsRoot: '/root', hddRoot: null, hddConectado: false, entrada: 0 }
+
 function handlers() {
   return {
     getAppInfo: vi.fn(() => info),
@@ -27,7 +29,16 @@ function handlers() {
     },
     importacion: {
       facturas: vi.fn(() => log),
-      carpetas: vi.fn(() => logCarpetas)
+      carpetas: vi.fn(() => logCarpetas),
+      estado: vi.fn(() => ({ facturas: null, carpetas: null })),
+      sugerencias: vi.fn(() => []),
+      responder: vi.fn(() => [])
+    },
+    rutas: {
+      leer: vi.fn(() => rutas),
+      elegirHdd: vi.fn(async () => rutas),
+      olvidarHdd: vi.fn(() => rutas),
+      abrir: vi.fn()
     },
     finanzas: {
       coberturaCostos: vi.fn(() => [{ anio: 2025, sinDatos: true }])

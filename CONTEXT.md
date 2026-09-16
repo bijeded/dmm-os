@@ -63,6 +63,9 @@ An invoiced, unpaid Ingreso older than the configured number of days (default 30
 **Sin datos**:
 What a period shows for margin or profit when its Costos were never imported. Never estimated.
 
+**Entrada**:
+The inbox folder of loose files with no triage yet. The app counts what waits there and opens it; it never files anything from it by itself.
+
 **Archivado**:
 A completed Proyecto whose files have left `Proyectos/` for long-term storage (`Archivo/`, external HDD and/or Google Drive). Its record stays; the app shows it as archived, not as a broken link.
 

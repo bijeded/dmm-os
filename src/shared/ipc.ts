@@ -57,6 +57,50 @@ export interface LogCarpetas {
   noDisponibles: string[]
 }
 
+/** One import run, kept so Logs still shows what it found after the run itself is over. */
+export interface Corrida<L> {
+  corridoEn: string
+  log: L
+}
+
+/** What Logs shows of the last run of each importer. Either is `null` until it has been run. */
+export interface EstadoImportacion {
+  facturas: Corrida<LogImportacion> | null
+  carpetas: Corrida<LogCarpetas> | null
+}
+
+export type AccionSugerencia = 'vincular' | 'fusionar' | 'ubicacion'
+export type EntidadSugerencia = 'ingreso' | 'costo' | 'cotizacion' | 'proyecto' | 'contacto'
+/** For `ubicacion`, where there is nothing to accept: `aceptada` is Archivado, `rechazada` No disponible. */
+export type RespuestaSugerencia = 'aceptada' | 'rechazada'
+
+/** A Sugerencia de importación as Logs shows it: what was guessed, about what, and why. */
+export interface Sugerencia {
+  id: number
+  accion: AccionSugerencia
+  entidad: EntidadSugerencia
+  /** Why the importer guessed this. */
+  motivo: string
+  creadoEn: string
+  /** The record in doubt, e.g. `Cotización 475 · Sonrieme`. */
+  registro: string
+  /** The Proyecto to link to or the Contacto to merge into; `ubicacion` has none. */
+  destino: string | null
+}
+
+/** The folders the app reads, and the state of the ones it cannot always reach. */
+export interface Rutas {
+  dmmOsRoot: string
+  /** The external HDD, a secondary source; `null` until one is chosen. */
+  hddRoot: string | null
+  hddConectado: boolean
+  /** Loose files waiting in `Entrada/`; `null` when the folder cannot be read. */
+  entrada: number | null
+}
+
+/** A folder the app can reveal in Finder. */
+export type CarpetaAbrible = 'raiz' | 'entrada'
+
 /** Whether a year's Costos are known at all; a year without them shows Sin datos. */
 export interface CoberturaAnual {
   anio: number
@@ -99,7 +143,22 @@ export const contrato = {
      * Re-reads `Cotizaciones/`, `Clientes/`, `Proyectos/` and `Archivo/Proyectos/`, with the
      * external HDD as a secondary source. Safe to run again at any time.
      */
-    carpetas: canal<[], LogCarpetas>()
+    carpetas: canal<[], LogCarpetas>(),
+    /** What the last run of each importer found, so Logs survives leaving the screen. */
+    estado: canal<[], EstadoImportacion>(),
+    /** The Sugerencias de importación still waiting for an accept/reject. */
+    sugerencias: canal<[], Sugerencia[]>(),
+    /** Answers one Sugerencia, once, and returns the ones still pending. */
+    responder: canal<[id: number, respuesta: RespuestaSugerencia], Sugerencia[]>()
+  },
+  rutas: {
+    leer: canal<[], Rutas>(),
+    /** Points at the external HDD: the user picks the folder. */
+    elegirHdd: canal<[], Rutas>(),
+    /** Forgets the external HDD; its Proyectos stay, as No disponible. */
+    olvidarHdd: canal<[], Rutas>(),
+    /** Reveals the folder in Finder. */
+    abrir: canal<[carpeta: CarpetaAbrible], void>()
   },
   finanzas: {
     /** Which years show Sin datos because their Costos were never imported. */
