@@ -2,7 +2,8 @@ import { and, eq, isNull } from 'drizzle-orm'
 import { nombresDeProyecto, type NombreCotizacion } from '../cotizaciones'
 import { clave, mejorEscrito, parecidos } from '../nombres'
 import type { Db } from './index'
-import { contactos, cotizaciones, proyectos, sugerenciasImportacion, ubicacionesArchivo } from './schema'
+import { proponer } from '../sugerencias'
+import { contactos, cotizaciones, proyectos, ubicacionesArchivo } from './schema'
 
 /**
  * Importing what the folders say: a Cotización per archived PDF (keyed by its Folio), a
@@ -60,21 +61,6 @@ function notasDeOtrosNombres(folio: number | null, otros: string[]): string | nu
   return otros.length > 0 ? `Cotización ${folio} también incluye: ${otros.join(', ')}` : null
 }
 
-/** A guess is recorded once; running the importer again asks nothing twice. */
-function sugerir(
-  db: Escritor,
-  s: {
-    entidad: (typeof sugerenciasImportacion.$inferInsert)['entidad']
-    entidadId: number
-    accion: (typeof sugerenciasImportacion.$inferInsert)['accion']
-    proyectoId?: number | null
-    contactoId?: number | null
-    motivo: string
-  }
-): void {
-  db.insert(sugerenciasImportacion).values(s).onConflictDoNothing().run()
-}
-
 /**
  * The Contacto behind a name written on disk. Names match through missing accents, case and
  * punctuation, and the better-written spelling becomes the stored Nombre canónico. A name
@@ -95,7 +81,7 @@ export function resolverContacto(db: Escritor, nombre: string): ResultadoContact
   const parecido = todos.find((c) => parecidos(c.nombre, nombre))
   const creado = db.insert(contactos).values({ nombre }).returning().get()
   if (parecido) {
-    sugerir(db, {
+    proponer(db, {
       entidad: 'contacto',
       entidadId: creado.id,
       accion: 'fusionar',
@@ -211,21 +197,27 @@ function vincularCotizacion(db: Escritor, proyectoId: number, contactoId: number
   if (!candidata) return null
 
   const otros = nombresDeProyecto(candidata.nombre ?? '').filter((n) => clave(n) !== clave(nombre))
+  const notasAntes = db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()?.notas ?? null
+  // A legacy quote listing several projects becomes one Proyecto; the rest are kept as notes.
+  const notasEscritas = notasDeOtrosNombres(candidata.folio, otros)
   db.update(cotizaciones).set({ estado: 'aceptada' }).where(eq(cotizaciones.id, candidata.id)).run()
   db.update(proyectos)
     .set({
       cotizacionId: candidata.id,
-      // A legacy quote listing several projects becomes one Proyecto; the rest are kept as notes.
-      notas: notasDeOtrosNombres(candidata.folio, otros)
+      notas: notasEscritas
     })
     .where(eq(proyectos.id, proyectoId))
     .run()
-  sugerir(db, {
+  proponer(db, {
     entidad: 'cotizacion',
     entidadId: candidata.id,
     accion: 'vincular',
     proyectoId,
-    motivo: `carpeta "${nombre}" con el mismo nombre`
+    motivo: `carpeta "${nombre}" con el mismo nombre`,
+    deshacer: {
+      cotizacion: { estado: candidata.estado },
+      proyecto: { notasAntes, notasEscritas }
+    }
   })
   return candidata.id
 }
@@ -259,7 +251,7 @@ export function proyectosDeCotizacionesAceptadas(db: Db): number[] {
       })
       .returning()
       .get()
-    sugerir(db, {
+    proponer(db, {
       entidad: 'proyecto',
       entidadId: proyecto.id,
       accion: 'ubicacion',

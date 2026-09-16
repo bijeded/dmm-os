@@ -308,6 +308,15 @@ export const asignacionesCosto = sqliteTable(
   (t) => [uniqueIndex('asignaciones_costo_proyecto_unique').on(t.costoId, t.proyectoId)]
 )
 
+/**
+ * What a guess changed, so rejecting its Sugerencia restores exactly that. `notas` holds the
+ * Proyecto's notes before the guess and the text the guess wrote in their place.
+ */
+export interface DeshacerSugerencia {
+  cotizacion?: { estado: (typeof cotizaciones.$inferSelect)['estado'] }
+  proyecto?: { notasAntes: string | null; notasEscritas: string | null }
+}
+
 // Sugerencia de importación: a link the importer guessed, waiting in Logs for a one-time
 // accept/reject. The record it points at is already saved; only the link is in doubt.
 export const sugerenciasImportacion = sqliteTable(
@@ -331,6 +340,8 @@ export const sugerenciasImportacion = sqliteTable(
     contactoId: integer('contacto_id').references(() => contactos.id, { onDelete: 'cascade' }),
     /** Why the importer guessed this, shown in Logs. */
     motivo: text('motivo').notNull(),
+    /** What rejecting undoes; null for guesses that change nothing until accepted. */
+    deshacer: text('deshacer', { mode: 'json' }).$type<DeshacerSugerencia>(),
     estado: text('estado', { enum: ['pendiente', 'aceptada', 'rechazada'] })
       .notNull()
       .default('pendiente'),

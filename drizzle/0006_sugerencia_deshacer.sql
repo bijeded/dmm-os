@@ -1,0 +1,1 @@
+ALTER TABLE `sugerencias_importacion` ADD `deshacer` text;

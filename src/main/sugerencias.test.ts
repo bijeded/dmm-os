@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { importarCarpetaProyecto, importarCotizacion, proyectosDeCotizacionesAceptadas, resolverContacto } from './carpetas'
+import { importarCarpetaProyecto, importarCotizacion, proyectosDeCotizacionesAceptadas, resolverContacto } from './db/carpetas'
 import { pendientes, responder } from './sugerencias'
-import { contactos, costos, cotizaciones, ingresos, proyectos, sugerenciasImportacion, ubicacionesArchivo } from './schema'
-import { db, ingresoBase, reiniciarDb } from './test-db'
+import { contactos, costos, cotizaciones, ingresos, proyectos, sugerenciasImportacion, ubicacionesArchivo } from './db/schema'
+import { db, ingresoBase, reiniciarDb } from './db/test-db'
 
 beforeEach(reiniciarDb)
 
@@ -100,6 +100,34 @@ describe('vincular', () => {
 
     responder(db, unaSugerencia().id, 'rechazada')
     expect(db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()!.notas).toBe('Pendiente de entrega final')
+  })
+
+  it('keeps a user note that starts with "Cotización " when a link that wrote no note is rejected', () => {
+    cotizacionEnDisco()
+    const { proyectoId } = importarCarpetaProyecto(db, { nombre: 'Sonrieme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Sonrieme' })
+    db.update(proyectos).set({ notas: 'Cotización revisada con el cliente' }).where(eq(proyectos.id, proyectoId)).run()
+
+    responder(db, unaSugerencia().id, 'rechazada')
+    expect(db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()!.notas).toBe('Cotización revisada con el cliente')
+  })
+
+  it('removes the note the link wrote when it is rejected', () => {
+    cotizacionEnDisco('Sonrieme, Casa Luna')
+    const { proyectoId } = importarCarpetaProyecto(db, { nombre: 'Sonrieme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Sonrieme' })
+    expect(db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()!.notas).toContain('Casa Luna')
+
+    responder(db, unaSugerencia().id, 'rechazada')
+    expect(db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()!.notas).toBe(null)
+  })
+
+  it('leaves notas untouched when rejecting a Sugerencia recorded without an undo', () => {
+    cotizacionEnDisco('Sonrieme, Casa Luna')
+    const { proyectoId } = importarCarpetaProyecto(db, { nombre: 'Sonrieme', tipo: 'proyectos', rutaRelativa: 'Proyectos/Sonrieme' })
+    db.update(sugerenciasImportacion).set({ deshacer: null }).run()
+
+    responder(db, unaSugerencia().id, 'rechazada')
+    expect(db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()!.notas).toContain('Casa Luna')
+    expect(db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()!.cotizacionId).toBe(null)
   })
 
   it('keeps the link when a Cotización link is accepted', () => {
