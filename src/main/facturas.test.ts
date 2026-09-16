@@ -5,16 +5,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { importarFacturas } from './facturas'
 import { costos, ingresos } from './db/schema'
 import { db, reiniciarDb } from './db/test-db'
+import { cfdiXml } from './test-cfdi'
 
 let root: string
 
-const cfdi = (uuid: string) => `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="4.0" Fecha="2026-02-03T12:00:00" TipoDeComprobante="I" Moneda="MXN" SubTotal="1000.00" Total="1160.00">
-  <cfdi:Emisor Rfc="DMM170101AB1" Nombre="DMM STUDIOS"/>
-  <cfdi:Receptor Rfc="EOC180202XY9" Nombre="ESTUDIO OCHO"/>
-  <cfdi:Conceptos><cfdi:Concepto Descripcion="Diseño" Importe="1000.00"/></cfdi:Conceptos>
-  <cfdi:Impuestos TotalImpuestosTrasladados="160.00"/>
-  <cfdi:Complemento><tfd:TimbreFiscalDigital UUID="${uuid}"/></cfdi:Complemento>
-</cfdi:Comprobante>`
+const cfdi = (uuid: string) => cfdiXml({ uuid })
 
 function escribir(rutaRelativa: string, contenido: string) {
   const file = join(root, rutaRelativa)

@@ -39,6 +39,12 @@ export interface LogImportacion {
   noDisponibles: string[]
 }
 
+/** Whether a year's Costos are known at all; a year without them shows Sin datos. */
+export interface CoberturaAnual {
+  anio: number
+  sinDatos: boolean
+}
+
 export interface AppInfo {
   version: string
   dbPath: string
@@ -71,6 +77,10 @@ export const contrato = {
   importacion: {
     /** Re-reads `Facturas/Emitidas` and `Facturas/Recibidas`; safe to run again at any time. */
     facturas: canal<[], LogImportacion>()
+  },
+  finanzas: {
+    /** Which years show Sin datos because their Costos were never imported. */
+    coberturaCostos: canal<[desde: number, hasta: number], CoberturaAnual[]>()
   }
 }
 

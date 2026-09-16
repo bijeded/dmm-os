@@ -17,6 +17,9 @@ function handlers() {
     },
     importacion: {
       facturas: vi.fn(() => log)
+    },
+    finanzas: {
+      coberturaCostos: vi.fn(() => [{ anio: 2025, sinDatos: true }])
     }
   } satisfies DmmHandlers
 }

@@ -9,28 +9,22 @@ const CARPETAS: Record<Direccion, string> = {
   recibida: posix.join('Facturas', 'Recibidas')
 }
 
-/** Every `.xml` under `dir`, at any depth, as paths relative to the DMM OS root. */
-function xmls(root: string, rutaRelativa: string): string[] {
+/**
+ * Every `.xml` under `rutaRelativa`, at any depth, as paths relative to the DMM OS root.
+ * `null` means the folder itself could not be read: No disponible, not empty.
+ */
+function xmls(root: string, rutaRelativa: string): string[] | null {
   let entries: Dirent[]
   try {
     entries = readdirSync(join(root, rutaRelativa), { withFileTypes: true })
   } catch {
-    return []
+    return null
   }
   return entries.flatMap((e) => {
     const hijo = posix.join(rutaRelativa, e.name)
-    if (e.isDirectory()) return xmls(root, hijo)
+    if (e.isDirectory()) return xmls(root, hijo) ?? []
     return e.name.toLowerCase().endsWith('.xml') ? [hijo] : []
   })
-}
-
-function existe(root: string, rutaRelativa: string): boolean {
-  try {
-    readdirSync(join(root, rutaRelativa))
-    return true
-  } catch {
-    return false
-  }
 }
 
 /**
@@ -51,11 +45,12 @@ export function importarFacturas(db: Db, root: string): LogImportacion {
   const rfcs = new Set<string>()
 
   for (const [direccion, carpeta] of Object.entries(CARPETAS) as [Direccion, string][]) {
-    if (!existe(root, carpeta)) {
+    const archivos = xmls(root, carpeta)
+    if (archivos === null) {
       log.noDisponibles.push(carpeta)
       continue
     }
-    for (const archivo of xmls(root, carpeta)) {
+    for (const archivo of archivos) {
       try {
         const r = importarCfdi(db, readFileSync(join(root, archivo), 'utf8'), direccion)
         if (r.resultado === 'importado') log.importados++

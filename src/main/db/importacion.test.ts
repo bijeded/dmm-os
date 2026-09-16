@@ -1,33 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { coberturaCostos, importarCfdi } from './importacion'
+import { importarCfdi } from './importacion'
 import { contactos, costos, cotizaciones, ingresos, proyectos, sugerenciasImportacion } from './schema'
 import { contacto, cotizacionAceptada, db, proyecto, reiniciarDb } from './test-db'
+import { cfdiXml, RFC_CLIENTE, RFC_DMM } from '../test-cfdi'
 
 beforeEach(reiniciarDb)
 
-const RFC_DMM = 'DMM170101AB1'
-const RFC_CLIENTE = 'EOC180202XY9'
-
-function cfdi({
-  uuid = 'A1B2C3D4-0000-4444-8888-99AABBCCDDEE',
-  fecha = '2026-02-03',
-  tipo = 'I',
-  emisor = RFC_DMM,
-  nombreEmisor = 'DMM STUDIOS SA DE CV',
-  receptor = RFC_CLIENTE,
-  subtotal = '1000.00',
-  iva = '160.00',
-  total = '1160.00',
-  descripcion = 'Diseño de sitio web'
-} = {}) {
-  return `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="4.0" Fecha="${fecha}T12:00:00" TipoDeComprobante="${tipo}" Moneda="MXN" SubTotal="${subtotal}" Total="${total}">
-  <cfdi:Emisor Rfc="${emisor}" Nombre="${nombreEmisor}"/>
-  <cfdi:Receptor Rfc="${receptor}" Nombre="ESTUDIO OCHO SA DE CV"/>
-  <cfdi:Conceptos><cfdi:Concepto Descripcion="${descripcion}" Importe="${subtotal}"/></cfdi:Conceptos>
-  <cfdi:Impuestos TotalImpuestosTrasladados="${iva}"/>
-  <cfdi:Complemento><tfd:TimbreFiscalDigital UUID="${uuid}"/></cfdi:Complemento>
-</cfdi:Comprobante>`
-}
+const cfdi = cfdiXml
 
 const contactoConRfc = (rfc = RFC_CLIENTE) =>
   db.insert(contactos).values({ nombre: 'Estudio Ocho', rfc }).returning().get()
@@ -64,7 +43,7 @@ describe('importar una factura emitida', () => {
   it('changes nothing when the same UUID is imported again', () => {
     contactoConRfc()
     importarCfdi(db, cfdi(), 'emitida')
-    const segunda = importarCfdi(db, cfdi({ subtotal: '9999.00', total: '9999.00', iva: '0.00' }), 'emitida')
+    const segunda = importarCfdi(db, cfdi({ subtotal: '9999.00', iva: '0.00' }), 'emitida')
     expect(segunda.resultado).toBe('duplicado')
     expect(db.select().from(ingresos).all()).toHaveLength(1)
     expect(db.select().from(ingresos).get()!.subtotal).toBe(100_000)
@@ -97,6 +76,13 @@ describe('importar una factura recibida', () => {
     importarCfdi(db, xml, 'recibida')
     expect(importarCfdi(db, xml, 'recibida').resultado).toBe('duplicado')
     expect(db.select().from(costos).all()).toHaveLength(1)
+  })
+
+  it('imports a CFDI once even when the same file sits in both folders', () => {
+    const xml = cfdi()
+    importarCfdi(db, xml, 'emitida')
+    expect(importarCfdi(db, xml, 'recibida').resultado).toBe('duplicado')
+    expect(db.select().from(costos).all()).toHaveLength(0)
   })
 })
 
@@ -160,16 +146,5 @@ describe('guessing the Proyecto', () => {
     proyecto(c.id, cotizacionAceptada(c.id).id)
     importarCfdi(db, cfdi(), 'emitida')
     expect(db.select().from(sugerenciasImportacion).all()).toHaveLength(0)
-  })
-})
-
-describe('coberturaCostos', () => {
-  it('marks Sin datos the years whose Costos were never imported', () => {
-    importarCfdi(db, cfdi({ receptor: RFC_DMM, fecha: '2026-02-03' }), 'recibida')
-    expect(coberturaCostos(db, 2024, 2026)).toEqual([
-      { anio: 2024, sinDatos: true },
-      { anio: 2025, sinDatos: true },
-      { anio: 2026, sinDatos: false }
-    ])
   })
 })

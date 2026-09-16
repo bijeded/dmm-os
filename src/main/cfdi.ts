@@ -1,22 +1,28 @@
 import { XMLParser } from 'fast-xml-parser'
 
+/** `I` ingreso, `E` egreso (nota de crédito), `P` pago, `N` nómina, `T` traslado. */
+export const TIPOS_CFDI = ['I', 'E', 'P', 'N', 'T'] as const
+export type TipoCfdi = (typeof TIPOS_CFDI)[number]
+
 /** A stamped CFDI, read into the shape the app records money in: MXN centavos, IVA apart. */
 export interface Cfdi {
   uuid: string
   /** Emission date, 'YYYY-MM-DD'. */
   fecha: string
-  /** `I` ingreso, `E` egreso (nota de crédito), `P` pago, `N` nómina, `T` traslado. */
-  tipo: string
+  tipo: TipoCfdi
   emisor: Parte
   receptor: Parte
   /** First concepto's description; what the money was for. */
   descripcion: string
+  /** SubTotal less any Descuento, in MXN centavos. */
   subtotal: number
+  /** Traslados less retenciones, in MXN centavos. */
   iva: number
   total: number
-  /** The total in its original currency, when that currency was not MXN. */
+  /** The currency the CFDI was issued in; 'MXN' unless it was a foreign invoice. */
+  moneda: string
+  /** The same total in its original currency, when that currency was not MXN. */
   montoOriginal: number | null
-  monedaOriginal: 'USD' | null
 }
 
 export interface Parte {
@@ -31,47 +37,56 @@ function centavos(valor: unknown, tipoCambio: number): number {
   return Math.round(Number(valor ?? 0) * tipoCambio * 100)
 }
 
-function primero<T>(valor: T | T[] | undefined): T | undefined {
-  return Array.isArray(valor) ? valor[0] : valor
+type Nodo = Record<string, unknown>
+
+/** The parser gives a single element as an object and repeats as an array; this takes the first. */
+function primero(valor: unknown): Nodo | undefined {
+  return (Array.isArray(valor) ? valor[0] : valor) as Nodo | undefined
+}
+
+/** The first `hijo` element of `padre`, whichever way the parser collapsed repeats. */
+function hijo(padre: unknown, nombre: string): Nodo | undefined {
+  return primero(primero(padre)?.[nombre])
 }
 
 /** Reads one CFDI XML. Throws when the file is not a stamped CFDI. */
 export function leerCfdi(xml: string): Cfdi {
-  const comprobante = parser.parse(xml)?.Comprobante as Record<string, never> | undefined
+  const comprobante = primero(parser.parse(xml)?.Comprobante)
   if (!comprobante) throw new Error('El archivo no es un CFDI')
 
-  const timbre = primero<Record<string, string>>(
-    (primero<Record<string, never>>(comprobante.Complemento) ?? {})?.TimbreFiscalDigital
-  )
+  const timbre = hijo(comprobante.Complemento, 'TimbreFiscalDigital')
   if (!timbre?.UUID) throw new Error('El CFDI viene sin timbre fiscal')
 
   const moneda = String(comprobante.Moneda ?? 'MXN')
   const tipoCambio = moneda === 'MXN' ? 1 : Number(comprobante.TipoCambio ?? 1)
-  const impuestos = primero<Record<string, string>>(comprobante.Impuestos)
-  const concepto = primero<Record<string, string>>(
-    (primero<Record<string, never>>(comprobante.Conceptos) ?? {})?.Concepto
-  )
-  const emisor = primero<Record<string, string>>(comprobante.Emisor)
-  const receptor = primero<Record<string, string>>(comprobante.Receptor)
+  const impuestos = primero(comprobante.Impuestos)
+  const concepto = hijo(comprobante.Conceptos, 'Concepto')
 
-  const subtotal = centavos(comprobante.SubTotal, tipoCambio)
-  const iva = centavos(impuestos?.TotalImpuestosTrasladados, tipoCambio)
+  // Descuentos and retenciones are part of what the bank actually sees, so they belong in the amounts.
+  const enPesos = (valor: unknown) => centavos(valor, tipoCambio)
+  const subtotal = enPesos(comprobante.SubTotal) - enPesos(comprobante.Descuento)
+  const iva = enPesos(impuestos?.TotalImpuestosTrasladados) - enPesos(impuestos?.TotalImpuestosRetenidos)
+  const original = () =>
+    centavos(comprobante.SubTotal, 1) -
+    centavos(comprobante.Descuento, 1) +
+    centavos(impuestos?.TotalImpuestosTrasladados, 1) -
+    centavos(impuestos?.TotalImpuestosRetenidos, 1)
 
   return {
     uuid: String(timbre.UUID).toLowerCase(),
     fecha: String(comprobante.Fecha ?? '').slice(0, 10),
-    tipo: String(comprobante.TipoDeComprobante ?? 'I'),
-    emisor: parte(emisor),
-    receptor: parte(receptor),
+    tipo: String(comprobante.TipoDeComprobante ?? 'I') as TipoCfdi,
+    emisor: parte(primero(comprobante.Emisor)),
+    receptor: parte(primero(comprobante.Receptor)),
     descripcion: String(concepto?.Descripcion ?? ''),
     subtotal,
     iva,
     total: subtotal + iva,
-    montoOriginal: moneda === 'MXN' ? null : centavos(comprobante.Total, 1),
-    monedaOriginal: moneda === 'MXN' ? null : (moneda as 'USD')
+    moneda,
+    montoOriginal: moneda === 'MXN' ? null : original()
   }
 }
 
-function parte(p: Record<string, string> | undefined): Parte {
-  return { rfc: String(p?.Rfc ?? ''), nombre: p?.Nombre ?? null }
+function parte(p: Nodo | undefined): Parte {
+  return { rfc: String(p?.Rfc ?? ''), nombre: p?.Nombre === undefined ? null : String(p.Nombre) }
 }
