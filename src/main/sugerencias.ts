@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
-import type { Sugerencia, RespuestaSugerencia } from '../../shared/ipc'
-import { mejorEscrito } from '../nombres'
-import type { Db } from './index'
+import type { Sugerencia, RespuestaSugerencia } from '../shared/ipc'
+import { mejorEscrito } from './nombres'
+import type { Db } from './db/index'
 import {
   contactos,
   costos,
@@ -11,16 +11,27 @@ import {
   proyectos,
   sugerenciasImportacion,
   ubicacionesArchivo
-} from './schema'
+} from './db/schema'
 
 /**
- * Answering a Sugerencia de importación, once. The importer writes its guesses so the records
- * are usable; what waits here is whether each guess stands. Accepting finishes what the guess
- * started; rejecting undoes it. Either way the Sugerencia is answered and never asked again.
+ * Sugerencias de importación, from guess to answer. The importer writes its guesses so the
+ * records are usable and proposes each one here, together with what the guess changed.
+ * Accepting finishes what the guess started; rejecting restores what it changed. Either way
+ * the Sugerencia is answered and never asked again.
  */
 
 /** A transaction, which reads and writes exactly like the database itself. */
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
+
+export type Propuesta = typeof sugerenciasImportacion.$inferInsert
+
+/**
+ * Records a guess once: proposing the same guess for the same record again asks nothing twice.
+ * Returns whether this call recorded it.
+ */
+export function proponer(db: Db | Tx, propuesta: Propuesta): boolean {
+  return db.insert(sugerenciasImportacion).values(propuesta).onConflictDoNothing().run().changes > 0
+}
 
 const mxn = (centavos: number) =>
   (centavos / 100).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
@@ -103,7 +114,7 @@ type Fila = typeof sugerenciasImportacion.$inferSelect
 /**
  * `vincular` attaches a record to the guessed Proyecto. An Ingreso or Costo is only linked on
  * acceptance. A Cotización's link was already written along with its inferred `aceptada`, so
- * rejecting is what undoes both.
+ * rejecting is what undoes both, restoring what the guess recorded it changed.
  */
 function vincular(tx: Tx, s: Fila, respuesta: RespuestaSugerencia): void {
   const proyectoId = s.proyectoId!
@@ -112,12 +123,15 @@ function vincular(tx: Tx, s: Fila, respuesta: RespuestaSugerencia): void {
   } else if (s.entidad === 'costo' && respuesta === 'aceptada') {
     tx.update(costos).set({ proyectoId }).where(eq(costos.id, s.entidadId)).run()
   } else if (s.entidad === 'cotizacion' && respuesta === 'rechazada') {
-    // `enviada` is what the PDF alone says: a quote whose file exists was at least sent. That is
-    // the status the importer gave it before inferring `aceptada` from the folder.
-    tx.update(cotizaciones).set({ estado: 'enviada' }).where(eq(cotizaciones.id, s.entidadId)).run()
+    // Without a recorded undo, `enviada` is what the PDF alone says: a quote whose file exists
+    // was at least sent.
+    const estado = s.deshacer?.cotizacion?.estado ?? 'enviada'
+    tx.update(cotizaciones).set({ estado }).where(eq(cotizaciones.id, s.entidadId)).run()
     const proyecto = tx.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()
-    // Only the note the link itself wrote goes; anything written since is the user's.
-    const notas = proyecto?.notas?.startsWith('Cotización ') ? null : (proyecto?.notas ?? null)
+    // The note goes back only if it is still what the link wrote; anything written since is the
+    // user's, and so is everything when no undo was recorded.
+    const previo = s.deshacer?.proyecto
+    const notas = previo && proyecto?.notas === previo.notasEscritas ? previo.notasAntes : (proyecto?.notas ?? null)
     tx.update(proyectos).set({ cotizacionId: null, notas }).where(eq(proyectos.id, proyectoId)).run()
   }
 }

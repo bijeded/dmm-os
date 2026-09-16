@@ -1,7 +1,8 @@
 import { and, eq, isNull, or, sql } from 'drizzle-orm'
 import { leerCfdi, type Cfdi } from '../cfdi'
 import type { Db } from './index'
-import { contactos, costos, cotizaciones, ingresos, proyectos, sugerenciasImportacion } from './schema'
+import { proponer } from '../sugerencias'
+import { contactos, costos, cotizaciones, ingresos, proyectos } from './schema'
 
 /** Which folder the CFDI came from: `Facturas/Emitidas` or `Facturas/Recibidas`. */
 export type Direccion = 'emitida' | 'recibida'
@@ -66,14 +67,12 @@ export function importarCfdi(db: Db, xml: string, direccion: Direccion): Resulta
 
     const sugerencia = contacto ? adivinarProyecto(tx, contacto.id, cfdi.total, cfdi.fecha) : null
     if (sugerencia) {
-      tx.insert(sugerenciasImportacion)
-        .values({
-          entidad: direccion === 'emitida' ? 'ingreso' : 'costo',
-          entidadId: id,
-          proyectoId: sugerencia.proyectoId,
-          motivo: sugerencia.motivo
-        })
-        .run()
+      proponer(tx, {
+        entidad: direccion === 'emitida' ? 'ingreso' : 'costo',
+        entidadId: id,
+        proyectoId: sugerencia.proyectoId,
+        motivo: sugerencia.motivo
+      })
     }
 
     return {
