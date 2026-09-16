@@ -5,6 +5,9 @@ import { createRespaldos } from './backup'
 import { importarFacturas } from './facturas'
 import { escanearCarpetas } from './escaneo'
 import { coberturaCostos } from './db/cobertura'
+import { pendientes, responder } from './db/sugerencias'
+import { leerRutas } from './rutas'
+import type { CarpetaAbrible, EstadoImportacion } from '../shared/ipc'
 import { createDatabase, type Conexion } from './db'
 import { registerIpc } from './ipc'
 
@@ -64,7 +67,14 @@ app.whenReady().then(() => {
   // The external HDD is organised like the main root, and is usually disconnected. Its path is
   // read per rescan, so plugging the drive in needs no restart; when it is absent its Proyectos
   // become No disponible, never lost.
-  const hddRoot = () => conexion.ajustes.leer('hdd.root')
+  const hddRoot = () => conexion.ajustes.leer('hdd.root') || undefined
+  const rutas = () => leerRutas(info.dmmOsRoot, hddRoot())
+  // Logs shows the last run of each importer; the runs themselves are not worth a table.
+  const ultimo: EstadoImportacion = { facturas: null, carpetas: null }
+  const ahora = () => new Date().toISOString()
+  const carpetaDe = (carpeta: CarpetaAbrible) =>
+    carpeta === 'hdd' ? hddRoot() : carpeta === 'entrada' ? join(info.dmmOsRoot, 'Entrada') : info.dmmOsRoot
+
   registerIpc(ipcMain, {
     getAppInfo: () => info,
     respaldos: {
@@ -87,8 +97,47 @@ app.whenReady().then(() => {
       }
     },
     importacion: {
-      facturas: () => importarFacturas(conexion.db, info.dmmOsRoot),
-      carpetas: () => escanearCarpetas(conexion.db, info.dmmOsRoot, hddRoot())
+      facturas: () => {
+        const log = importarFacturas(conexion.db, info.dmmOsRoot)
+        ultimo.facturas = { corridoEn: ahora(), log }
+        return log
+      },
+      carpetas: () => {
+        const log = escanearCarpetas(conexion.db, info.dmmOsRoot, hddRoot())
+        ultimo.carpetas = { corridoEn: ahora(), log }
+        return log
+      },
+      estado: () => ultimo,
+      sugerencias: () => pendientes(conexion.db),
+      responder: (id, respuesta) => {
+        responder(conexion.db, id, respuesta)
+        return pendientes(conexion.db)
+      }
+    },
+    rutas: {
+      leer: rutas,
+      elegirHdd: async (path) => {
+        let elegido = path
+        if (!elegido) {
+          const picked = await dialog.showOpenDialog({
+            title: 'Disco externo',
+            message: 'Elige la carpeta del disco externo, organizada como DMM OS',
+            properties: ['openDirectory']
+          })
+          if (picked.canceled || !picked.filePaths[0]) return rutas()
+          elegido = picked.filePaths[0]
+        }
+        conexion.ajustes.escribir('hdd.root', elegido)
+        return rutas()
+      },
+      olvidarHdd: () => {
+        conexion.ajustes.escribir('hdd.root', '')
+        return leerRutas(info.dmmOsRoot)
+      },
+      abrir: (carpeta) => {
+        const path = carpetaDe(carpeta)
+        if (path) shell.openPath(path)
+      }
     },
     finanzas: {
       coberturaCostos: (desde, hasta) => coberturaCostos(conexion.db, desde, hasta)
