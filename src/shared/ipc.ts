@@ -496,6 +496,10 @@ export interface FilaIngreso {
   origen: 'cfdi' | 'periodo' | 'cotizacion' | 'manual'
   /** Cobranza vencida: invoiced, unpaid, older than the configured days. */
   vencida: boolean
+  /** The currency it was paid in. */
+  moneda: 'MXN' | 'USD'
+  /** What a Reembolso can still give back, in `moneda` (centavos or USD cents); 0 when none. */
+  reembolsable: number
   /** Set on a Reembolso: the Ingreso it gives money back from. */
   reembolsoDeId: number | null
   notas: string | null
@@ -707,8 +711,8 @@ export const contrato = {
     cancelarIngreso: canal<[id: number], void>(),
     /** Borrar vs cancelar: only a hand-entered Ingreso with no Reembolso against it. */
     borrarIngreso: canal<[id: number], void>(),
-    /** A Reembolso: a negative, paid Ingreso linked to the original, counted on `fecha`. A USD one needs its USD amount. */
-    reembolsar: canal<[id: number, subtotal: number, iva: number, fecha: string, montoOriginal?: number], void>(),
+    /** A Reembolso of `monto` (total, in the Ingreso's currency): a negative, paid Ingreso linked to the original, dated today. */
+    reembolsar: canal<[id: number, monto: number], void>(),
     pagarCosto: canal<[id: number], void>(),
     cancelarCosto: canal<[id: number], void>(),
     /** Borrar vs cancelar: only a hand-entered one-time Costo. */
