@@ -45,7 +45,7 @@ import {
 import { escanearCarpetas, importarFacturas, marcarHddNoDisponible } from './importacion'
 import { leerRutas } from './rutas'
 import { pendientes, responder } from './sugerencias'
-import { diaLocal } from '../shared/formato'
+import { diaLocal } from '../shared/fechas'
 import type { AppInfo, DmmHandlers, EstadoImportacion } from '../shared/ipc'
 
 export interface HandlersOptions {
@@ -104,14 +104,14 @@ export function crearHandlers({
         return log
       },
       carpetas: () => {
-        const log = escanearCarpetas(conexion.db, info.dmmOsRoot, hddRoot())
+        const log = escanearCarpetas(conexion.db, info.dmmOsRoot, hddRoot(), hoy())
         ultimo.carpetas = { corridoEn: ahora(), log }
         return log
       },
       estado: () => ultimo,
       sugerencias: () => pendientes(conexion.db),
       responder: (id, respuesta) => {
-        responder(conexion.db, id, respuesta)
+        responder(conexion.db, id, respuesta, hoy())
         return pendientes(conexion.db)
       }
     },

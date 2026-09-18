@@ -3,6 +3,7 @@ import { join, posix } from 'node:path'
 import type { LogCarpetas } from '../../shared/ipc'
 import { leerNombreArchivo } from '../cotizaciones'
 import type { Db } from '../db'
+import { hoy as hoyLocal } from '../../shared/fechas'
 import { carpetaDeProyectos, rutaDeProyecto, type TipoCarpetaProyecto } from '../paths'
 import {
   importarCarpetaProyecto,
@@ -60,16 +61,16 @@ function sumar(log: LogCarpetas, aportes: Aportes): void {
  * `hddRoot` is the external HDD, organised exactly like the main root. When it is absent its
  * Proyectos stay in the database and their locations become No disponible.
  */
-export function escanearCarpetas(db: Db, root: string, hddRoot?: string): LogCarpetas {
+export function escanearCarpetas(db: Db, root: string, hddRoot?: string, hoy = hoyLocal()): LogCarpetas {
   const log = logVacio()
 
   cotizacionesDeDisco(db, root, log)
   contactosDeDisco(db, root, log)
-  proyectosDeDisco(db, root, 'proyectos', log)
-  proyectosDeDisco(db, root, 'archivo', log)
+  proyectosDeDisco(db, root, 'proyectos', log, hoy)
+  proyectosDeDisco(db, root, 'archivo', log, hoy)
 
   if (hddRoot) {
-    const encontrados = proyectosDeDisco(db, hddRoot, 'hdd_externo', log)
+    const encontrados = proyectosDeDisco(db, hddRoot, 'hdd_externo', log, hoy)
     log.hddConectado = encontrados !== null
     if (!log.hddConectado) marcarHddNoDisponible(db)
   }
@@ -130,7 +131,8 @@ function proyectosDeDisco(
   db: Db,
   root: string,
   tipo: TipoCarpetaProyecto,
-  log: LogCarpetas
+  log: LogCarpetas,
+  hoy: string
 ): string[] | null {
   const rutaRelativa = carpetaDeProyectos(tipo)
   const nombres = subcarpetas(root, rutaRelativa)
@@ -144,7 +146,7 @@ function proyectosDeDisco(
         nombre,
         tipo,
         rutaRelativa: rutaDeProyecto(tipo, nombre)
-      })
+      }, hoy)
       if (r.creado) log.proyectos.creados++
       else log.proyectos.actualizados++
       sumar(log, r)

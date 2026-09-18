@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { NOMBRES_FACTURACION, type FichaCotizacion } from '../shared/ipc'
+import { sumarDias } from '../shared/fechas'
+import { fechaLarga } from '../shared/formato'
 
 /**
  * The Cotización as the Contacto receives it, in the DMM Studios brand (DMM/Brand/DESIGN.md):
@@ -35,13 +37,7 @@ const escapar = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<'
 const dinero = (centavos: number, moneda: string) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: moneda, currencyDisplay: 'narrowSymbol' }).format(centavos / 100) + ` ${moneda}`
 
-const fechaLarga = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
 
-const sumarDias = (iso: string, dias: number) => {
-  const d = new Date(`${iso}T12:00:00`)
-  d.setDate(d.getDate() + dias)
-  return d.toISOString().slice(0, 10)
-}
 
 const parrafos = (s: string | null) => (s ? s.split(/\n+/).map((p) => `<p>${escapar(p)}</p>`).join('') : '')
 

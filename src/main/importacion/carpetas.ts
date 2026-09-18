@@ -1,6 +1,6 @@
 import { and, eq, isNull } from 'drizzle-orm'
 import { nombresDeProyecto, type NombreCotizacion } from '../cotizaciones'
-import { diaLocal } from '../../shared/formato'
+import { hoy as hoyLocal } from '../../shared/fechas'
 import { clave, mejorEscrito, parecidos } from '../nombres'
 import type { Db } from '../db'
 import { proponer } from '../sugerencias'
@@ -143,7 +143,7 @@ export function importarCotizacion(db: Db, entrada: EntradaCotizacion): Resultad
  * `Archivo/` or the external HDD is a finished Proyecto. The same Proyecto may be found in
  * several places, and each is recorded as its own location.
  */
-export function importarCarpetaProyecto(db: Db, entrada: EntradaCarpeta): ResultadoCarpeta {
+export function importarCarpetaProyecto(db: Db, entrada: EntradaCarpeta, hoy = hoyLocal()): ResultadoCarpeta {
   return db.transaction((tx) => {
     // A folder the app scaffolded (or already knows) is its Proyecto's, whatever its name says.
     const conocida = tx
@@ -153,7 +153,7 @@ export function importarCarpetaProyecto(db: Db, entrada: EntradaCarpeta): Result
       .get()
     if (conocida) {
       tx.update(ubicacionesArchivo)
-        .set({ disponible: true, verificadoEn: diaLocal(new Date()) })
+        .set({ disponible: true, verificadoEn: hoy })
         .where(eq(ubicacionesArchivo.id, conocida.id))
         .run()
       return { proyectoId: conocida.proyectoId, creado: false, contactosCreados: 0, sugerencias: 0 }
@@ -188,7 +188,7 @@ export function importarCarpetaProyecto(db: Db, entrada: EntradaCarpeta): Result
         tipo: entrada.tipo,
         rutaRelativa: entrada.rutaRelativa,
         disponible: true,
-        verificadoEn: diaLocal(new Date())
+        verificadoEn: hoy
       })
       .onConflictDoUpdate({
         target: [ubicacionesArchivo.proyectoId, ubicacionesArchivo.tipo],

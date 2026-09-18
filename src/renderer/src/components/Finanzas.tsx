@@ -11,9 +11,8 @@ import {
   type PuntoFinanzas,
   type ResumenFinanzas
 } from '../../../shared/ipc'
-import { normalizar } from '../../../shared/formato'
+import { dia, normalizar } from '../../../shared/formato'
 import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
-import { dia } from './Cotizaciones'
 import { centavos } from './NuevoMovimiento'
 import { Aviso, inputCls, useAccion } from './Seccion'
 import { Button } from './ui/button'

@@ -9,7 +9,7 @@ import {
   type EstadoCotizacion,
   type ListaCotizaciones
 } from '../../../shared/ipc'
-import { folioDmm, normalizar } from '../../../shared/formato'
+import { dia, folioDmm, normalizar } from '../../../shared/formato'
 import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
@@ -25,12 +25,6 @@ const COLORES: Record<Categoria, string> = {
   other: '#ADADAD'
 }
 
-export const dia = (d: string) =>
-  new Date(`${d.slice(0, 10)}T12:00:00`).toLocaleDateString('es-MX', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  })
 
 /** Cotizaciones: every quote, how many turn into work, and what kind of work is asked for. */
 export function Cotizaciones() {

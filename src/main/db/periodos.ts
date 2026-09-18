@@ -1,5 +1,5 @@
 import { and, eq, inArray, lte } from 'drizzle-orm'
-import { fechaEnPeriodo, sumarMeses } from './fechas'
+import { fechaEnPeriodo, sumarMeses } from '../../shared/fechas'
 import type { Db } from './index'
 import {
   costos,

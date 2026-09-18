@@ -3,6 +3,7 @@ import type { Sugerencia, RespuestaSugerencia } from '../shared/ipc'
 import { mejorEscrito } from './nombres'
 import { rutaDeProyecto } from './paths'
 import type { Db } from './db/index'
+import { hoy as hoyLocal } from '../shared/fechas'
 import {
   contactos,
   costos,
@@ -96,7 +97,7 @@ function describirDestino(db: Db, proyectoId: number | null, contactoId: number 
  * Archivado and `rechazada` means No disponible. Throws if it was already answered: a
  * Sugerencia is asked once.
  */
-export function responder(db: Db, id: number, respuesta: RespuestaSugerencia): void {
+export function responder(db: Db, id: number, respuesta: RespuestaSugerencia, hoy = hoyLocal()): void {
   db.transaction((tx) => {
     const s = tx.select().from(sugerenciasImportacion).where(eq(sugerenciasImportacion.id, id)).get()
     if (!s) throw new Error(`No existe la sugerencia ${id}`)
@@ -104,7 +105,7 @@ export function responder(db: Db, id: number, respuesta: RespuestaSugerencia): v
 
     if (s.accion === 'vincular') vincular(tx, s, respuesta)
     else if (s.accion === 'fusionar' && respuesta === 'aceptada') fusionar(tx, s.entidadId, s.contactoId!)
-    else if (s.accion === 'ubicacion') ubicacion(tx, s.entidadId, respuesta)
+    else if (s.accion === 'ubicacion') ubicacion(tx, s.entidadId, respuesta, hoy)
 
     tx.update(sugerenciasImportacion).set({ estado: respuesta }).where(eq(sugerenciasImportacion.id, id)).run()
   })
@@ -177,7 +178,7 @@ function fusionar(tx: Tx, duplicadoId: number, originalId: number): void {
  * the archive location its files left for, No disponible records the working folder the app
  * knows but cannot reach. Neither was seen on disk, so neither is available.
  */
-function ubicacion(tx: Tx, proyectoId: number, respuesta: RespuestaSugerencia): void {
+function ubicacion(tx: Tx, proyectoId: number, respuesta: RespuestaSugerencia, hoy: string): void {
   const proyecto = tx.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()
   if (!proyecto) throw new Error(`No existe el proyecto ${proyectoId}`)
   const archivado = respuesta === 'aceptada'
@@ -187,7 +188,7 @@ function ubicacion(tx: Tx, proyectoId: number, respuesta: RespuestaSugerencia): 
       tipo: archivado ? 'archivo' : 'proyectos',
       rutaRelativa: rutaDeProyecto(archivado ? 'archivo' : 'proyectos', proyecto.nombre),
       disponible: false,
-      verificadoEn: new Date().toISOString().slice(0, 10)
+      verificadoEn: hoy
     })
     .onConflictDoUpdate({
       target: [ubicacionesArchivo.proyectoId, ubicacionesArchivo.tipo],
