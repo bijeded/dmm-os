@@ -2,8 +2,9 @@ import { existsSync, mkdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { and, eq } from 'drizzle-orm'
 import type { Db } from './db'
+import { estadoCobro } from './cobranza'
 import { cancelar, RegistroVinculadoError } from './db/cancelacion'
-import { contactos, cotizaciones, ingresos, proyectos, ubicacionesArchivo } from './db/schema'
+import { contactos, cotizaciones, proyectos, ubicacionesArchivo } from './db/schema'
 import { folioDe } from './cotizar'
 import { rutaDeProyecto } from './paths'
 import {
@@ -86,38 +87,11 @@ export function carpetaAbrible(db: Db, root: string, id: number): string {
   throw new Error(c.estado === 'archivado' ? 'La carpeta está archivada fuera de DMM OS' : 'La carpeta está No disponible')
 }
 
-/**
- * Pending and paid Ingresos of the Proyecto, before IVA, and whether it is fully paid: nothing
- * pending and, for a Proyecto from a one-off or installment Cotización, paid Ingresos (net of
- * Reembolsos) reaching the quote's total. A USD quote is compared in USD, by each Ingreso's
- * original amount. A monthly quote has no total to reach.
- */
-function cobros(db: Db, p: { id: number; cotizacionId: number | null }) {
-  const suyos = db.select().from(ingresos).where(eq(ingresos.proyectoId, p.id)).all()
-  const pagados = suyos.filter((i) => i.estado === 'pagado')
-  const pendientes = suyos.filter((i) => i.estado === 'pendiente')
-  const suma = (is: typeof suyos) => is.reduce((s, i) => s + i.subtotal, 0)
-  let faltante = 0
-  const c = p.cotizacionId === null ? undefined : db.select().from(cotizaciones).where(eq(cotizaciones.id, p.cotizacionId)).get()
-  const usd = c?.moneda === 'USD'
-  if (c && c.facturacion !== 'mensual') {
-    const pagado = pagados.reduce((s, i) => s + (usd ? (i.monedaOriginal === 'USD' ? (i.montoOriginal ?? 0) : 0) : i.total), 0)
-    faltante = Math.max(0, c.total - pagado)
-  }
-  const pagadoCompleto = pendientes.length === 0 && faltante === 0
-  return {
-    porCobrar: suma(pendientes),
-    cobrado: suma(pagados),
-    pagadoCompleto,
-    falta: pagadoCompleto ? null : { pendientes: pendientes.length, faltante, moneda: usd ? ('USD' as const) : ('MXN' as const) }
-  }
-}
-
 export function fichaProyecto(db: Db, root: string, id: number): FichaProyecto {
   const p = leer(db, id)
   const contacto = p.contactoId === null ? undefined : db.select({ nombre: contactos.nombre }).from(contactos).where(eq(contactos.id, p.contactoId)).get()
   const cotizacion = p.cotizacionId === null ? undefined : db.select().from(cotizaciones).where(eq(cotizaciones.id, p.cotizacionId)).get()
-  const { porCobrar, cobrado, pagadoCompleto, falta } = cobros(db, p)
+  const { porCobrar, cobrado, pagadoCompleto, falta } = estadoCobro(db, p.id)
   const acciones = (Object.keys(PERMITIDA_EN) as AccionProyecto[]).filter(
     (a) => PERMITIDA_EN[a].includes(p.estado) && !(a === 'completar' && !pagadoCompleto)
   )
@@ -235,7 +209,7 @@ export function reanudarProyecto(db: Db, root: string, id: number): FichaProyect
 /** A Proyecto is only completed once fully paid; delivered but unpaid it stays En curso. */
 export function completarProyecto(db: Db, root: string, id: number, hoy: string): FichaProyecto {
   exigir('completar', leer(db, id).estado, 'Solo un proyecto en curso o pausado se puede completar')
-  if (!cobros(db, leer(db, id)).pagadoCompleto) throw new Error('El proyecto se completa hasta que esté pagado por completo')
+  if (!estadoCobro(db, id).pagadoCompleto) throw new Error('El proyecto se completa hasta que esté pagado por completo')
   db.update(proyectos).set({ estado: 'completado', fechaFin: hoy }).where(eq(proyectos.id, id)).run()
   return fichaProyecto(db, root, id)
 }
@@ -265,6 +239,17 @@ export function borrarProyecto(db: Db, id: number): void {
   }
 }
 
+/**
+ * A completed Proyecto with files somewhere (local or external HDD) and a Cotización whose paid
+ * Ingresos never reached its total: imported history (ADR-0002) waiting for its uninvoiced
+ * Ingresos to be entered by hand. Derived, so it clears itself once they are.
+ */
+function sinIngresosRegistrados(db: Db, p: { id: number; estado: EstadoProyecto; cotizacionId: number | null }) {
+  if (p.estado !== 'completado' || p.cotizacionId === null) return false
+  if (!db.select().from(ubicacionesArchivo).where(eq(ubicacionesArchivo.proyectoId, p.id)).get()) return false
+  return (estadoCobro(db, p.id).falta?.faltante ?? 0) > 0
+}
+
 export function listarProyectos(db: Db, root: string): ListaProyectos {
   const filas = db
     .select({ p: proyectos, contacto: contactos.nombre })
@@ -283,7 +268,8 @@ export function listarProyectos(db: Db, root: string): ListaProyectos {
       categoria: p.categoria,
       fechaInicio: p.fechaInicio,
       estado: p.estado,
-      carpeta: carpeta(db, root, p.id)
+      carpeta: carpeta(db, root, p.id),
+      sinIngresosRegistrados: sinIngresosRegistrados(db, p)
     }))
   const conteo = Object.fromEntries(ESTADOS_PROYECTO.map((e) => [e, 0])) as Record<EstadoProyecto, number>
   const porCategoria = Object.fromEntries(CATEGORIAS.map((c) => [c, 0])) as Record<Categoria, number>
