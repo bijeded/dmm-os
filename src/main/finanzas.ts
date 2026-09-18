@@ -14,16 +14,7 @@ import {
   proyectos,
   vigenciasPrecio
 } from './db/schema'
-import type {
-  CifrasFinanzas,
-  FilaCosto,
-  FilaIngreso,
-  PagoProximo,
-  PeriodoFinanzas,
-  PuntoFinanzas,
-  Rango,
-  ResumenFinanzas
-} from '../shared/ipc'
+import type { CifrasFinanzas, FilaCosto, FilaIngreso, PagoProximo, PeriodoFinanzas, PuntoFinanzas, Rango, ResumenFinanzas } from '../shared/dominio'
 
 /** Days after which an unpaid invoice is Cobranza vencida, unless configured otherwise. */
 export const DIAS_VENCIDA = 30

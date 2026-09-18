@@ -9,7 +9,22 @@ import {
   uniqueIndex,
   type AnySQLiteColumn
 } from 'drizzle-orm/sqlite-core'
-import { CATEGORIAS, type CostoEstimado } from '../../shared/ipc'
+import {
+  ACCIONES_SUGERENCIA,
+  CATEGORIAS,
+  CATEGORIAS_COSTO,
+  CATEGORIAS_INGRESO,
+  ENTIDADES_SUGERENCIA,
+  ESTADOS_COSTO,
+  ESTADOS_COTIZACION,
+  ESTADOS_FACTURACION,
+  ESTADOS_INGRESO,
+  ESTADOS_PROYECTO,
+  ETIQUETAS_PROYECTO,
+  FACTURACIONES,
+  MONEDAS,
+  type CostoEstimado
+} from '../../shared/dominio'
 
 // Money is stored as integer centavos (MXN). Periods are 'YYYY-MM'. Dates are 'YYYY-MM-DD'.
 // File locations are relative paths (docs/adr/0001).
@@ -29,7 +44,7 @@ const montos = () => ({
   iva: integer('iva').notNull().default(0),
   total: integer('total').notNull(),
   montoOriginal: integer('monto_original'),
-  monedaOriginal: text('moneda_original', { enum: ['MXN', 'USD'] })
+  monedaOriginal: text('moneda_original', { enum: MONEDAS })
 })
 
 export const settings = sqliteTable('settings', {
@@ -81,13 +96,13 @@ export const cotizaciones = sqliteTable(
       .references(() => contactos.id, { onDelete: 'restrict' }),
     categoria: text('categoria', { enum: categorias }).notNull(),
     estado: text('estado', {
-      enum: ['borrador', 'enviada', 'aceptada', 'rechazada', 'cancelada', 'expirada']
+      enum: ESTADOS_COTIZACION
     })
       .notNull()
       .default('borrador'),
     fecha: text('fecha').notNull(),
     validezDias: integer('validez_dias').notNull().default(30),
-    moneda: text('moneda', { enum: ['MXN', 'USD'] }).notNull().default('MXN'),
+    moneda: text('moneda', { enum: MONEDAS }).notNull().default('MXN'),
     /** MXN per USD, set when a USD quote is accepted; converts its Ingresos paid in pesos. */
     tipoCambio: real('tipo_cambio'),
     items: text('items', { mode: 'json' }).notNull().default('[]'),
@@ -95,7 +110,7 @@ export const cotizaciones = sqliteTable(
     subtotal: integer('subtotal').notNull().default(0),
     iva: integer('iva').notNull().default(0),
     total: integer('total').notNull().default(0),
-    facturacion: text('facturacion', { enum: ['unica', 'mensual', 'parcialidades'] })
+    facturacion: text('facturacion', { enum: FACTURACIONES })
       .notNull()
       .default('unica'),
     /** How many payments `parcialidades` billing splits the total into. */
@@ -125,8 +140,8 @@ export const proyectos = sqliteTable(
     }),
     clienteFinal: text('cliente_final'),
     categoria: text('categoria', { enum: categorias }).notNull(),
-    etiqueta: text('etiqueta', { enum: ['cliente', 'personal'] }).notNull().default('cliente'),
-    estado: text('estado', { enum: ['en_curso', 'pausado', 'completado', 'cancelado'] })
+    etiqueta: text('etiqueta', { enum: ETIQUETAS_PROYECTO }).notNull().default('cliente'),
+    estado: text('estado', { enum: ESTADOS_PROYECTO })
       .notNull()
       .default('en_curso'),
     fechaInicio: text('fecha_inicio'),
@@ -175,7 +190,7 @@ export const definicionesIngreso = sqliteTable(
     proyectoId: integer('proyecto_id').references(() => proyectos.id, { onDelete: 'restrict' }),
     contactoId: integer('contacto_id').references(() => contactos.id, { onDelete: 'restrict' }),
     tipo: text('tipo', { enum: ['mensual', 'parcialidades'] }).notNull(),
-    categoria: text('categoria', { enum: ['factura', 'sin_factura'] }).notNull(),
+    categoria: text('categoria', { enum: CATEGORIAS_INGRESO }).notNull(),
     ...montos(),
     diaDelMes: integer('dia_del_mes').notNull().default(1),
     periodoInicio: text('periodo_inicio').notNull(),
@@ -239,11 +254,11 @@ export const ingresos = sqliteTable(
   'ingresos',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
-    categoria: text('categoria', { enum: ['factura', 'sin_factura'] }).notNull(),
-    estado: text('estado', { enum: ['pendiente', 'pagado', 'cancelado', 'incobrable'] })
+    categoria: text('categoria', { enum: CATEGORIAS_INGRESO }).notNull(),
+    estado: text('estado', { enum: ESTADOS_INGRESO })
       .notNull()
       .default('pendiente'),
-    estadoFacturacion: text('estado_facturacion', { enum: ['por_facturar', 'facturado'] }),
+    estadoFacturacion: text('estado_facturacion', { enum: ESTADOS_FACTURACION }),
     ...montos(),
     proyectoId: integer('proyecto_id').references(() => proyectos.id, { onDelete: 'restrict' }),
     cotizacionId: integer('cotizacion_id').references(() => cotizaciones.id, {
@@ -284,8 +299,8 @@ export const costos = sqliteTable(
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
     nombre: text('nombre').notNull(),
-    categoria: text('categoria', { enum: ['unico', 'mensual', 'msi', 'anual'] }).notNull(),
-    estado: text('estado', { enum: ['pendiente', 'pagado', 'cancelado'] })
+    categoria: text('categoria', { enum: CATEGORIAS_COSTO }).notNull(),
+    estado: text('estado', { enum: ESTADOS_COSTO })
       .notNull()
       .default('pendiente'),
     estimado: integer('estimado', { mode: 'boolean' }).notNull().default(false),
@@ -348,14 +363,14 @@ export const sugerenciasImportacion = sqliteTable(
     id: integer('id').primaryKey({ autoIncrement: true }),
     // The record whose link is in doubt; `proyectoId` / `contactoId` name what it would link to.
     entidad: text('entidad', {
-      enum: ['ingreso', 'costo', 'cotizacion', 'proyecto', 'contacto']
+      enum: ENTIDADES_SUGERENCIA
     }).notNull(),
     entidadId: integer('entidad_id').notNull(),
     /**
      * What accepting it would do: attach the record to a Proyecto, merge two Contactos under
      * one Nombre canónico, or settle whether a Proyecto's files are Archivado or No disponible.
      */
-    accion: text('accion', { enum: ['vincular', 'fusionar', 'ubicacion'] })
+    accion: text('accion', { enum: ACCIONES_SUGERENCIA })
       .notNull()
       .default('vincular'),
     proyectoId: integer('proyecto_id').references(() => proyectos.id, { onDelete: 'cascade' }),

@@ -1,6 +1,5 @@
+import type { Moneda } from '../shared/dominio'
 import type { ingresos } from './db/schema'
-
-export type Moneda = 'MXN' | 'USD'
 
 type Montos = Pick<typeof ingresos.$inferSelect, 'total' | 'montoOriginal' | 'monedaOriginal'>
 

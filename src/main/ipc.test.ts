@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { contrato, crearApi, recorrerContrato, type DmmHandlers, type ResumenFinanzas } from '../shared/ipc'
+import { type ResumenFinanzas } from '../shared/dominio'
+import { contrato, crearApi, recorrerContrato, type DmmHandlers } from '../shared/contrato'
 import { registerIpc } from './ipc'
 
 const info = { version: '0.1.0', dbPath: '/db', dmmOsRoot: '/root' }

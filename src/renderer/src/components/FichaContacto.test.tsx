@@ -2,7 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
-import type { DmmApi, FichaContacto as Ficha } from '../../../shared/ipc'
+import type { FichaContacto as Ficha } from '../../../shared/dominio'
+import type { DmmApi } from '../../../shared/contrato'
 import { FichaContacto } from './FichaContacto'
 
 const ficha: Ficha = {

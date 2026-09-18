@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
-import type { DmmApi } from '../../../shared/ipc'
+import type { DmmApi } from '../../../shared/contrato'
 import { Configuracion } from './Configuracion'
 
 const estado = { dir: '/v', frecuenciaDias: 7, conservar: 4, ultimo: null, respaldos: [] }

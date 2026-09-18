@@ -45,7 +45,8 @@ import { escanearCarpetas, importarFacturas, marcarHddNoDisponible } from './imp
 import { leerRutas } from './rutas'
 import { pendientes, responder } from './sugerencias'
 import { diaLocal } from '../shared/fechas'
-import type { AppInfo, DmmHandlers, EstadoImportacion } from '../shared/ipc'
+import type { EstadoImportacion } from '../shared/dominio'
+import type { AppInfo, DmmHandlers } from '../shared/contrato'
 
 export interface HandlersOptions {
   conexion: Conexion

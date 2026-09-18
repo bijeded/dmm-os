@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { DmmApi, EstadoRespaldos } from '../../../shared/ipc'
+import type { EstadoRespaldos } from '../../../shared/dominio'
+import type { DmmApi } from '../../../shared/contrato'
 import { Exportar } from './Exportar'
 
 const estado: EstadoRespaldos = {

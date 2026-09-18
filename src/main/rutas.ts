@@ -1,6 +1,6 @@
 import { readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Rutas } from '../shared/ipc'
+import type { Rutas } from '../shared/dominio'
 
 /**
  * The folders the app reads: the DMM OS root, the external HDD (a secondary source that is

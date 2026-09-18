@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDatabase, type Conexion } from './db'
 import { contactos } from './db/schema'
 import { crearHandlers, type HandlersOptions } from './handlers'
-import type { DmmHandlers } from '../shared/ipc'
+import type { DmmHandlers } from '../shared/contrato'
 
 const migrationsFolder = resolve(import.meta.dirname, '../../drizzle')
 

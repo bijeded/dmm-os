@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { CATEGORIAS, NOMBRES_CATEGORIA, type Categoria, type FilaContacto, type ProyectoNuevo } from '../../../shared/ipc'
+import { CATEGORIAS, NOMBRES_CATEGORIA, type Categoria, type FilaContacto, type ProyectoNuevo } from '../../../shared/dominio'
 import { tituloCls } from './Contactos'
 import { Campo, campoCls } from './NuevaCotizacion'
 import { Aviso, useAccion } from './Seccion'

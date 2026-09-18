@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import type { Db } from './db'
 import { catalogo } from './db/schema'
-import { CATEGORIAS, type ConceptoCatalogo, ConceptoNuevo, PartidaCotizacion } from '../shared/ipc'
+import { CATEGORIAS, type ConceptoCatalogo, ConceptoNuevo, PartidaCotizacion } from '../shared/dominio'
 
 const campos = { id: catalogo.id, concepto: catalogo.concepto, categoria: catalogo.categoria, precio: catalogo.precio }
 

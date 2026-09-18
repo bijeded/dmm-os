@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { DmmApi, EstadoImportacion, Sugerencia } from '../../../shared/ipc'
+import type { EstadoImportacion, Sugerencia } from '../../../shared/dominio'
+import type { DmmApi } from '../../../shared/contrato'
 import { Logs } from './Logs'
 
 const vincular: Sugerencia = {

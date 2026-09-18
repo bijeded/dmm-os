@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, type Dirent } from 'node:fs'
 import { join, posix } from 'node:path'
 import type { Db } from '../db'
-import type { LogImportacion } from '../../shared/ipc'
+import type { LogImportacion } from '../../shared/dominio'
 import { importarCfdi, type Direccion } from './comprobantes'
 
 const CARPETAS: Record<Direccion, string> = {

@@ -18,7 +18,7 @@ import {
   listarCotizaciones,
   rechazarCotizacion
 } from './cotizar'
-import type { CotizacionNueva } from '../shared/ipc'
+import type { CotizacionNueva } from '../shared/dominio'
 
 let root: string
 let contactoId: number

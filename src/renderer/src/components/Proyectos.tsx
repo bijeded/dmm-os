@@ -1,15 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
-import {
-  CATEGORIAS,
-  ESTADOS_PROYECTO,
-  NOMBRES_CATEGORIA,
-  NOMBRES_ESTADO_PROYECTO,
-  type CarpetaProyecto,
-  type Categoria,
-  type EstadoProyecto,
-  type ListaProyectos
-} from '../../../shared/ipc'
+import { CATEGORIAS, ESTADOS_PROYECTO, NOMBRES_CATEGORIA, NOMBRES_ESTADO_PROYECTO, type CarpetaProyecto, type Categoria, type EstadoProyecto, type ListaProyectos } from '../../../shared/dominio'
 import { dia, normalizar } from '../../../shared/formato'
 import { celdaCls, etiquetaCls, tituloCls } from './Contactos'
 import { PorCategoria, selectCls } from './Cotizaciones'

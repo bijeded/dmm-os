@@ -1,16 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import {
-  CATEGORIAS,
-  CATEGORIAS_COSTO,
-  FACTURACIONES,
-  NOMBRES_CATEGORIA,
-  NOMBRES_CATEGORIA_COSTO,
-  NOMBRES_FACTURACION,
-  type ConceptoCatalogo,
-  type CotizacionNueva,
-  type FilaContacto
-} from '../../../shared/ipc'
+import { CATEGORIAS, CATEGORIAS_COSTO, FACTURACIONES, NOMBRES_CATEGORIA, NOMBRES_CATEGORIA_COSTO, NOMBRES_FACTURACION, type ConceptoCatalogo, type CotizacionNueva, type FilaContacto } from '../../../shared/dominio'
 import { totalesCotizacion } from '../../../shared/formato'
 import { hoy } from '../../../shared/fechas'
 import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'

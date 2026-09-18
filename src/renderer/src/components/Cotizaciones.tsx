@@ -1,14 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
-import {
-  CATEGORIAS,
-  ESTADOS_COTIZACION,
-  NOMBRES_CATEGORIA,
-  NOMBRES_ESTADO_COTIZACION,
-  type Categoria,
-  type EstadoCotizacion,
-  type ListaCotizaciones
-} from '../../../shared/ipc'
+import { CATEGORIAS, ESTADOS_COTIZACION, NOMBRES_CATEGORIA, NOMBRES_ESTADO_COTIZACION, type Categoria, type EstadoCotizacion, type ListaCotizaciones } from '../../../shared/dominio'
 import { dia, folioDmm, normalizar } from '../../../shared/formato'
 import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
 import { Aviso, useAccion } from './Seccion'

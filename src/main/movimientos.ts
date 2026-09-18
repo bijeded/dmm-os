@@ -5,7 +5,7 @@ import { generarPeriodos } from './db/periodos'
 import { asignacionesCosto, costos, definicionesCosto, ingresos, proyectos, vigenciasPrecio } from './db/schema'
 import { monedaDe, montoEn, tasaDe } from './dinero'
 import { ivaDe } from '../shared/formato'
-import type { AccionCosto, AccionIngreso, CostoNuevo, FilaCosto, FilaIngreso, IngresoNuevo } from '../shared/ipc'
+import type { AccionCosto, AccionIngreso, CostoNuevo, FilaCosto, FilaIngreso, IngresoNuevo } from '../shared/dominio'
 
 // Movimientos: Ingresos and Costos entered, paid, cancelled, deleted, refunded or stopped, and the
 // rules for which of those each one allows now. The Finanzas rows show exactly these actions.

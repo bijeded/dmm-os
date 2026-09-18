@@ -18,7 +18,7 @@ import {
   pausarProyecto,
   reanudarProyecto
 } from './proyectos'
-import type { ProyectoNuevo } from '../shared/ipc'
+import type { ProyectoNuevo } from '../shared/dominio'
 
 let root: string
 let contactoId: number

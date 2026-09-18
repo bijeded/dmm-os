@@ -2,7 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
-import type { DmmApi, FilaContacto, ListaContactos } from '../../../shared/ipc'
+import type { FilaContacto, ListaContactos } from '../../../shared/dominio'
+import type { DmmApi } from '../../../shared/contrato'
 import { Contactos } from './Contactos'
 
 const fila = (id: number, nombre: string, estado: FilaContacto['estado'] = 'lead_frio'): FilaContacto => ({

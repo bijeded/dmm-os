@@ -7,17 +7,7 @@ import { cancelar, RegistroVinculadoError } from './db/cancelacion'
 import { contactos, cotizaciones, proyectos, ubicacionesArchivo } from './db/schema'
 import { folioDe } from './cotizar'
 import { rutaDeProyecto } from './paths'
-import {
-  CATEGORIAS,
-  ESTADOS_PROYECTO,
-  type AccionProyecto,
-  type CarpetaProyecto,
-  type Categoria,
-  type EstadoProyecto,
-  type FichaProyecto,
-  type ListaProyectos,
-  type ProyectoNuevo
-} from '../shared/ipc'
+import { CATEGORIAS, ESTADOS_PROYECTO, type AccionProyecto, type CarpetaProyecto, type Categoria, type EstadoProyecto, type FichaProyecto, type ListaProyectos, type ProyectoNuevo } from '../shared/dominio'
 
 /** Which estados allow each action. The guards below and the ficha's `acciones` both read this. */
 const PERMITIDA_EN: Record<AccionProyecto, readonly EstadoProyecto[]> = {
