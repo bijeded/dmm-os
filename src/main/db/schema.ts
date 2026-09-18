@@ -3,6 +3,7 @@ import {
   check,
   index,
   integer,
+  real,
   sqliteTable,
   text,
   uniqueIndex,
@@ -87,6 +88,8 @@ export const cotizaciones = sqliteTable(
     fecha: text('fecha').notNull(),
     validezDias: integer('validez_dias').notNull().default(30),
     moneda: text('moneda', { enum: ['MXN', 'USD'] }).notNull().default('MXN'),
+    /** MXN per USD, set when a USD quote is accepted; converts its Ingresos paid in pesos. */
+    tipoCambio: real('tipo_cambio'),
     items: text('items', { mode: 'json' }).notNull().default('[]'),
     stack: text('stack'),
     subtotal: integer('subtotal').notNull().default(0),

@@ -1,6 +1,7 @@
 import { eq, inArray } from 'drizzle-orm'
 import type { Db } from './db'
 import { cotizaciones, ingresos, proyectos } from './db/schema'
+import { montoEn } from './dinero'
 
 export interface EstadoCobro {
   /** Pending Ingresos, centavos before IVA. */
@@ -49,7 +50,7 @@ function cobro(c: typeof cotizaciones.$inferSelect | undefined, suyos: Ingreso[]
   let faltante = 0
   const usd = c?.moneda === 'USD'
   if (c && c.facturacion !== 'mensual') {
-    const pagado = pagados.reduce((s, i) => s + (usd ? (i.monedaOriginal === 'USD' ? (i.montoOriginal ?? 0) : 0) : i.total), 0)
+    const pagado = pagados.reduce((s, i) => s + montoEn(i, usd ? 'USD' : 'MXN', c.tipoCambio), 0)
     faltante = Math.max(0, c.total - pagado)
   }
   const pagadoCompleto = pendientes.length === 0 && faltante === 0

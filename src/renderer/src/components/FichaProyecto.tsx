@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { NOMBRES_CATEGORIA, NOMBRES_ESTADO_PROYECTO, type FichaProyecto as Ficha } from '../../../shared/ipc'
-import { folioDmm } from '../../../shared/formato'
+import { folioDmm, monto } from '../../../shared/formato'
 import { pesos, tituloCls } from './Contactos'
 import { dia } from './Cotizaciones'
 import { NOMBRES_CARPETA } from './Proyectos'
@@ -119,7 +119,7 @@ export function FichaProyecto() {
                   Se completa cuando esté pagado por completo:{' '}
                   {[
                     f.falta.pendientes > 0 && `${f.falta.pendientes} ${f.falta.pendientes === 1 ? 'pago pendiente' : 'pagos pendientes'} por cobrar`,
-                    f.falta.faltante > 0 && `faltan ${pesos(f.falta.faltante)}${f.falta.moneda === 'USD' ? ' USD' : ''} para el total de la cotización`
+                    f.falta.faltante > 0 && `faltan ${monto(f.falta.faltante, f.falta.moneda)} para el total de la cotización`
                   ]
                     .filter(Boolean)
                     .join(' · ')}

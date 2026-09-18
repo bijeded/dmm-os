@@ -194,7 +194,7 @@ export function aceptarCotizacion(db: Db, id: number, hoy: string, tipoCambio?: 
   const periodo = hoy.slice(0, 7)
 
   db.transaction((tx) => {
-    tx.update(cotizaciones).set({ estado: 'aceptada' }).where(eq(cotizaciones.id, id)).run()
+    tx.update(cotizaciones).set({ estado: 'aceptada', tipoCambio: usd ? tipoCambio : null }).where(eq(cotizaciones.id, id)).run()
     const proyectoId = tx
       .insert(proyectos)
       .values({ nombre: c.nombre ?? `Cotización ${folioDe(c)}`, contactoId: c.contactoId, cotizacionId: id, categoria: c.categoria, fechaInicio: hoy })

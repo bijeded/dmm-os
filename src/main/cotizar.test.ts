@@ -149,6 +149,7 @@ describe('aceptar', () => {
     aceptarCotizacion(db, id, '2026-09-20', 18.5)
     expect(db.select().from(ingresos).all()).toMatchObject([{ subtotal: 1_850_000, iva: 296_000, total: 2_146_000, montoOriginal: 116_000, monedaOriginal: 'USD' }])
     expect(db.select().from(costos).all()).toMatchObject([{ subtotal: 185_000, total: 185_000, montoOriginal: 10_000, monedaOriginal: 'USD' }])
+    expect(db.select().from(cotizaciones).where(eq(cotizaciones.id, id)).get()?.tipoCambio).toBe(18.5)
   })
 
   it('turns recurring estimated costs into Costo definitions from the month it was accepted', async () => {
