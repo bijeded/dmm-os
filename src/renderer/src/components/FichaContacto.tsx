@@ -112,9 +112,8 @@ export function FichaContacto() {
                 <Fila label="Teléfono">{c.telefono ?? '—'}</Fila>
                 {c.rfc && <Fila label="RFC">{c.rfc}</Fila>}
                 {c.direccion && <Fila label="Dirección">{c.direccion}</Fila>}
-                <Fila label="Valor total">{pesos(ficha.valor.total)}</Fila>
-                <Fila label="Cobrado">{pesos(ficha.valor.cobrado)}</Fila>
-                <Fila label="Por cobrar">{pesos(ficha.valor.porCobrar)}</Fila>
+                <Fila label="Valor total">{pesos(ficha.valor)}</Fila>
+                <Fila label="Por cobrar">{pesos(ficha.porCobrar)}</Fila>
                 <Fila label="Proyectos">{ficha.proyectos}</Fila>
                 <Fila label="Cotizaciones">{`${ficha.cotizaciones.total} · ${conversion}% conversión`}</Fila>
               </Datos>

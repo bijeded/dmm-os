@@ -18,14 +18,23 @@ import {
 type EstadoProyecto = (typeof proyectos.$inferSelect)['estado']
 type EstadoCotizacion = (typeof cotizaciones.$inferSelect)['estado']
 
+interface CotizacionDe {
+  estado: EstadoCotizacion
+  /** Whether a Proyecto was already created from it. */
+  conProyecto: boolean
+}
+
 /**
- * Estado de Contacto: an En curso or paused Proyecto makes an active client; otherwise a sent
- * Cotización makes a hot lead; a past Proyecto an inactive client; anything else is a cold lead.
+ * Estado de Contacto. Active client: an En curso or paused Proyecto, or an accepted Cotización
+ * whose Proyecto doesn't exist yet. Hot lead: a sent Cotización. Inactive client: was active
+ * (a completed Proyecto) and no longer is. Anything else — no quotes, drafts, only rejected,
+ * expired or cancelled ones — is a cold lead.
  */
-function derivarEstado(proyectosDe: EstadoProyecto[], cotizacionesDe: EstadoCotizacion[]): EstadoContacto {
+function derivarEstado(proyectosDe: EstadoProyecto[], cotizacionesDe: CotizacionDe[]): EstadoContacto {
   if (proyectosDe.some((e) => e === 'en_curso' || e === 'pausado')) return 'cliente_activo'
-  if (cotizacionesDe.includes('enviada')) return 'lead_caliente'
-  if (proyectosDe.length > 0) return 'cliente_inactivo'
+  if (cotizacionesDe.some((c) => c.estado === 'aceptada' && !c.conProyecto)) return 'cliente_activo'
+  if (cotizacionesDe.some((c) => c.estado === 'enviada')) return 'lead_caliente'
+  if (proyectosDe.includes('completado')) return 'cliente_inactivo'
   return 'lead_frio'
 }
 
@@ -44,11 +53,19 @@ function cobradoPorContacto(db: Db): Map<number, number> {
   return m
 }
 
+function cotizacionesConProyecto(db: Db): Set<number | null> {
+  return new Set(db.select({ id: proyectos.cotizacionId }).from(proyectos).all().map((p) => p.id))
+}
+
 const porNombre = (a: { nombre: string }, b: { nombre: string }) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })
 
 export function listarContactos(db: Db): ListaContactos {
   const deProyectos = agrupar(db.select({ contactoId: proyectos.contactoId, estado: proyectos.estado }).from(proyectos).all(), (p) => p.estado)
-  const deCotizaciones = agrupar(db.select({ contactoId: cotizaciones.contactoId, estado: cotizaciones.estado }).from(cotizaciones).all(), (c) => c.estado)
+  const conProyecto = cotizacionesConProyecto(db)
+  const deCotizaciones = agrupar(db.select({ id: cotizaciones.id, contactoId: cotizaciones.contactoId, estado: cotizaciones.estado }).from(cotizaciones).all(), (c) => ({
+    estado: c.estado,
+    conProyecto: conProyecto.has(c.id)
+  }))
   const cobrado = cobradoPorContacto(db)
 
   const filas = db
@@ -86,9 +103,7 @@ export function fichaContacto(db: Db, root: string, id: number): FichaContacto {
   const suyosProyectos = db.select().from(proyectos).where(eq(proyectos.contactoId, id)).all()
   const suyosIngresos = db.select().from(ingresos).where(eq(ingresos.contactoId, id)).all()
 
-  const sumar = (estado: 'pagado' | 'pendiente') => suyosIngresos.filter((i) => i.estado === estado).reduce((s, i) => s + i.subtotal, 0)
-  const cobrado = sumar('pagado')
-  const porCobrar = sumar('pendiente')
+  const porCobrar = suyosIngresos.filter((i) => i.estado === 'pendiente').reduce((s, i) => s + i.subtotal, 0)
 
   const historial: Movimiento[] = [
     ...suyasCotizaciones.map((c) => ({
@@ -125,9 +140,11 @@ export function fichaContacto(db: Db, root: string, id: number): FichaContacto {
     contacto,
     estado: derivarEstado(
       suyosProyectos.map((p) => p.estado),
-      suyasCotizaciones.map((c) => c.estado)
+      suyasCotizaciones.map((c) => ({ estado: c.estado, conProyecto: suyosProyectos.some((p) => p.cotizacionId === c.id) }))
     ),
-    valor: { total: cobrado + porCobrar, cobrado, porCobrar },
+    // Same value as the list and the top 10: what has been paid.
+    valor: cobradoPorContacto(db).get(id) ?? 0,
+    porCobrar,
     proyectos: suyosProyectos.length,
     cotizaciones: { total: suyasCotizaciones.length, aceptadas: suyasCotizaciones.filter((c) => c.estado === 'aceptada').length },
     historial,

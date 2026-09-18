@@ -173,7 +173,10 @@ export interface FichaContacto {
     creadoEn: string
   }
   estado: EstadoContacto
-  valor: { total: number; cobrado: number; porCobrar: number }
+  /** What the Contacto has paid, net of Reembolsos: the same value as in the list. */
+  valor: number
+  /** Pending Ingresos. */
+  porCobrar: number
   proyectos: number
   /** Drafts count; `aceptadas` is what the conversion rate is made of. */
   cotizaciones: { total: number; aceptadas: number }

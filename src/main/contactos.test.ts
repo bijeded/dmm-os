@@ -47,6 +47,19 @@ describe('Estado de Contacto', () => {
     })
   })
 
+  it('an accepted Cotización makes an active client, even before its Proyecto exists', () => {
+    cotizacionAceptada(contacto('Aceptó').id)
+    expect(listarContactos(db).contactos[0].estado).toBe('cliente_activo')
+  })
+
+  it('a Contacto whose only Proyecto was cancelled is not an inactive client', () => {
+    const c = contacto('Canceló')
+    const p = proyecto(c.id, cotizacionAceptada(c.id).id)
+    db.update(proyectos).set({ estado: 'cancelado' }).where(eq(proyectos.id, p.id)).run()
+    db.update(cotizaciones).set({ estado: 'cancelada' }).run()
+    expect(listarContactos(db).contactos[0].estado).toBe('lead_frio')
+  })
+
   it('a Contacto with no Cotización is a cold lead', () => {
     contacto('Nuevo')
     expect(listarContactos(db).contactos[0].estado).toBe('lead_frio')
@@ -95,7 +108,8 @@ describe('fichaContacto', () => {
 
     const f = fichaContacto(db, root, c.id)
     expect(f.estado).toBe('cliente_activo')
-    expect(f.valor).toEqual({ total: 2000, cobrado: 1000, porCobrar: 1000 })
+    expect(f.valor).toBe(1000)
+    expect(f.porCobrar).toBe(1000)
     expect(f.proyectos).toBe(1)
     expect(f.cotizaciones).toEqual({ total: 2, aceptadas: 1 })
     expect(f.historial.map((h) => [h.fecha, h.tipo, h.referencia, h.estado])).toEqual([

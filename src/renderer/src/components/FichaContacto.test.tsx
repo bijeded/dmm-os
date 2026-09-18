@@ -18,7 +18,8 @@ const ficha: Ficha = {
     creadoEn: '2019-03-14T10:00:00.000Z'
   },
   estado: 'cliente_activo',
-  valor: { total: 41_200_000, cobrado: 38_800_000, porCobrar: 2_400_000 },
+  valor: 41_200_000,
+  porCobrar: 2_400_000,
   proyectos: 1,
   cotizaciones: { total: 3, aceptadas: 2 },
   historial: [
