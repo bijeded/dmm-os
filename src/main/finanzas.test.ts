@@ -2,18 +2,8 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { costos, definicionesCosto, ingresos } from './db/schema'
 import { contacto, db, reiniciarDb } from './db/test-db'
-import {
-  borrarCosto,
-  borrarIngreso,
-  cancelarIngreso,
-  detenerCosto,
-  nuevoCosto,
-  nuevoIngreso,
-  pagarIngreso,
-  rangos,
-  reembolsar,
-  resumenFinanzas
-} from './finanzas'
+import { rangos, resumenFinanzas } from './finanzas'
+import { borrarCosto, borrarIngreso, cancelarIngreso, detenerCosto, nuevoCosto, nuevoIngreso, pagarIngreso, reembolsar } from './movimientos'
 import type { CostoNuevo, IngresoNuevo } from '../shared/ipc'
 
 const hoy = '2026-09-18'
@@ -276,7 +266,7 @@ describe('Borrar vs cancelar', () => {
     nuevoIngreso(db, ingreso(), hoy)
     nuevoCosto(db, costo(), hoy)
     borrarIngreso(db, db.select().from(ingresos).get()!.id)
-    borrarCosto(db, db.select().from(costos).get()!.id)
+    borrarCosto(db, db.select().from(costos).get()!.id, hoy)
     expect(db.select().from(ingresos).all()).toEqual([])
     expect(db.select().from(costos).all()).toEqual([])
   })
@@ -290,7 +280,7 @@ describe('Borrar vs cancelar', () => {
     expect(() => borrarIngreso(db, manual.id)).toThrow(/cancélalo/)
     nuevoCosto(db, costo({ categoria: 'mensual' }), hoy)
     const [generado] = resumenFinanzas(db, 'mes', hoy, 30).costos
-    expect(() => borrarCosto(db, generado.id)).toThrow(/cancélalo/)
+    expect(() => borrarCosto(db, generado.id, hoy)).toThrow(/cancélalo/)
   })
 
   it('offers only the actions each record allows', () => {

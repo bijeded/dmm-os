@@ -3,10 +3,8 @@ import type { Db } from './db'
 import { coberturaCostos } from './db/cobertura'
 import { fechaEnPeriodo, sumarAnios, sumarDias, sumarMeses } from '../shared/fechas'
 import { generarPeriodos } from './db/periodos'
-import { RegistroVinculadoError } from './db/cancelacion'
-import { registrarReembolso } from './db/dominio'
-import { ivaDe } from '../shared/formato'
-import { monedaDe, montoEn, tasaDe } from './dinero'
+import { monedaDe } from './dinero'
+import { accionesCosto, accionesIngreso, origenCosto, origenIngreso, reembolsableIngreso, restante, type Costo, type Definicion, type Ingreso } from './movimientos'
 import {
   asignacionesCosto,
   contactos,
@@ -17,13 +15,9 @@ import {
   vigenciasPrecio
 } from './db/schema'
 import type {
-  AccionCosto,
-  AccionIngreso,
   CifrasFinanzas,
-  CostoNuevo,
   FilaCosto,
   FilaIngreso,
-  IngresoNuevo,
   PagoProximo,
   PeriodoFinanzas,
   PuntoFinanzas,
@@ -65,8 +59,6 @@ export function rangos(periodo: PeriodoFinanzas, hoy: string, primero = hoy): { 
   return { rango, anterior: { desde: sumarAnios(desde, -n), hasta: sumarAnios(hoy, -n) } }
 }
 
-type Ingreso = typeof ingresos.$inferSelect
-type Costo = typeof costos.$inferSelect
 
 /** When an Ingreso counts: the day it was paid, else the day it was registered. */
 const fechaIngreso = (i: Ingreso) => i.fechaPago ?? i.fechaRegistro
@@ -144,55 +136,6 @@ function serie(periodo: PeriodoFinanzas, todosIngresos: Ingreso[], todosCostos: 
     ingresosAnterior: antes ? sumar(antes.ingresos, clave) : null,
     costosAnterior: antes ? sumar(antes.costos, clave) : null
   }))
-}
-
-const origenIngreso = (i: Ingreso): FilaIngreso['origen'] =>
-  i.cfdiUuid !== null ? 'cfdi' : i.definicionId !== null ? 'periodo' : i.cotizacionId !== null ? 'cotizacion' : 'manual'
-
-const origenCosto = (c: Costo): FilaCosto['origen'] => (c.cfdiUuid !== null ? 'cfdi' : c.definicionId !== null ? 'recurrente' : 'manual')
-
-/** Borrar vs cancelar: only a hand-entered Ingreso no Reembolso points at. */
-const borrableIngreso = (i: Ingreso, reembolsado: boolean) => origenIngreso(i) === 'manual' && !reembolsado
-
-/** Borrar vs cancelar: only a hand-entered one-time Costo nothing is attributed from. */
-const borrableCosto = (c: Costo, asignado: boolean) => origenCosto(c) === 'manual' && c.cotizacionId === null && !asignado
-
-const reembolsableIngreso = (i: Ingreso) => i.estado === 'pagado' && i.total > 0 && i.reembolsoDeId === null
-
-/**
- * What is left to give back of an Ingreso after its Reembolsos: in pesos, its IVA, and in its own
- * currency (`original`, USD cents for a USD Ingreso, else the same as `total`).
- */
-function restante(i: Ingreso, reembolsos: Ingreso[]) {
-  const moneda = monedaDe(i)
-  const suma = (f: (r: Ingreso) => number) => [i, ...reembolsos].reduce((s, r) => s + f(r), 0)
-  return { moneda, total: suma((r) => r.total), iva: suma((r) => r.iva), original: suma((r) => montoEn(r, moneda)) }
-}
-
-function accionesIngreso(i: Ingreso, reembolsos: Ingreso[] | undefined): AccionIngreso[] {
-  const puede: Record<AccionIngreso, boolean> = {
-    pagar: i.estado === 'pendiente',
-    cancelar: i.estado === 'pendiente',
-    borrar: borrableIngreso(i, reembolsos !== undefined),
-    reembolsar: reembolsableIngreso(i) && restante(i, reembolsos ?? []).original > 0
-  }
-  return (Object.keys(puede) as AccionIngreso[]).filter((a) => puede[a])
-}
-
-type Definicion = typeof definicionesCosto.$inferSelect
-
-/** A monthly or annual series can be stopped while it still runs; MSI is already committed. */
-const detenible = (d: Definicion | undefined, periodoActual: string) =>
-  d !== undefined && d.tipo !== 'msi' && (d.periodoFin === null || d.periodoFin > periodoActual)
-
-function accionesCosto(c: Costo, definicion: Definicion | undefined, periodoActual: string, asignado: boolean): AccionCosto[] {
-  const puede: Record<AccionCosto, boolean> = {
-    pagar: c.estado === 'pendiente',
-    cancelar: c.estado === 'pendiente',
-    borrar: borrableCosto(c, asignado),
-    detener: detenible(definicion, periodoActual)
-  }
-  return (Object.keys(puede) as AccionCosto[]).filter((a) => puede[a])
 }
 
 /**
@@ -319,169 +262,4 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     proximosPagos,
     diasVencida
   }
-}
-
-function exigirMonto(subtotal: number, iva: number) {
-  if (!Number.isInteger(subtotal) || subtotal <= 0) throw new Error('El monto debe ser mayor a cero')
-  if (!Number.isInteger(iva) || iva < 0) throw new Error('El IVA no puede ser negativo')
-}
-
-function exigirFecha(fecha: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) throw new Error('La fecha no es válida')
-}
-
-function leerIngreso(db: Db, id: number) {
-  const i = db.select().from(ingresos).where(eq(ingresos.id, id)).get()
-  if (!i) throw new Error(`El ingreso ${id} no existe`)
-  return i
-}
-
-function leerCosto(db: Db, id: number) {
-  const c = db.select().from(costos).where(eq(costos.id, id)).get()
-  if (!c) throw new Error(`El costo ${id} no existe`)
-  return c
-}
-
-/** A hand-entered Ingreso; given a Proyecto, its Contacto is the Proyecto's. */
-export function nuevoIngreso(db: Db, n: IngresoNuevo, hoy: string) {
-  // Uninvoiced income carries no IVA.
-  const iva = ivaDe(n.subtotal, n.categoria === 'factura' && n.conIva)
-  exigirMonto(n.subtotal, iva)
-  exigirFecha(n.fecha)
-  let contactoId = n.contactoId
-  if (n.proyectoId !== null) {
-    const p = db.select().from(proyectos).where(eq(proyectos.id, n.proyectoId)).get()
-    if (!p) throw new Error(`El proyecto ${n.proyectoId} no existe`)
-    contactoId = p.contactoId
-  }
-  const pagado = n.pagado && n.fecha <= hoy
-  db.insert(ingresos)
-    .values({
-      categoria: n.categoria,
-      estadoFacturacion: n.categoria === 'factura' ? (n.facturado ? 'facturado' : 'por_facturar') : null,
-      estado: pagado ? 'pagado' : 'pendiente',
-      subtotal: n.subtotal,
-      iva,
-      total: n.subtotal + iva,
-      proyectoId: n.proyectoId,
-      contactoId,
-      fechaRegistro: n.fecha,
-      fechaPago: pagado ? n.fecha : null,
-      notas: n.notas?.trim() || null
-    })
-    .run()
-}
-
-/** A one-time Costo, or the definition of a monthly, MSI or annual one and its first price. */
-export function nuevoCosto(db: Db, n: CostoNuevo, hoy: string) {
-  const nombre = n.nombre.trim()
-  if (!nombre) throw new Error('El costo necesita un nombre')
-  const iva = ivaDe(n.subtotal, n.conIva)
-  exigirMonto(n.subtotal, iva)
-  exigirFecha(n.fecha)
-  if (n.categoria === 'msi' && (!n.parcialidades || n.parcialidades < 2)) throw new Error('Un costo a MSI necesita al menos 2 parcialidades')
-  const montos = { subtotal: n.subtotal, iva, total: n.subtotal + iva }
-  const proveedor = n.proveedor?.trim() || null
-
-  if (n.categoria === 'unico') {
-    const pagado = n.pagado && n.fecha <= hoy
-    db.insert(costos)
-      .values({
-        nombre,
-        categoria: 'unico',
-        estado: pagado ? 'pagado' : 'pendiente',
-        ...montos,
-        proveedor,
-        referencia: n.referencia?.trim() || null,
-        fecha: n.fecha,
-        fechaPago: pagado ? n.fecha : null,
-        proyectoId: n.proyectoId
-      })
-      .run()
-    return
-  }
-
-  const periodoInicio = n.fecha.slice(0, 7)
-  db.transaction((tx) => {
-    const definicionCostoId = tx
-      .insert(definicionesCosto)
-      .values({
-        nombre,
-        proveedor,
-        tipo: n.categoria as 'mensual' | 'msi' | 'anual',
-        proyectoId: n.proyectoId,
-        suscripcionIa: n.suscripcionIa,
-        diaDelMes: Number(n.fecha.slice(8, 10)),
-        periodoInicio,
-        numeroParcialidades: n.categoria === 'msi' ? n.parcialidades : null
-      })
-      .returning({ id: definicionesCosto.id })
-      .get().id
-    tx.insert(vigenciasPrecio).values({ definicionCostoId, desde: periodoInicio, ...montos }).run()
-  })
-  generarPeriodos(db, hoy.slice(0, 7))
-}
-
-export function pagarIngreso(db: Db, id: number, hoy: string) {
-  if (leerIngreso(db, id).estado !== 'pendiente') throw new Error('Solo se marca pagado un ingreso pendiente')
-  db.update(ingresos).set({ estado: 'pagado', fechaPago: hoy }).where(eq(ingresos.id, id)).run()
-}
-
-export function cancelarIngreso(db: Db, id: number) {
-  if (leerIngreso(db, id).estado !== 'pendiente') throw new Error('Solo se cancela un ingreso pendiente')
-  db.update(ingresos).set({ estado: 'cancelado' }).where(eq(ingresos.id, id)).run()
-}
-
-/** Borrar vs cancelar: an imported, generated or quoted Ingreso, or one with a Reembolso, is cancelled instead. */
-export function borrarIngreso(db: Db, id: number) {
-  const i = leerIngreso(db, id)
-  const reembolsado = db.select({ id: ingresos.id }).from(ingresos).where(eq(ingresos.reembolsoDeId, id)).get()
-  if (!borrableIngreso(i, reembolsado !== undefined)) throw new RegistroVinculadoError('El ingreso', id)
-  db.delete(ingresos).where(eq(ingresos.id, id)).run()
-}
-
-/**
- * Reembolso of `monto` (the total, in the Ingreso's own currency) against a paid Ingreso, dated
- * today, never more than what is left of it. A USD one converts at the Ingreso's own rate; IVA is
- * in the Ingreso's proportion; giving back all that is left takes the exact remainders.
- */
-export function reembolsar(db: Db, id: number, monto: number, hoy: string) {
-  if (!Number.isInteger(monto) || monto <= 0) throw new Error('El monto debe ser mayor a cero')
-  const i = leerIngreso(db, id)
-  if (!reembolsableIngreso(i)) throw new Error('Solo se reembolsa un ingreso pagado')
-  const tasa = monedaDe(i) === 'USD' ? tasaDe(i) : 1
-  if (tasa === null) throw new Error('El ingreso en USD no tiene su monto en USD')
-  const queda = restante(i, db.select().from(ingresos).where(eq(ingresos.reembolsoDeId, id)).all())
-  if (monto > queda.original) throw new Error('No se puede reembolsar más de lo pagado')
-  const todo = monto === queda.original
-  const total = todo ? queda.total : Math.min(queda.total, Math.round(monto * tasa))
-  const iva = todo ? queda.iva : Math.min(queda.iva, Math.round((total * i.iva) / i.total))
-  registrarReembolso(db, id, { subtotal: total - iva, iva, fecha: hoy, montoOriginal: queda.moneda === 'USD' ? monto : undefined })
-}
-
-export function pagarCosto(db: Db, id: number, hoy: string) {
-  if (leerCosto(db, id).estado !== 'pendiente') throw new Error('Solo se marca pagado un costo pendiente')
-  db.update(costos).set({ estado: 'pagado', fechaPago: hoy }).where(eq(costos.id, id)).run()
-}
-
-export function cancelarCosto(db: Db, id: number) {
-  if (leerCosto(db, id).estado !== 'pendiente') throw new Error('Solo se cancela un costo pendiente')
-  db.update(costos).set({ estado: 'cancelado' }).where(eq(costos.id, id)).run()
-}
-
-/** Borrar vs cancelar: only a hand-entered one-time Costo nothing is attributed from. */
-export function borrarCosto(db: Db, id: number) {
-  const c = leerCosto(db, id)
-  const asignado = db.select({ id: asignacionesCosto.id }).from(asignacionesCosto).where(eq(asignacionesCosto.costoId, id)).get()
-  if (!borrableCosto(c, asignado !== undefined)) throw new RegistroVinculadoError('El costo', id)
-  db.delete(costos).where(eq(costos.id, id)).run()
-}
-
-/** Ends the monthly or annual series the Costo belongs to after this month; MSI is committed. */
-export function detenerCosto(db: Db, id: number, hoy: string) {
-  const c = leerCosto(db, id)
-  const periodoActual = hoy.slice(0, 7)
-  const d = c.definicionId === null ? undefined : db.select().from(definicionesCosto).where(eq(definicionesCosto.id, c.definicionId)).get()
-  if (!d || !detenible(d, periodoActual)) throw new Error('Este costo no pertenece a una serie que se pueda detener')
-  db.update(definicionesCosto).set({ periodoFin: periodoActual }).where(eq(definicionesCosto.id, d.id)).run()
 }

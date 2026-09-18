@@ -1,42 +1,6 @@
 import { eq } from 'drizzle-orm'
 import type { Db } from './index'
-import { asignacionesCosto, costos, ingresos } from './schema'
-
-/**
- * Reembolso: a negative Ingreso linked to the original, dated when the money went back. A USD
- * Ingreso is refunded in USD too (`montoOriginal`), so a USD Cotización counts it against what
- * was paid.
- */
-export function registrarReembolso(
-  db: Db,
-  ingresoId: number,
-  r: { subtotal: number; iva: number; fecha: string; montoOriginal?: number }
-) {
-  const original = db.select().from(ingresos).where(eq(ingresos.id, ingresoId)).get()
-  if (!original) throw new Error(`ingreso ${ingresoId} no existe`)
-  const usd = original.monedaOriginal === 'USD'
-  if (usd && r.montoOriginal === undefined) throw new Error('Un reembolso de un ingreso en USD necesita el monto en USD')
-  return db
-    .insert(ingresos)
-    .values({
-      categoria: original.categoria,
-      estado: 'pagado',
-      estadoFacturacion: original.estadoFacturacion,
-      subtotal: -Math.abs(r.subtotal),
-      iva: -Math.abs(r.iva),
-      total: -(Math.abs(r.subtotal) + Math.abs(r.iva)),
-      montoOriginal: usd ? -Math.abs(r.montoOriginal!) : null,
-      monedaOriginal: usd ? ('USD' as const) : null,
-      proyectoId: original.proyectoId,
-      cotizacionId: original.cotizacionId,
-      contactoId: original.contactoId,
-      fechaRegistro: r.fecha,
-      fechaPago: r.fecha,
-      reembolsoDeId: original.id
-    })
-    .returning()
-    .get()
-}
+import { asignacionesCosto, costos } from './schema'
 
 /**
  * Asignación de costo: splits a Costo's subtotal across Proyectos by token usage,
