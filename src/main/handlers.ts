@@ -16,6 +16,18 @@ import {
   rechazarCotizacion,
   type ImprimirPdf
 } from './cotizar'
+import {
+  borrarProyecto,
+  cancelarProyecto,
+  carpetaAbrible,
+  completarProyecto,
+  crearCarpeta,
+  fichaProyecto,
+  guardarProyecto,
+  listarProyectos,
+  pausarProyecto,
+  reanudarProyecto
+} from './proyectos'
 import { escanearCarpetas, importarFacturas, marcarHddNoDisponible } from './importacion'
 import { leerRutas } from './rutas'
 import { pendientes, responder } from './sugerencias'
@@ -123,7 +135,13 @@ export function crearHandlers({
       ficha: (id) => (expirar(), fichaCotizacion(conexion.db, id)),
       guardar: (cotizacion) => guardarCotizacion(conexion.db, cotizacion),
       enviar: (id) => enviarCotizacion(conexion.db, info.dmmOsRoot, id, imprimirPdf),
-      aceptar: (id, tipoCambio) => (expirar(), aceptarCotizacion(conexion.db, id, hoy(), tipoCambio)),
+      aceptar: (id, tipoCambio) => {
+        expirar()
+        const ficha = aceptarCotizacion(conexion.db, id, hoy(), tipoCambio)
+        // The Proyecto the quote became gets its folder like any other.
+        crearCarpeta(conexion.db, info.dmmOsRoot, ficha.proyectoId!)
+        return ficha
+      },
       rechazar: (id) => rechazarCotizacion(conexion.db, id),
       cancelar: (id) => cancelarCotizacion(conexion.db, id),
       borrar: (id) => borrarCotizacion(conexion.db, id),
@@ -131,6 +149,20 @@ export function crearHandlers({
         const { pdf } = fichaCotizacion(conexion.db, id)
         if (!pdf) throw new Error('La cotización no tiene PDF')
         const error = await abrirCarpeta(join(info.dmmOsRoot, pdf))
+        if (error) throw new Error(error)
+      }
+    },
+    proyectos: {
+      listar: () => listarProyectos(conexion.db, info.dmmOsRoot),
+      ficha: (id) => fichaProyecto(conexion.db, info.dmmOsRoot, id),
+      guardar: (proyecto) => guardarProyecto(conexion.db, info.dmmOsRoot, proyecto, hoy()),
+      pausar: (id) => pausarProyecto(conexion.db, info.dmmOsRoot, id),
+      reanudar: (id) => reanudarProyecto(conexion.db, info.dmmOsRoot, id),
+      completar: (id) => completarProyecto(conexion.db, info.dmmOsRoot, id, hoy()),
+      cancelar: (id) => cancelarProyecto(conexion.db, info.dmmOsRoot, id, hoy()),
+      borrar: (id) => borrarProyecto(conexion.db, id),
+      abrirCarpeta: async (id) => {
+        const error = await abrirCarpeta(carpetaAbrible(conexion.db, info.dmmOsRoot, id))
         if (error) throw new Error(error)
       }
     },

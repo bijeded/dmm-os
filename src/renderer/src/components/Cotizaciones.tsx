@@ -14,7 +14,7 @@ import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
 
-const selectCls = 'h-9 rounded-control border border-border-strong bg-surface-sunken px-2 text-[13px] text-on-surface'
+export const selectCls = 'h-9 rounded-control border border-border-strong bg-surface-sunken px-2 text-[13px] text-on-surface'
 // The brand's chart palette, one per category.
 const COLORES: Record<Categoria, string> = {
   website: '#EBA51C',
@@ -191,14 +191,14 @@ export function Cotizaciones() {
           <Aviso error={error} />
         </section>
 
-        {lista && <PorCategoria conteo={lista.porCategoria} />}
+        {lista && <PorCategoria conteo={lista.porCategoria} unidad="cotizaciones" />}
       </div>
     </>
   )
 }
 
-/** Doughnut of quotes by category, drafts left out. */
-function PorCategoria({ conteo }: { conteo: Record<Categoria, number> }) {
+/** Doughnut of `conteo` by category; `unidad` names what is counted. */
+export function PorCategoria({ conteo, unidad }: { conteo: Record<Categoria, number>; unidad: string }) {
   const total = CATEGORIAS.reduce((s, c) => s + conteo[c], 0)
   const radio = 15.915 // circumference 100, so each arc's length is its percentage
   const presentes = CATEGORIAS.filter((c) => conteo[c] > 0)
@@ -209,7 +209,7 @@ function PorCategoria({ conteo }: { conteo: Record<Categoria, number> }) {
       <h2 id="por-categoria" className={`m-0 ${etiquetaCls}`}>
         Por categoría
       </h2>
-      <svg viewBox="0 0 42 42" className="mx-auto w-44" role="img" aria-label={`${total} cotizaciones por categoría`}>
+      <svg viewBox="0 0 42 42" className="mx-auto w-44" role="img" aria-label={`${total} ${unidad} por categoría`}>
         <circle cx="21" cy="21" r={radio} fill="none" stroke="currentColor" strokeWidth="5" className="text-border" />
         {presentes.map((c, i) => (
           <circle

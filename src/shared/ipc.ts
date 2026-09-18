@@ -336,6 +336,90 @@ export interface FichaCotizacion extends Required<Omit<CotizacionNueva, 'id'>> {
   acciones: AccionCotizacion[]
 }
 
+export const ESTADOS_PROYECTO = ['en_curso', 'pausado', 'completado', 'cancelado'] as const
+export type EstadoProyecto = (typeof ESTADOS_PROYECTO)[number]
+
+export const NOMBRES_ESTADO_PROYECTO: Record<EstadoProyecto, string> = {
+  en_curso: 'En curso',
+  pausado: 'Pausado',
+  completado: 'Completado',
+  cancelado: 'Cancelado'
+}
+
+export type EtiquetaProyecto = 'cliente' | 'personal'
+
+/** What can be done to a Proyecto; which ones apply depends on its estado and is decided in main. */
+export type AccionProyecto = 'editar' | 'borrar' | 'pausar' | 'reanudar' | 'completar' | 'cancelar'
+
+/**
+ * Where a Proyecto's files are. `disponible`: its folder is there to open. `archivado`: its
+ * files left `Proyectos/` for long-term storage. `no_disponible`: a folder the app knows but
+ * cannot reach now. `sin_carpeta`: no location recorded at all.
+ */
+export type EstadoCarpeta = 'disponible' | 'archivado' | 'no_disponible' | 'sin_carpeta'
+
+export interface CarpetaProyecto {
+  estado: EstadoCarpeta
+  /** Relative to the root of wherever it lives. */
+  ruta: string | null
+  /** Whether it can be revealed in Finder right now. */
+  abrible: boolean
+}
+
+/** What the Proyecto form edits. Without `id` it creates one; with one it edits it. */
+export interface ProyectoNuevo {
+  id?: number
+  nombre: string
+  /** A personal Proyecto has no Contacto and no Cotización. */
+  etiqueta: EtiquetaProyecto
+  contactoId: number | null
+  clienteFinal: string | null
+  categoria: Categoria
+  /** `YYYY-MM-DD` */
+  fechaInicio: string | null
+  fechaEntrega: string | null
+  notas: string | null
+}
+
+/** One row of the Proyectos table. */
+export interface FilaProyecto {
+  id: number
+  /** `PRY-014` */
+  referencia: string
+  nombre: string
+  etiqueta: EtiquetaProyecto
+  contactoId: number | null
+  contacto: string | null
+  clienteFinal: string | null
+  categoria: Categoria
+  fechaInicio: string | null
+  estado: EstadoProyecto
+  carpeta: CarpetaProyecto
+}
+
+export interface ListaProyectos {
+  /** By reference, newest first. */
+  proyectos: FilaProyecto[]
+  conteo: Record<EstadoProyecto, number>
+  porCategoria: Record<Categoria, number>
+}
+
+export interface FichaProyecto extends Required<Omit<ProyectoNuevo, 'id'>> {
+  id: number
+  referencia: string
+  estado: EstadoProyecto
+  contacto: string | null
+  cotizacionId: number | null
+  /** The Folio of the Cotización it came from. */
+  folio: string | null
+  fechaFin: string | null
+  carpeta: CarpetaProyecto
+  /** Pending Ingresos, centavos before IVA: while any remain it cannot be completed. */
+  porCobrar: number
+  cobrado: number
+  acciones: AccionProyecto[]
+}
+
 export interface AppInfo {
   version: string
   dbPath: string
@@ -423,6 +507,21 @@ export const contrato = {
     /** Only drafts can be deleted; anything else is cancelled. */
     borrar: canal<[id: number], void>(),
     abrirPdf: canal<[id: number], void>()
+  },
+  proyectos: {
+    listar: canal<[], ListaProyectos>(),
+    ficha: canal<[id: number], FichaProyecto>(),
+    /** Creates (scaffolding its folder in `Proyectos/`) or edits a Proyecto. */
+    guardar: canal<[proyecto: ProyectoNuevo], FichaProyecto>(),
+    pausar: canal<[id: number], FichaProyecto>(),
+    reanudar: canal<[id: number], FichaProyecto>(),
+    /** Refused while any Ingreso is pending: a Proyecto is only completed once fully paid. */
+    completar: canal<[id: number], FichaProyecto>(),
+    /** Cancels the Proyecto and its Cotización (Cancelación con pagos). */
+    cancelar: canal<[id: number], FichaProyecto>(),
+    /** Borrar vs cancelar: refused when it has anything linked. Its folder stays on disk. */
+    borrar: canal<[id: number], void>(),
+    abrirCarpeta: canal<[id: number], void>()
   },
   finanzas: {
     /** Which years show Sin datos because their Costos were never imported. */

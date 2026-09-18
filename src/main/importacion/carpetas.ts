@@ -144,6 +144,20 @@ export function importarCotizacion(db: Db, entrada: EntradaCotizacion): Resultad
  */
 export function importarCarpetaProyecto(db: Db, entrada: EntradaCarpeta): ResultadoCarpeta {
   return db.transaction((tx) => {
+    // A folder the app scaffolded (or already knows) is its Proyecto's, whatever its name says.
+    const conocida = tx
+      .select()
+      .from(ubicacionesArchivo)
+      .where(and(eq(ubicacionesArchivo.tipo, entrada.tipo), eq(ubicacionesArchivo.rutaRelativa, entrada.rutaRelativa)))
+      .get()
+    if (conocida) {
+      tx.update(ubicacionesArchivo)
+        .set({ disponible: true, verificadoEn: new Date().toISOString().slice(0, 10) })
+        .where(eq(ubicacionesArchivo.id, conocida.id))
+        .run()
+      return { proyectoId: conocida.proyectoId, creado: false, contactosCreados: 0, sugerencias: 0 }
+    }
+
     const { contactoId, ...aportes } = resolverContacto(tx, entrada.nombre)
     // Matched by Nombre canónico, so the same Proyecto foldered `Sonrieme` in one root and
     // `Sonríeme` in another is one Proyecto with two locations, not two Proyectos.
