@@ -568,7 +568,8 @@ export interface IngresoNuevo {
   /** `YYYY-MM-DD` */
   fecha: string
   subtotal: number
-  iva: number
+  /** 16% IVA on top; ignored for `sin_factura`, which carries none. */
+  conIva: boolean
   /** Paid on `fecha`; otherwise it waits in Cobranza. */
   pagado: boolean
   notas: string | null
@@ -587,7 +588,8 @@ export interface CostoNuevo {
   /** `YYYY-MM-DD`: the date of a one-time Costo, the first due date of a recurring one. */
   fecha: string
   subtotal: number
-  iva: number
+  /** 16% IVA on top. */
+  conIva: boolean
   /** Only for `msi`. */
   parcialidades: number | null
   suscripcionIa: boolean

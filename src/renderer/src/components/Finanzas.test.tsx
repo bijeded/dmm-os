@@ -185,7 +185,7 @@ describe('Nuevo ingreso / costo', () => {
     montar('/finanzas/ingresos/nuevo')
     fireEvent.change(await screen.findByPlaceholderText('0.00'), { target: { value: '4,500' } })
     fireEvent.click(screen.getByRole('button', { name: 'Registrar ingreso' }))
-    await waitFor(() => expect(api.nuevoIngreso).toHaveBeenCalledWith(expect.objectContaining({ categoria: 'sin_factura', subtotal: 450_000, iva: 0, pagado: true })))
+    await waitFor(() => expect(api.nuevoIngreso).toHaveBeenCalledWith(expect.objectContaining({ categoria: 'sin_factura', subtotal: 450_000, conIva: false, pagado: true })))
     await waitFor(() => expect(router.state.location.pathname).toBe('/finanzas'))
   })
 
