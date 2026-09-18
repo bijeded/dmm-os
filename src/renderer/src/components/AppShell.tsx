@@ -4,7 +4,8 @@ import { Logo } from './Logo'
 
 export function AppShell() {
   const { pathname } = useLocation()
-  const current = sections.find((s) => s.path === pathname) ?? sections[0]
+  // A record under a section (e.g. /contactos/7) still belongs to that section.
+  const current = sections.find((s) => s.path !== '/' && (pathname === s.path || pathname.startsWith(`${s.path}/`))) ?? sections[0]
   const main = sections.slice(0, -1)
   const settings = sections[sections.length - 1]
 

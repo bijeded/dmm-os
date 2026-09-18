@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import type { Respaldos } from './backup'
+import { borrarContacto, contactosCsv, fichaContacto, listarContactos } from './contactos'
 import type { Conexion } from './db'
 import { coberturaCostos } from './db/cobertura'
 import { escanearCarpetas, importarFacturas, marcarHddNoDisponible } from './importacion'
@@ -83,6 +84,12 @@ export function crearHandlers({
         const error = await abrirCarpeta(carpeta === 'entrada' ? join(info.dmmOsRoot, 'Entrada') : info.dmmOsRoot)
         if (error) throw new Error(error)
       }
+    },
+    contactos: {
+      listar: () => listarContactos(conexion.db),
+      ficha: (id) => fichaContacto(conexion.db, info.dmmOsRoot, id),
+      borrar: (id) => borrarContacto(conexion.db, id),
+      csv: () => contactosCsv(conexion.db)
     },
     finanzas: {
       coberturaCostos: (desde, hasta) => coberturaCostos(conexion.db, desde, hasta)
