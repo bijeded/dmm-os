@@ -188,7 +188,7 @@ export function importarCarpetaProyecto(db: Db, entrada: EntradaCarpeta): Result
         tipo: entrada.tipo,
         rutaRelativa: entrada.rutaRelativa,
         disponible: true,
-        verificadoEn: new Date().toISOString().slice(0, 10)
+        verificadoEn: diaLocal(new Date())
       })
       .onConflictDoUpdate({
         target: [ubicacionesArchivo.proyectoId, ubicacionesArchivo.tipo],

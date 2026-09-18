@@ -115,6 +115,24 @@ describe('estado', () => {
     expect(f).toMatchObject({ estado: 'completado', fechaFin: hoy, porCobrar: 0, cobrado: 1000 })
   })
 
+  it('from a Cotización, is completed only once paid Ingresos reach its total', () => {
+    const c = db.insert(cotizaciones).values({ contactoId, folio: 7, categoria: 'website', estado: 'aceptada', fecha: hoy, subtotal: 2000, iva: 320, total: 2320 }).returning().get()
+    const p = proyecto(contactoId, c.id)
+    db.insert(ingresos).values({ ...ingresoBase, categoria: 'sin_factura', proyectoId: p.id, estado: 'pagado' }).run()
+    expect(fichaProyecto(db, root, p.id).acciones).not.toContain('completar')
+    expect(() => completarProyecto(db, root, p.id, hoy)).toThrow(/pagado/i)
+
+    db.insert(ingresos).values({ ...ingresoBase, categoria: 'sin_factura', proyectoId: p.id, estado: 'pagado' }).run()
+    expect(completarProyecto(db, root, p.id, hoy).estado).toBe('completado')
+  })
+
+  it('compares a USD Cotización in USD', () => {
+    const c = db.insert(cotizaciones).values({ contactoId, folio: 8, categoria: 'website', estado: 'aceptada', fecha: hoy, moneda: 'USD', subtotal: 100, total: 100 }).returning().get()
+    const p = proyecto(contactoId, c.id)
+    db.insert(ingresos).values({ fechaRegistro: hoy, subtotal: 1800, total: 1800, montoOriginal: 100, monedaOriginal: 'USD', categoria: 'sin_factura', proyectoId: p.id, estado: 'pagado' }).run()
+    expect(completarProyecto(db, root, p.id, hoy).estado).toBe('completado')
+  })
+
   it('cancelling cascades to its Cotización (Cancelación con pagos)', () => {
     const c = cotizacionAceptada(contactoId)
     const p = proyecto(contactoId, c.id)

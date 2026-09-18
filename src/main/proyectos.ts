@@ -86,20 +86,34 @@ export function carpetaAbrible(db: Db, root: string, id: number): string {
   throw new Error(c.estado === 'archivado' ? 'La carpeta está archivada fuera de DMM OS' : 'La carpeta está No disponible')
 }
 
-/** Pending and paid Ingresos of the Proyecto, before IVA. */
-function cobros(db: Db, id: number) {
-  const suyos = db.select({ estado: ingresos.estado, subtotal: ingresos.subtotal }).from(ingresos).where(eq(ingresos.proyectoId, id)).all()
-  const suma = (estado: string) => suyos.filter((i) => i.estado === estado).reduce((s, i) => s + i.subtotal, 0)
-  return { porCobrar: suma('pendiente'), cobrado: suma('pagado'), pendientes: suyos.some((i) => i.estado === 'pendiente') }
+/**
+ * Pending and paid Ingresos of the Proyecto, before IVA, and whether it is fully paid: nothing
+ * pending and, for a Proyecto from a one-off or installment Cotización, paid Ingresos (net of
+ * Reembolsos) reaching the quote's total. A USD quote is compared in USD, by each Ingreso's
+ * original amount. A monthly quote has no total to reach.
+ */
+function cobros(db: Db, p: { id: number; cotizacionId: number | null }) {
+  const suyos = db.select().from(ingresos).where(eq(ingresos.proyectoId, p.id)).all()
+  const pagados = suyos.filter((i) => i.estado === 'pagado')
+  const pendientes = suyos.filter((i) => i.estado === 'pendiente')
+  const suma = (is: typeof suyos) => is.reduce((s, i) => s + i.subtotal, 0)
+  let pagadoCompleto = pendientes.length === 0
+  const c = p.cotizacionId === null ? undefined : db.select().from(cotizaciones).where(eq(cotizaciones.id, p.cotizacionId)).get()
+  if (c && c.facturacion !== 'mensual') {
+    const usd = c.moneda === 'USD'
+    const pagado = pagados.reduce((s, i) => s + (usd ? (i.monedaOriginal === 'USD' ? (i.montoOriginal ?? 0) : 0) : i.total), 0)
+    pagadoCompleto &&= pagado >= c.total
+  }
+  return { porCobrar: suma(pendientes), cobrado: suma(pagados), pagadoCompleto }
 }
 
 export function fichaProyecto(db: Db, root: string, id: number): FichaProyecto {
   const p = leer(db, id)
   const contacto = p.contactoId === null ? undefined : db.select({ nombre: contactos.nombre }).from(contactos).where(eq(contactos.id, p.contactoId)).get()
   const cotizacion = p.cotizacionId === null ? undefined : db.select().from(cotizaciones).where(eq(cotizaciones.id, p.cotizacionId)).get()
-  const { porCobrar, cobrado, pendientes } = cobros(db, id)
+  const { porCobrar, cobrado, pagadoCompleto } = cobros(db, p)
   const acciones = (Object.keys(PERMITIDA_EN) as AccionProyecto[]).filter(
-    (a) => PERMITIDA_EN[a].includes(p.estado) && !(a === 'completar' && pendientes)
+    (a) => PERMITIDA_EN[a].includes(p.estado) && !(a === 'completar' && !pagadoCompleto)
   )
   return {
     id: p.id,
@@ -214,7 +228,7 @@ export function reanudarProyecto(db: Db, root: string, id: number): FichaProyect
 /** A Proyecto is only completed once fully paid; delivered but unpaid it stays En curso. */
 export function completarProyecto(db: Db, root: string, id: number, hoy: string): FichaProyecto {
   exigir('completar', leer(db, id).estado, 'Solo un proyecto en curso o pausado se puede completar')
-  if (cobros(db, id).pendientes) throw new Error('El proyecto se completa hasta que esté pagado por completo')
+  if (!cobros(db, leer(db, id)).pagadoCompleto) throw new Error('El proyecto se completa hasta que esté pagado por completo')
   db.update(proyectos).set({ estado: 'completado', fechaFin: hoy }).where(eq(proyectos.id, id)).run()
   return fichaProyecto(db, root, id)
 }
