@@ -76,7 +76,7 @@ describe('Contactos', () => {
   it('ranks the top 10 by value with their share', async () => {
     const top = await screen.findByRole('list', { name: 'Top 10 por valor' })
     expect(top.textContent).toContain('Café Nómada')
-    expect(top.textContent).toContain('$296,000 · 100%')
+    expect(top.textContent).toContain('$296,000.00 · 100%')
   })
 
   it('exports the list as CSV', async () => {

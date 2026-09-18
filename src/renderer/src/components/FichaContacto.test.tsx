@@ -53,7 +53,7 @@ describe('Ficha de contacto', () => {
     expect((await screen.findByRole('heading', { level: 1 })).textContent).toBe('Hotel Aura')
     expect(api.ficha).toHaveBeenCalledWith(7)
     expect(screen.getByText('Cliente activo')).toBeTruthy()
-    expect(screen.getByText('$412,000')).toBeTruthy()
+    expect(screen.getByText('$412,000.00')).toBeTruthy()
     expect(screen.getByText('3 · 67% conversión')).toBeTruthy()
     expect(screen.getByText('Prefiere WhatsApp.')).toBeTruthy()
   })
