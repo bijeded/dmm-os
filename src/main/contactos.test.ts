@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { borrarContacto, contactosCsv, fichaContacto, listarContactos } from './contactos'
+import { borrarContacto, contactosCsv, fichaContacto, guardarContacto, listarContactos } from './contactos'
 import { contacto, cotizacionAceptada, db, ingresoBase, proyecto, reiniciarDb } from './db/test-db'
 import { contactos, cotizaciones, ingresos, proyectos } from './db/schema'
 
@@ -166,5 +166,54 @@ describe('contactosCsv', () => {
     const c = contacto('Estudio "Ocho", SA')
     db.update(contactos).set({ email: 'hola@ocho.mx', telefono: '55 1234' }).where(eq(contactos.id, c.id)).run()
     expect(contactosCsv(db)).toBe('nombre,empresa,email,telefono,estado\r\n"Estudio ""Ocho"", SA",,hola@ocho.mx,55 1234,Lead frío\r\n')
+  })
+})
+
+describe('guardarContacto', () => {
+  const vacio = { nombre: '', empresa: null, email: null, telefono: null, direccion: null, notas: null }
+
+  it('creates a Contacto, trimming and blanking empty fields', () => {
+    const id = guardarContacto(db, { ...vacio, nombre: '  Sonríeme ', email: ' hola@sonrieme.mx ', telefono: '  ', notas: 'Por WhatsApp' })
+    expect(db.select().from(contactos).where(eq(contactos.id, id)).get()).toMatchObject({
+      nombre: 'Sonríeme',
+      email: 'hola@sonrieme.mx',
+      telefono: null,
+      notas: 'Por WhatsApp',
+      empresa: null
+    })
+    expect(listarContactos(db).contactos[0].estado).toBe('lead_frio')
+  })
+
+  it('edits every field of an existing Contacto', () => {
+    const c = contacto('Sonrieme')
+    expect(guardarContacto(db, { id: c.id, nombre: 'Sonríeme', empresa: 'Dra. Ruiz', email: 'a@b.mx', telefono: '55 1', direccion: 'CDMX', notas: 'Nota' })).toBe(c.id)
+    expect(db.select().from(contactos).where(eq(contactos.id, c.id)).get()).toMatchObject({
+      nombre: 'Sonríeme',
+      empresa: 'Dra. Ruiz',
+      email: 'a@b.mx',
+      telefono: '55 1',
+      direccion: 'CDMX',
+      notas: 'Nota'
+    })
+  })
+
+  it('needs a name', () => {
+    expect(() => guardarContacto(db, { ...vacio, nombre: '   ' })).toThrow(/nombre/)
+  })
+
+  it('refuses a name another Contacto already has, accents aside', () => {
+    contacto('Sonríeme')
+    expect(() => guardarContacto(db, { ...vacio, nombre: 'sonrieme' })).toThrow(/Ya existe/)
+    const otro = contacto('Otro')
+    expect(() => guardarContacto(db, { ...vacio, id: otro.id, nombre: 'SONRÍEME' })).toThrow(/Ya existe/)
+  })
+
+  it('lets a Contacto keep its own name', () => {
+    const c = contacto('Sonrieme')
+    expect(guardarContacto(db, { ...vacio, id: c.id, nombre: 'Sonríeme' })).toBe(c.id)
+  })
+
+  it('refuses an unknown Contacto', () => {
+    expect(() => guardarContacto(db, { ...vacio, id: 999, nombre: 'X' })).toThrow(/no existe/)
   })
 })

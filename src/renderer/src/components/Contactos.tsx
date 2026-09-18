@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ESTADOS_CONTACTO, NOMBRES_ESTADO_CONTACTO, type EstadoContacto, type ListaContactos } from '../../../shared/dominio'
 import { monto, normalizar } from '../../../shared/formato'
+import { FormContacto } from './FormContacto'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
 
@@ -29,6 +30,7 @@ export function Contactos() {
   const [busqueda, setBusqueda] = useState('')
   const [estado, setEstado] = useState<EstadoContacto | ''>('')
   const [pagina, setPagina] = useState(0)
+  const [nuevo, setNuevo] = useState(false)
   const { error, ocupado, correr } = useAccion()
 
   useEffect(() => {
@@ -61,6 +63,7 @@ export function Contactos() {
   return (
     <>
       <h1 className={tituloCls}>Contactos</h1>
+      {nuevo && <FormContacto onGuardado={(id) => navigate(`/contactos/${id}`)} onCerrar={() => setNuevo(false)} />}
 
       {lista && (
         <ul aria-label="Resumen" className="g-stats m-0 grid list-none grid-cols-5 gap-3 p-0">
@@ -106,6 +109,7 @@ export function Contactos() {
             <Button variant="secondary" disabled={ocupado || !lista} onClick={exportar}>
               Exportar CSV
             </Button>
+            <Button onClick={() => setNuevo(true)}>Nuevo contacto</Button>
           </div>
 
           <table className="tbl w-full border-collapse text-[13px]">

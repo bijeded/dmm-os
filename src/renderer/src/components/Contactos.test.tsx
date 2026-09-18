@@ -30,7 +30,7 @@ let api: DmmApi['contactos']
 let router: ReturnType<typeof createMemoryRouter>
 
 beforeEach(() => {
-  api = { listar: vi.fn(async () => lista), ficha: vi.fn(), borrar: vi.fn(), csv: vi.fn(async () => 'nombre\r\n') }
+  api = { listar: vi.fn(async () => lista), ficha: vi.fn(), guardar: vi.fn(async () => 42), borrar: vi.fn(), csv: vi.fn(async () => 'nombre\r\n') }
   window.dmm = { contactos: api } as unknown as DmmApi
   router = createMemoryRouter(
     [
@@ -87,5 +87,27 @@ describe('Contactos', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Exportar CSV' }))
     await waitFor(() => expect(api.csv).toHaveBeenCalled())
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled())
+  })
+
+  it('creates a Contacto and opens its record', async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Nuevo contacto' }))
+    const dialogo = screen.getByRole('dialog', { name: 'Nuevo contacto' })
+    expect(within(dialogo).queryByLabelText(/estado/i)).toBeNull()
+    fireEvent.change(within(dialogo).getByLabelText('Nombre'), { target: { value: 'Sonríeme' } })
+    fireEvent.change(within(dialogo).getByLabelText('Teléfono / WhatsApp'), { target: { value: '55 1234' } })
+    fireEvent.change(within(dialogo).getByLabelText('Notas'), { target: { value: 'Referida' } })
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Guardar' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/contactos/42'))
+    expect(api.guardar).toHaveBeenCalledWith({ nombre: 'Sonríeme', empresa: '', email: '', telefono: '55 1234', direccion: '', notas: 'Referida' })
+  })
+
+  it('keeps the form open when main refuses it', async () => {
+    vi.mocked(api.guardar).mockRejectedValue(new Error("Error invoking remote method 'contactos:guardar': Error: Ya existe el contacto Café Nómada"))
+    fireEvent.click(await screen.findByRole('button', { name: 'Nuevo contacto' }))
+    const dialogo = screen.getByRole('dialog')
+    fireEvent.change(within(dialogo).getByLabelText('Nombre'), { target: { value: 'cafe nomada' } })
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Guardar' }))
+    expect((await within(dialogo).findByRole('alert')).textContent).toMatch(/Ya existe el contacto Café Nómada/)
+    expect(router.state.location.pathname).toBe('/contactos')
   })
 })
