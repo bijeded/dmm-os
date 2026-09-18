@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { estadoCobro, estadosCobro } from './cobranza'
 import { cotizaciones, ingresos } from './db/schema'
+import { registrarReembolso } from './db/dominio'
 import { contacto, db, ingresoBase, proyecto, reiniciarDb } from './db/test-db'
 
 const hoy = '2026-09-18'
@@ -46,6 +47,18 @@ describe('estadoCobro', () => {
     ingreso(p.id, { subtotal: 900, iva: 0, total: 900, montoOriginal: 50, monedaOriginal: 'USD' })
     ingreso(p.id, { subtotal: 900, iva: 0, total: 900 })
     expect(estadoCobro(db, p.id).falta).toEqual({ pendientes: 0, faltante: 50, moneda: 'USD' })
+  })
+
+  it('a USD Reembolso counts against what a USD Cotización was paid', () => {
+    const p = proyecto(contactoId, cotizacion({ moneda: 'USD', subtotal: 100, iva: 0, total: 100 }).id)
+    const o = db
+      .insert(ingresos)
+      .values({ fechaRegistro: hoy, subtotal: 1800, total: 1800, montoOriginal: 100, monedaOriginal: 'USD', categoria: 'sin_factura', proyectoId: p.id, estado: 'pagado' })
+      .returning()
+      .get()
+    expect(estadoCobro(db, p.id).pagadoCompleto).toBe(true)
+    registrarReembolso(db, o.id, { subtotal: 540, iva: 0, fecha: hoy, montoOriginal: 30 })
+    expect(estadoCobro(db, p.id).falta).toEqual({ pendientes: 0, faltante: 30, moneda: 'USD' })
   })
 
   it('compares an MXN Cotización by pesos, even when paid in USD', () => {
