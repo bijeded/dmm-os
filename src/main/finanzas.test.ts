@@ -188,6 +188,17 @@ describe('Reembolso', () => {
     expect(r.ingresos[0]).toMatchObject({ total: -3000, reembolsoDeId: i.id, estado: 'pagado' })
   })
 
+  it('refunds a USD Ingreso in USD too', () => {
+    const usd = db
+      .insert(ingresos)
+      .values({ categoria: 'sin_factura', estado: 'pagado', subtotal: 170000, iva: 0, total: 170000, montoOriginal: 10000, monedaOriginal: 'USD', fechaRegistro: '2026-09-01', fechaPago: '2026-09-01' })
+      .returning()
+      .get()
+    expect(() => reembolsar(db, usd.id, 17000, 0, hoy)).toThrow(/USD/)
+    reembolsar(db, usd.id, 17000, 0, hoy, 1000)
+    expect(db.select().from(ingresos).where(eq(ingresos.reembolsoDeId, usd.id)).get()).toMatchObject({ total: -17000, montoOriginal: -1000, monedaOriginal: 'USD' })
+  })
+
   it('never gives back more than was paid, nor from an unpaid Ingreso', () => {
     nuevoIngreso(db, ingreso({ subtotal: 10000 }), hoy)
     const i = db.select().from(ingresos).get()!

@@ -194,7 +194,7 @@ export function crearHandlers({
       pagarIngreso: (id) => pagarIngreso(conexion.db, id, hoy()),
       cancelarIngreso: (id) => cancelarIngreso(conexion.db, id),
       borrarIngreso: (id) => borrarIngreso(conexion.db, id),
-      reembolsar: (id, subtotal, iva, fecha) => reembolsar(conexion.db, id, subtotal, iva, fecha),
+      reembolsar: (id, subtotal, iva, fecha, montoOriginal) => reembolsar(conexion.db, id, subtotal, iva, fecha, montoOriginal),
       pagarCosto: (id) => pagarCosto(conexion.db, id, hoy()),
       cancelarCosto: (id) => cancelarCosto(conexion.db, id),
       borrarCosto: (id) => borrarCosto(conexion.db, id),

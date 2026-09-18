@@ -3,6 +3,7 @@ import type { Db } from './db'
 import { coberturaCostos } from './db/cobertura'
 import { fechaEnPeriodo, generarPeriodos, sumarMeses } from './db/periodos'
 import { RegistroVinculadoError } from './db/cancelacion'
+import { registrarReembolso } from './db/dominio'
 import {
   asignacionesCosto,
   contactos,
@@ -152,11 +153,17 @@ const origenIngreso = (i: Ingreso): FilaIngreso['origen'] =>
 
 const origenCosto = (c: Costo): FilaCosto['origen'] => (c.cfdiUuid !== null ? 'cfdi' : c.definicionId !== null ? 'recurrente' : 'manual')
 
+/** Borrar vs cancelar: only a hand-entered Ingreso no Reembolso points at. */
+const borrableIngreso = (i: Ingreso, reembolsado: boolean) => origenIngreso(i) === 'manual' && !reembolsado
+
+/** Borrar vs cancelar: only a hand-entered one-time Costo nothing is attributed from. */
+const borrableCosto = (c: Costo, asignado: boolean) => origenCosto(c) === 'manual' && c.cotizacionId === null && !asignado
+
 function accionesIngreso(i: Ingreso, conReembolsos: Set<number>): AccionIngreso[] {
   const puede: Record<AccionIngreso, boolean> = {
     pagar: i.estado === 'pendiente',
     cancelar: i.estado === 'pendiente',
-    borrar: origenIngreso(i) === 'manual' && !conReembolsos.has(i.id),
+    borrar: borrableIngreso(i, conReembolsos.has(i.id)),
     reembolsar: i.estado === 'pagado' && i.total > 0 && i.reembolsoDeId === null
   }
   return (Object.keys(puede) as AccionIngreso[]).filter((a) => puede[a])
@@ -168,11 +175,11 @@ type Definicion = typeof definicionesCosto.$inferSelect
 const detenible = (d: Definicion | undefined, periodoActual: string) =>
   d !== undefined && d.tipo !== 'msi' && (d.periodoFin === null || d.periodoFin > periodoActual)
 
-function accionesCosto(c: Costo, definicion: Definicion | undefined, periodoActual: string): AccionCosto[] {
+function accionesCosto(c: Costo, definicion: Definicion | undefined, periodoActual: string, asignado: boolean): AccionCosto[] {
   const puede: Record<AccionCosto, boolean> = {
     pagar: c.estado === 'pendiente',
     cancelar: c.estado === 'pendiente',
-    borrar: origenCosto(c) === 'manual' && c.cotizacionId === null,
+    borrar: borrableCosto(c, asignado),
     detener: detenible(definicion, periodoActual)
   }
   return (Object.keys(puede) as AccionCosto[]).filter((a) => puede[a])
@@ -237,6 +244,7 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
   const sinDatos = new Set(coberturaCostos(db, desde, anioDe(hoy)).filter((c) => c.sinDatos).map((c) => c.anio))
   const aniosVistos = (r: Rango | null) => (r ? [...sinDatos].filter((a) => a >= anioDe(r.desde) && a <= anioDe(r.hasta)) : [])
 
+  const asignados = new Set(db.select({ costoId: asignacionesCosto.costoId }).from(asignacionesCosto).all().map((a) => a.costoId))
   const conReembolsos = new Set(is.flatMap((i) => (i.reembolsoDeId === null ? [] : [i.reembolsoDeId])))
   const limiteVencida = sumarDias(hoy, -diasVencida)
   const filaIngreso = (i: Ingreso): FilaIngreso => ({
@@ -269,7 +277,7 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     iva: c.iva,
     total: c.total,
     origen: origenCosto(c),
-    acciones: accionesCosto(c, c.definicionId === null ? undefined : definicion.get(c.definicionId), periodoActual)
+    acciones: accionesCosto(c, c.definicionId === null ? undefined : definicion.get(c.definicionId), periodoActual, asignados.has(c.id))
   })
 
   const porFecha = <T>(f: (x: T) => string | null) => (a: T, b: T) => (f(a) ?? '').localeCompare(f(b) ?? '')
@@ -293,7 +301,7 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     cobranza: is.filter((i) => i.estado === 'pendiente').sort(porFecha(fechaIngreso)).map(filaIngreso),
     costosPendientes: pendientesCosto.map(filaCosto),
     ingresos: is.filter((i) => i.estado !== 'cancelado' && dentro(fechaIngreso(i), rango)).sort(porFecha(fechaIngreso)).reverse().map(filaIngreso),
-    costos: cs.filter((c) => dentro(c.fecha, rango)).sort(porFecha((c) => c.fecha)).reverse().map(filaCosto),
+    costos: cs.filter((c) => cuentaCosto(c) && dentro(c.fecha, rango)).sort(porFecha((c) => c.fecha)).reverse().map(filaCosto),
     proximosPagos,
     diasVencida
   }
@@ -411,12 +419,12 @@ export function cancelarIngreso(db: Db, id: number) {
 export function borrarIngreso(db: Db, id: number) {
   const i = leerIngreso(db, id)
   const reembolsado = db.select({ id: ingresos.id }).from(ingresos).where(eq(ingresos.reembolsoDeId, id)).get()
-  if (origenIngreso(i) !== 'manual' || reembolsado) throw new RegistroVinculadoError('El ingreso', id)
+  if (!borrableIngreso(i, reembolsado !== undefined)) throw new RegistroVinculadoError('El ingreso', id)
   db.delete(ingresos).where(eq(ingresos.id, id)).run()
 }
 
-/** Reembolso: a negative, paid Ingreso against a paid one, never more than what is left of it. */
-export function reembolsar(db: Db, id: number, subtotal: number, iva: number, fecha: string) {
+/** Reembolso against a paid Ingreso, never more than what is left of it; a USD one needs its USD amount. */
+export function reembolsar(db: Db, id: number, subtotal: number, iva: number, fecha: string, montoOriginal?: number) {
   exigirMonto(subtotal, iva)
   exigirFecha(fecha)
   const i = leerIngreso(db, id)
@@ -428,22 +436,7 @@ export function reembolsar(db: Db, id: number, subtotal: number, iva: number, fe
     .all()
     .reduce((s, r) => s - r.total, 0)
   if (devuelto + subtotal + iva > i.total) throw new Error('No se puede reembolsar más de lo pagado')
-  db.insert(ingresos)
-    .values({
-      categoria: i.categoria,
-      estadoFacturacion: i.estadoFacturacion,
-      estado: 'pagado',
-      subtotal: -subtotal,
-      iva: -iva,
-      total: -(subtotal + iva),
-      proyectoId: i.proyectoId,
-      cotizacionId: i.cotizacionId,
-      contactoId: i.contactoId,
-      fechaRegistro: fecha,
-      fechaPago: fecha,
-      reembolsoDeId: id
-    })
-    .run()
+  registrarReembolso(db, id, { subtotal, iva, fecha, montoOriginal })
 }
 
 export function pagarCosto(db: Db, id: number, hoy: string) {
@@ -460,7 +453,7 @@ export function cancelarCosto(db: Db, id: number) {
 export function borrarCosto(db: Db, id: number) {
   const c = leerCosto(db, id)
   const asignado = db.select({ id: asignacionesCosto.id }).from(asignacionesCosto).where(eq(asignacionesCosto.costoId, id)).get()
-  if (origenCosto(c) !== 'manual' || c.cotizacionId !== null || asignado) throw new RegistroVinculadoError('El costo', id)
+  if (!borrableCosto(c, asignado !== undefined)) throw new RegistroVinculadoError('El costo', id)
   db.delete(costos).where(eq(costos.id, id)).run()
 }
 

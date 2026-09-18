@@ -705,8 +705,8 @@ export const contrato = {
     cancelarIngreso: canal<[id: number], void>(),
     /** Borrar vs cancelar: only a hand-entered Ingreso with no Reembolso against it. */
     borrarIngreso: canal<[id: number], void>(),
-    /** A Reembolso: a negative, paid Ingreso linked to the original, counted on `fecha`. */
-    reembolsar: canal<[id: number, subtotal: number, iva: number, fecha: string], void>(),
+    /** A Reembolso: a negative, paid Ingreso linked to the original, counted on `fecha`. A USD one needs its USD amount. */
+    reembolsar: canal<[id: number, subtotal: number, iva: number, fecha: string, montoOriginal?: number], void>(),
     pagarCosto: canal<[id: number], void>(),
     cancelarCosto: canal<[id: number], void>(),
     /** Borrar vs cancelar: only a hand-entered one-time Costo. */
