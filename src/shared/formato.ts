@@ -12,8 +12,11 @@ export const folioDmm = (folio: string | number) => `DMM${folio}`
 export const normalizar = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
 
 /** A quote's subtotal (sum of cantidad × precio, rounded) and IVA on top of it when `conIva`. */
+/** 16% IVA on top of a subtotal in centavos when `conIva`, else none. */
+export const ivaDe = (subtotal: number, conIva: boolean) => (conIva ? Math.round(subtotal * TASA_IVA) : 0)
+
 export function totalesCotizacion(partidas: readonly { cantidad: number; precio: number }[], conIva: boolean) {
   const subtotal = Math.round(partidas.reduce((s, p) => s + p.cantidad * p.precio, 0))
-  const iva = conIva ? Math.round(subtotal * TASA_IVA) : 0
+  const iva = ivaDe(subtotal, conIva)
   return { subtotal, iva, total: subtotal + iva }
 }

@@ -7,7 +7,7 @@ import {
   type FilaContacto,
   type FilaProyecto
 } from '../../../shared/ipc'
-import { diaLocal, TASA_IVA } from '../../../shared/formato'
+import { diaLocal } from '../../../shared/formato'
 import { tituloCls } from './Contactos'
 import { Campo, campoCls } from './NuevaCotizacion'
 import { Aviso, useAccion } from './Seccion'
@@ -16,11 +16,11 @@ import { Button } from './ui/button'
 /** Pesos typed by hand, e.g. `1,250.50`, as centavos; `NaN` when it isn't a number. */
 export const centavos = (pesos: string) => Math.round(Number(pesos.replace(/[,\s$]/g, '')) * 100)
 
-/** Subtotal and, when `conIva`, 16% IVA on top, from pesos typed by hand. */
-function montos(pesos: string, conIva: boolean) {
-  const subtotal = centavos(pesos)
-  if (!Number.isFinite(subtotal) || subtotal <= 0) throw new Error('Escribe un monto mayor a cero')
-  return { subtotal, iva: conIva ? Math.round(subtotal * TASA_IVA) : 0 }
+/** The subtotal typed by hand, in centavos. */
+function subtotal(pesos: string) {
+  const s = centavos(pesos)
+  if (!Number.isFinite(s) || s <= 0) throw new Error('Escribe un monto mayor a cero')
+  return s
 }
 
 function Formulario({ titulo, accion, ocupado, guardar, error, children }: { titulo: string; accion: string; ocupado: boolean; guardar: () => void; error: string | null; children: ReactNode }) {
@@ -105,8 +105,8 @@ export function NuevoIngreso() {
         contactoId: proyectoId === null ? contactoId : null,
         proyectoId,
         fecha,
-        // Uninvoiced income carries no IVA.
-        ...montos(monto, factura && conIva),
+        subtotal: subtotal(monto),
+        conIva: factura && conIva,
         pagado,
         notas: notas || null
       })
@@ -188,7 +188,8 @@ export function NuevoCosto() {
         categoria,
         proyectoId,
         fecha,
-        ...montos(monto, conIva),
+        subtotal: subtotal(monto),
+        conIva,
         parcialidades: categoria === 'msi' ? Number(parcialidades) : null,
         suscripcionIa,
         pagado: unico && pagado

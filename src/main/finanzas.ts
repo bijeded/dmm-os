@@ -5,6 +5,7 @@ import { fechaEnPeriodo, sumarAnios, sumarDias, sumarMeses } from './db/fechas'
 import { generarPeriodos } from './db/periodos'
 import { RegistroVinculadoError } from './db/cancelacion'
 import { registrarReembolso } from './db/dominio'
+import { ivaDe } from '../shared/formato'
 import {
   asignacionesCosto,
   contactos,
@@ -343,7 +344,9 @@ function leerCosto(db: Db, id: number) {
 
 /** A hand-entered Ingreso; given a Proyecto, its Contacto is the Proyecto's. */
 export function nuevoIngreso(db: Db, n: IngresoNuevo, hoy: string) {
-  exigirMonto(n.subtotal, n.iva)
+  // Uninvoiced income carries no IVA.
+  const iva = ivaDe(n.subtotal, n.categoria === 'factura' && n.conIva)
+  exigirMonto(n.subtotal, iva)
   exigirFecha(n.fecha)
   let contactoId = n.contactoId
   if (n.proyectoId !== null) {
@@ -358,8 +361,8 @@ export function nuevoIngreso(db: Db, n: IngresoNuevo, hoy: string) {
       estadoFacturacion: n.categoria === 'factura' ? (n.facturado ? 'facturado' : 'por_facturar') : null,
       estado: pagado ? 'pagado' : 'pendiente',
       subtotal: n.subtotal,
-      iva: n.iva,
-      total: n.subtotal + n.iva,
+      iva,
+      total: n.subtotal + iva,
       proyectoId: n.proyectoId,
       contactoId,
       fechaRegistro: n.fecha,
@@ -373,10 +376,11 @@ export function nuevoIngreso(db: Db, n: IngresoNuevo, hoy: string) {
 export function nuevoCosto(db: Db, n: CostoNuevo, hoy: string) {
   const nombre = n.nombre.trim()
   if (!nombre) throw new Error('El costo necesita un nombre')
-  exigirMonto(n.subtotal, n.iva)
+  const iva = ivaDe(n.subtotal, n.conIva)
+  exigirMonto(n.subtotal, iva)
   exigirFecha(n.fecha)
   if (n.categoria === 'msi' && (!n.parcialidades || n.parcialidades < 2)) throw new Error('Un costo a MSI necesita al menos 2 parcialidades')
-  const montos = { subtotal: n.subtotal, iva: n.iva, total: n.subtotal + n.iva }
+  const montos = { subtotal: n.subtotal, iva, total: n.subtotal + iva }
   const proveedor = n.proveedor?.trim() || null
 
   if (n.categoria === 'unico') {

@@ -31,7 +31,7 @@ const ingreso = (cambios: Partial<IngresoNuevo> = {}): IngresoNuevo => ({
   proyectoId: null,
   fecha: '2026-09-02',
   subtotal: 10000,
-  iva: 0,
+  conIva: false,
   pagado: true,
   notas: null,
   ...cambios
@@ -45,7 +45,7 @@ const costo = (cambios: Partial<CostoNuevo> = {}): CostoNuevo => ({
   proyectoId: null,
   fecha: '2026-09-05',
   subtotal: 2000,
-  iva: 320,
+  conIva: true,
   parcialidades: null,
   suscripcionIa: false,
   pagado: true,
@@ -90,8 +90,8 @@ describe('resumen', () => {
     nuevoIngreso(db, ingreso({ subtotal: 10000 }), hoy)
     cfdi('2026-03-10', 5000)
     cfdi('2025-03-10', 4000)
-    nuevoCosto(db, costo({ subtotal: 2000, iva: 320 }), hoy)
-    nuevoCosto(db, costo({ fecha: '2025-06-01', subtotal: 1000, iva: 0 }), hoy)
+    nuevoCosto(db, costo({ subtotal: 2000, conIva: true }), hoy)
+    nuevoCosto(db, costo({ fecha: '2025-06-01', subtotal: 1000, conIva: false }), hoy)
 
     const r = resumenFinanzas(db, 'anio', hoy, 30)
     expect(r.actual).toEqual({ ingresos: 15000, ingresosFactura: 5000, ingresosSinFactura: 10000, ivaIngresos: 800, costos: 2000, ivaCostos: 320, utilidad: 13000 })
@@ -171,7 +171,7 @@ describe('Cobrado', () => {
 
 describe('recurring and installment Costos', () => {
   it('generates a monthly Costo per period up to this month', () => {
-    nuevoCosto(db, costo({ nombre: 'Claude Max', categoria: 'mensual', fecha: '2026-07-05', subtotal: 170000, iva: 0, suscripcionIa: true }), hoy)
+    nuevoCosto(db, costo({ nombre: 'Claude Max', categoria: 'mensual', fecha: '2026-07-05', subtotal: 170000, conIva: false, suscripcionIa: true }), hoy)
     const r = resumenFinanzas(db, 'anio', hoy, 30)
     expect(r.costos.map((c) => [c.fecha, c.origen])).toEqual([
       ['2026-09-05', 'recurrente'],
@@ -182,7 +182,7 @@ describe('recurring and installment Costos', () => {
   })
 
   it('runs an MSI to its installment count and lists the next one as an upcoming payment', () => {
-    nuevoCosto(db, costo({ nombre: 'MacBook Pro', categoria: 'msi', parcialidades: 18, fecha: '2026-08-12', subtotal: 250000, iva: 0 }), hoy)
+    nuevoCosto(db, costo({ nombre: 'MacBook Pro', categoria: 'msi', parcialidades: 18, fecha: '2026-08-12', subtotal: 250000, conIva: false }), hoy)
     const r = resumenFinanzas(db, 'anio', hoy, 30)
     expect(r.costosPendientes.map((c) => c.fecha)).toEqual(['2026-08-12', '2026-09-12'])
     expect(r.proximosPagos[0]).toMatchObject({ fecha: '2026-10-12', nombre: 'MacBook Pro', total: 250000 })
@@ -196,6 +196,21 @@ describe('recurring and installment Costos', () => {
     detenerCosto(db, c.id, hoy)
     expect(db.select().from(definicionesCosto).get()?.periodoFin).toBe('2026-09')
     expect(resumenFinanzas(db, 'anio', hoy, 30).proximosPagos).toEqual([])
+  })
+})
+
+describe('IVA of a hand-entered Ingreso or Costo', () => {
+  it('adds 16% on top, rounded to the centavo, only when asked', () => {
+    nuevoCosto(db, costo({ subtotal: 1003, conIva: true }), hoy)
+    nuevoCosto(db, costo({ subtotal: 1003, conIva: false }), hoy)
+    nuevoIngreso(db, ingreso({ categoria: 'factura', subtotal: 1003, conIva: true }), hoy)
+    expect(db.select().from(costos).all().map((c) => [c.iva, c.total])).toEqual([[160, 1163], [0, 1003]])
+    expect(db.select().from(ingresos).get()).toMatchObject({ iva: 160, total: 1163 })
+  })
+
+  it('never puts IVA on uninvoiced income', () => {
+    nuevoIngreso(db, ingreso({ categoria: 'sin_factura', subtotal: 1000, conIva: true }), hoy)
+    expect(db.select().from(ingresos).get()).toMatchObject({ iva: 0, total: 1000 })
   })
 })
 
