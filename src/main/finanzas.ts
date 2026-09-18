@@ -1,7 +1,7 @@
 import { and, eq, lte } from 'drizzle-orm'
 import type { Db } from './db'
 import { coberturaCostos } from './db/cobertura'
-import { fechaEnPeriodo, sumarAnios, sumarDias, sumarMeses } from './db/fechas'
+import { fechaEnPeriodo, sumarAnios, sumarDias, sumarMeses } from '../shared/fechas'
 import { generarPeriodos } from './db/periodos'
 import { RegistroVinculadoError } from './db/cancelacion'
 import { registrarReembolso } from './db/dominio'

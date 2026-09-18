@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { NOMBRES_ESTADO_CONTACTO, type FichaContacto as Ficha, type Movimiento } from '../../../shared/ipc'
+import { dia } from '../../../shared/formato'
 import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
@@ -30,7 +31,6 @@ const estados: Record<string, string> = {
 }
 
 // Dates are stored as 'YYYY-MM-DD'; read them as that calendar day, not as UTC midnight.
-const dia = (d: string) => new Date(`${d.slice(0, 10)}T12:00:00`).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
 
 /** Ficha de contacto: the Contacto's data, its complete history and its files in `Clientes/`. */
 export function FichaContacto() {

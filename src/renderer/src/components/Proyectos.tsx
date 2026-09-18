@@ -10,9 +10,9 @@ import {
   type EstadoProyecto,
   type ListaProyectos
 } from '../../../shared/ipc'
-import { normalizar } from '../../../shared/formato'
+import { dia, normalizar } from '../../../shared/formato'
 import { celdaCls, etiquetaCls, tituloCls } from './Contactos'
-import { PorCategoria, dia, selectCls } from './Cotizaciones'
+import { PorCategoria, selectCls } from './Cotizaciones'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
 
