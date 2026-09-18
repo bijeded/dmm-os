@@ -60,7 +60,7 @@ function describirRegistro(db: Db, entidad: Sugerencia['entidad'], id: number): 
   switch (entidad) {
     case 'ingreso': {
       const i = db.select().from(ingresos).where(eq(ingresos.id, id)).get()
-      return i ? `Ingreso ${i.fechaRegistro} · ${mxn(i.total)}` : `Ingreso ${id}`
+      return i ? `Ingreso ${i.fechaRegistro ?? 'por facturar'} · ${mxn(i.total)}` : `Ingreso ${id}`
     }
     case 'costo': {
       const c = db.select().from(costos).where(eq(costos.id, id)).get()

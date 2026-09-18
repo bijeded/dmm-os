@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -29,6 +29,7 @@ beforeEach(() => {
     elegirRespaldo: vi.fn(async () => undefined),
     elegirHdd: vi.fn(async () => undefined),
     abrirCarpeta: vi.fn(async () => ''),
+    imprimirPdf: vi.fn(async () => new TextEncoder().encode('%PDF')),
     ahora: () => '2026-09-16T10:00:00.000Z'
   }
   h = crearHandlers(opciones)
@@ -123,5 +124,53 @@ describe('Catálogo', () => {
     expect(await h.catalogo.guardar({ ...c, precio: 2_000_000 })).toEqual([{ ...c, precio: 2_000_000 }])
     expect(await h.catalogo.listar()).toHaveLength(1)
     expect(await h.catalogo.borrar(c.id)).toEqual([])
+  })
+})
+
+describe('cotizaciones', () => {
+  it('sends a quote into the DMM OS root, accepts it on the local day, and opens its PDF', async () => {
+    const { id: contactoId } = conexion.db.insert(contactos).values({ nombre: 'Clínica Sol' }).returning().get()
+    const { id } = await h.cotizaciones.guardar({
+      contactoId,
+      nombre: 'Landing',
+      categoria: 'website',
+      fecha: '2026-09-16',
+      validezDias: 30,
+      moneda: 'MXN',
+      partidas: [{ concepto: 'Landing', categoria: 'website', cantidad: 1, precio: 950_000 }],
+      conIva: false,
+      facturacion: 'unica',
+      parcialidades: null,
+      stack: null,
+      terminos: null,
+      notas: null,
+      costosEstimados: []
+    })
+    const { pdf } = await h.cotizaciones.enviar(id)
+    expect(readFileSync(join(root, pdf!), 'utf8')).toBe('%PDF')
+    expect((await h.cotizaciones.aceptar(id)).estado).toBe('aceptada')
+    await h.cotizaciones.abrirPdf(id)
+    expect(opciones.abrirCarpeta).toHaveBeenCalledWith(join(root, pdf!))
+  })
+  it('expires sent quotes past their validity whenever quotes are read', async () => {
+    const { id: contactoId } = conexion.db.insert(contactos).values({ nombre: 'Hotel Aura' }).returning().get()
+    const { id } = await h.cotizaciones.guardar({
+      contactoId,
+      nombre: 'Tienda',
+      categoria: 'ecommerce',
+      fecha: '2026-08-01',
+      validezDias: 30,
+      moneda: 'MXN',
+      partidas: [{ concepto: 'Tienda', categoria: 'ecommerce', cantidad: 1, precio: 100 }],
+      conIva: false,
+      facturacion: 'unica',
+      parcialidades: null,
+      stack: null,
+      terminos: null,
+      notas: null,
+      costosEstimados: []
+    })
+    await h.cotizaciones.enviar(id)
+    expect((await h.cotizaciones.listar()).cotizaciones[0].estado).toBe('expirada')
   })
 })

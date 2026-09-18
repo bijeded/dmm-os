@@ -8,7 +8,7 @@ import {
   uniqueIndex,
   type AnySQLiteColumn
 } from 'drizzle-orm/sqlite-core'
-import { CATEGORIAS } from '../../shared/ipc'
+import { CATEGORIAS, type CostoEstimado } from '../../shared/ipc'
 
 // Money is stored as integer centavos (MXN). Periods are 'YYYY-MM'. Dates are 'YYYY-MM-DD'.
 // File locations are relative paths (docs/adr/0001).
@@ -95,8 +95,12 @@ export const cotizaciones = sqliteTable(
     facturacion: text('facturacion', { enum: ['unica', 'mensual', 'parcialidades'] })
       .notNull()
       .default('unica'),
+    /** How many payments `parcialidades` billing splits the total into. */
+    parcialidades: integer('parcialidades'),
     terminos: text('terminos'),
     notas: text('notas'),
+    /** Never shown to the Contacto; become estimated Costos when the quote is accepted. */
+    costosEstimados: text('costos_estimados', { mode: 'json' }).$type<CostoEstimado[]>().notNull().default([]),
     pdfRutaRelativa: text('pdf_ruta'),
     creadoEn: creadoEn()
   },
@@ -193,6 +197,9 @@ export const definicionesCosto = sqliteTable(
     proveedor: text('proveedor'),
     tipo: text('tipo', { enum: ['mensual', 'msi', 'anual'] }).notNull(),
     proyectoId: integer('proyecto_id').references(() => proyectos.id, { onDelete: 'restrict' }),
+    // Set when the definition came from a Cotización's estimated costs. Such a monthly series
+    // doesn't stop with its Proyecto; it runs until it is stopped in Finanzas.
+    cotizacionId: integer('cotizacion_id').references(() => cotizaciones.id, { onDelete: 'restrict' }),
     suscripcionIa: integer('suscripcion_ia', { mode: 'boolean' }).notNull().default(false),
     diaDelMes: integer('dia_del_mes').notNull().default(1),
     periodoInicio: text('periodo_inicio').notNull(),
@@ -240,7 +247,8 @@ export const ingresos = sqliteTable(
       onDelete: 'restrict'
     }),
     contactoId: integer('contacto_id').references(() => contactos.id, { onDelete: 'restrict' }),
-    fechaRegistro: text('fecha_registro').notNull(),
+    // Blank for a pending Ingreso created on accepting a Cotización, until it is invoiced.
+    fechaRegistro: text('fecha_registro'),
     fechaPago: text('fecha_pago'),
     periodo: text('periodo'),
     definicionId: integer('definicion_id').references(() => definicionesIngreso.id, {

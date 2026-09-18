@@ -57,6 +57,13 @@
       "when": 1789714313936,
       "tag": "0007_catalogo",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1789716590696,
+      "tag": "0008_cotizacion_nueva",
+      "breakpoints": true
     }
   ]
 }

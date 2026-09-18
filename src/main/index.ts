@@ -8,6 +8,17 @@ import { registerIpc } from './ipc'
 
 app.setName('DMM OS')
 
+/** Prints a page of HTML to a Letter PDF in a hidden window, backgrounds included. */
+async function imprimirPdf(html: string): Promise<Uint8Array> {
+  const win = new BrowserWindow({ show: false, webPreferences: { javascript: false } })
+  try {
+    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+    return await win.webContents.printToPDF({ pageSize: 'Letter', printBackground: true, preferCSSPageSize: true })
+  } finally {
+    win.destroy()
+  }
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1440,
@@ -83,7 +94,8 @@ app.whenReady().then(() => {
           message: 'Elige la carpeta del disco externo, organizada como DMM OS',
           properties: ['openDirectory']
         }),
-      abrirCarpeta: (path) => shell.openPath(path)
+      abrirCarpeta: (path) => shell.openPath(path),
+      imprimirPdf
     })
   )
   createWindow()

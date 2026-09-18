@@ -53,6 +53,33 @@ function handlers() {
       guardar: vi.fn(() => []),
       borrar: vi.fn(() => [])
     },
+    cotizaciones: {
+      listar: vi.fn(() => ({
+        cotizaciones: [],
+        resumen: { total: 0, enviadas: 0, conversion: 0, montoAbiertas: 0, promedio: 0 },
+        porCategoria: { website: 0, ecommerce: 0, app: 0, ai: 0, marketing: 0, other: 0 }
+      })),
+      ficha: vi.fn(() => {
+        throw new Error('sin ficha')
+      }),
+      guardar: vi.fn(() => {
+        throw new Error('sin ficha')
+      }),
+      enviar: vi.fn(async () => {
+        throw new Error('sin ficha')
+      }),
+      aceptar: vi.fn(() => {
+        throw new Error('sin ficha')
+      }),
+      rechazar: vi.fn(() => {
+        throw new Error('sin ficha')
+      }),
+      cancelar: vi.fn(() => {
+        throw new Error('sin ficha')
+      }),
+      borrar: vi.fn(),
+      abrirPdf: vi.fn(async () => {})
+    },
     finanzas: {
       coberturaCostos: vi.fn(() => [{ anio: 2025, sinDatos: true }])
     }

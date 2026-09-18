@@ -105,7 +105,8 @@ export function generarPeriodos(db: Db, periodoActual: string) {
 
     for (const d of tx.select().from(definicionesCosto).all()) {
       // Monthly Costos stop with their Proyecto; MSI and annual ones are committed and run to their end.
-      if (d.tipo === 'mensual' && d.proyectoId !== null && proyectosCerrados.has(d.proyectoId)) continue
+      // A monthly cost estimated in a Cotización runs until it is stopped in Finanzas.
+      if (d.tipo === 'mensual' && d.cotizacionId === null && d.proyectoId !== null && proyectosCerrados.has(d.proyectoId)) continue
       const periodos = periodosHasta(
         d.periodoInicio,
         periodoActual,

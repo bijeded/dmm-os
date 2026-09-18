@@ -127,7 +127,7 @@ export function fichaContacto(db: Db, root: string, id: number): FichaContacto {
     ...suyosIngresos.map((i) => ({
       tipo: 'pago' as const,
       id: i.id,
-      fecha: i.fechaPago ?? i.fechaRegistro,
+      fecha: i.fechaPago ?? i.fechaRegistro ?? dia(i.creadoEn),
       referencia: null,
       detalle: i.reembolsoDeId !== null ? 'Reembolso' : (i.notas ?? (i.periodo ? `Periodo ${i.periodo}` : i.categoria === 'factura' ? 'Factura' : 'Sin factura')),
       monto: i.subtotal,
