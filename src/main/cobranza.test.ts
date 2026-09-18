@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { estadoCobro, estadosCobro } from './cobranza'
 import { cotizaciones, ingresos } from './db/schema'
-import { registrarReembolso } from './db/dominio'
-import { reembolsar } from './finanzas'
+import { reembolsar } from './movimientos'
 import { contacto, db, ingresoBase, proyecto, reiniciarDb } from './db/test-db'
 
 const hoy = '2026-09-18'
@@ -65,7 +64,7 @@ describe('estadoCobro', () => {
       .returning()
       .get()
     expect(estadoCobro(db, p.id).pagadoCompleto).toBe(true)
-    registrarReembolso(db, o.id, { subtotal: 540, iva: 0, fecha: hoy, montoOriginal: 30 })
+    reembolsar(db, o.id, 30, hoy)
     expect(estadoCobro(db, p.id).falta).toEqual({ pendientes: 0, faltante: 30, moneda: 'USD' })
   })
 

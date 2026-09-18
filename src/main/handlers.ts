@@ -4,20 +4,19 @@ import { borrarConcepto, guardarConcepto, listarCatalogo } from './catalogo'
 import { borrarContacto, contactosCsv, fichaContacto, listarContactos } from './contactos'
 import type { Conexion } from './db'
 import { coberturaCostos } from './db/cobertura'
+import { DIAS_VENCIDA, resumenFinanzas } from './finanzas'
 import {
   borrarCosto,
   borrarIngreso,
   cancelarCosto,
   cancelarIngreso,
   detenerCosto,
-  DIAS_VENCIDA,
   nuevoCosto,
   nuevoIngreso,
   pagarCosto,
   pagarIngreso,
-  reembolsar,
-  resumenFinanzas
-} from './finanzas'
+  reembolsar
+} from './movimientos'
 import {
   aceptarCotizacion,
   borrarCotizacion,
@@ -196,8 +195,8 @@ export function crearHandlers({
       borrarIngreso: (id) => borrarIngreso(conexion.db, id),
       reembolsar: (id, monto) => reembolsar(conexion.db, id, monto, hoy()),
       pagarCosto: (id) => pagarCosto(conexion.db, id, hoy()),
-      cancelarCosto: (id) => cancelarCosto(conexion.db, id),
-      borrarCosto: (id) => borrarCosto(conexion.db, id),
+      cancelarCosto: (id) => cancelarCosto(conexion.db, id, hoy()),
+      borrarCosto: (id) => borrarCosto(conexion.db, id, hoy()),
       detenerCosto: (id) => detenerCosto(conexion.db, id, hoy())
     }
   }
