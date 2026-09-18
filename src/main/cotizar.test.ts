@@ -255,3 +255,15 @@ describe('listar', () => {
     expect(l.porCategoria).toMatchObject({ website: 1, ai: 1, app: 0 })
   })
 })
+
+describe('acciones', () => {
+  it('lists the actions each estado allows', async () => {
+    expect(guardarCotizacion(db, nueva()).acciones).toEqual(['editar', 'borrar', 'enviar'])
+    const f = await enviada()
+    expect(f.acciones).toEqual(['aceptar', 'rechazar', 'cancelar'])
+    expect(aceptarCotizacion(db, f.id, '2026-09-20').acciones).toEqual(['cancelar'])
+    expect(cancelarCotizacion(db, f.id).acciones).toEqual([])
+    const r = await enviada()
+    expect(rechazarCotizacion(db, r.id).acciones).toEqual([])
+  })
+})

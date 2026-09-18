@@ -9,8 +9,10 @@ import {
   CATEGORIAS,
   CATEGORIAS_COSTO,
   FACTURACIONES,
+  type AccionCotizacion,
   type Categoria,
   type CotizacionNueva,
+  type EstadoCotizacion,
   type FichaCotizacion,
   type ListaCotizaciones,
   type PartidaCotizacion
@@ -19,6 +21,23 @@ import { folioDmm, totalesCotizacion } from '../shared/formato'
 
 /** Prints a page of HTML to PDF bytes; in the app, Electron's `printToPDF`. */
 export type ImprimirPdf = (html: string) => Promise<Uint8Array>
+
+/** Which estados allow each action. The guards below and the ficha's `acciones` both read this. */
+const PERMITIDA_EN: Record<AccionCotizacion, readonly EstadoCotizacion[]> = {
+  editar: ['borrador'],
+  borrar: ['borrador'],
+  enviar: ['borrador'],
+  aceptar: ['enviada'],
+  rechazar: ['enviada'],
+  cancelar: ['enviada', 'aceptada']
+}
+
+const accionesEn = (estado: EstadoCotizacion) =>
+  (Object.keys(PERMITIDA_EN) as AccionCotizacion[]).filter((a) => PERMITIDA_EN[a].includes(estado))
+
+function exigir(accion: AccionCotizacion, estado: EstadoCotizacion, mensaje: string) {
+  if (!PERMITIDA_EN[accion].includes(estado)) throw new Error(mensaje)
+}
 
 const folioDe = (c: { folio: number | null; folioSufijo: string }) => (c.folio === null ? null : `${c.folio}${c.folioSufijo}`)
 
@@ -55,7 +74,8 @@ export function fichaCotizacion(db: Db, id: number): FichaCotizacion {
     iva: c.iva,
     total: c.total,
     pdf: c.pdfRutaRelativa,
-    proyectoId: proyecto?.id ?? null
+    proyectoId: proyecto?.id ?? null,
+    acciones: accionesEn(c.estado)
   }
 }
 
@@ -97,7 +117,7 @@ export function guardarCotizacion(db: Db, c: CotizacionNueva): FichaCotizacion {
   }
 
   if (c.id === undefined) return fichaCotizacion(db, db.insert(cotizaciones).values(valores).returning({ id: cotizaciones.id }).get().id)
-  if (leer(db, c.id).estado !== 'borrador') throw new Error('Solo un borrador se puede editar')
+  exigir('editar', leer(db, c.id).estado, 'Solo un borrador se puede editar')
   db.update(cotizaciones).set(valores).where(eq(cotizaciones.id, c.id)).run()
   return fichaCotizacion(db, c.id)
 }
@@ -115,7 +135,7 @@ export function archivoPdf({ folio, fecha, nombre }: { folio: number; fecha: str
  */
 export async function enviarCotizacion(db: Db, root: string, id: number, imprimir: ImprimirPdf): Promise<FichaCotizacion> {
   const c = leer(db, id)
-  if (c.estado !== 'borrador') throw new Error('Solo un borrador se puede enviar')
+  exigir('enviar', c.estado, 'Solo un borrador se puede enviar')
   const folio = (db.select({ n: max(cotizaciones.folio) }).from(cotizaciones).get()?.n ?? 0) + 1
   const ficha = { ...fichaCotizacion(db, id), folio: String(folio) }
 
@@ -159,7 +179,7 @@ export function expirarCotizaciones(db: Db, hoy: string): void {
  */
 export function aceptarCotizacion(db: Db, id: number, hoy: string, tipoCambio?: number): FichaCotizacion {
   const c = leer(db, id)
-  if (c.estado !== 'enviada') throw new Error('Solo una cotización enviada se puede aceptar')
+  exigir('aceptar', c.estado, 'Solo una cotización enviada se puede aceptar')
   const usd = c.moneda === 'USD'
   if (usd && !(tipoCambio !== undefined && tipoCambio > 0)) throw new Error('Indica el tipo de cambio de la cotización en USD')
   const mxn = (n: number) => (usd ? Math.round(n * tipoCambio!) : n)
@@ -233,21 +253,20 @@ export function aceptarCotizacion(db: Db, id: number, hoy: string, tipoCambio?: 
 }
 
 export function rechazarCotizacion(db: Db, id: number): FichaCotizacion {
-  if (leer(db, id).estado !== 'enviada') throw new Error('Solo una cotización enviada se puede rechazar')
+  exigir('rechazar', leer(db, id).estado, 'Solo una cotización enviada se puede rechazar')
   db.update(cotizaciones).set({ estado: 'rechazada' }).where(eq(cotizaciones.id, id)).run()
   return fichaCotizacion(db, id)
 }
 
 export function cancelarCotizacion(db: Db, id: number): FichaCotizacion {
-  const estado = leer(db, id).estado
-  if (estado !== 'enviada' && estado !== 'aceptada') throw new Error('Solo una cotización enviada o aceptada se puede cancelar')
+  exigir('cancelar', leer(db, id).estado, 'Solo una cotización enviada o aceptada se puede cancelar')
   cancelar(db, 'cotizacion', id)
   return fichaCotizacion(db, id)
 }
 
 /** Borrar vs cancelar: only drafts are deleted; a sent quote exists for the Contacto. */
 export function borrarCotizacion(db: Db, id: number): void {
-  if (leer(db, id).estado !== 'borrador') throw new Error('Solo un borrador se puede borrar; cancélala en su lugar')
+  exigir('borrar', leer(db, id).estado, 'Solo un borrador se puede borrar; cancélala en su lugar')
   borrar(db, 'cotizacion', id)
 }
 
