@@ -47,6 +47,7 @@ function handlers() {
     },
     contactos: {
       listar: vi.fn(() => ({ contactos: [], conteo: { lead_frio: 0, lead_caliente: 0, cliente_activo: 0, cliente_inactivo: 0 }, top: [] })),
+      guardar: vi.fn(() => 1),
       ficha: vi.fn(() => {
         throw new Error('sin ficha')
       }),

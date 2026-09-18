@@ -4,6 +4,7 @@ import type {
   ConceptoCatalogo,
   ConceptoNuevo,
   ConfigRespaldos,
+  ContactoNuevo,
   CostoNuevo,
   CotizacionNueva,
   EstadoImportacion,
@@ -83,6 +84,8 @@ export const contrato = {
   contactos: {
     listar: canal<[], ListaContactos>(),
     ficha: canal<[id: number], FichaContacto>(),
+    /** Adds or edits a Contacto and returns its id. Refused if another Contacto has the same name. */
+    guardar: canal<[contacto: ContactoNuevo], number>(),
     /** Borrar vs cancelar: refused when the Contacto has anything linked. */
     borrar: canal<[id: number], void>(),
     /** Every Contacto as CSV, for a newsletter service. */

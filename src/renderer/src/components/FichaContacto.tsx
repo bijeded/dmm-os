@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { NOMBRES_ESTADO_CONTACTO, type FichaContacto as Ficha, type Movimiento } from '../../../shared/dominio'
 import { dia } from '../../../shared/formato'
 import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
+import { FormContacto } from './FormContacto'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
 
@@ -39,12 +40,20 @@ export function FichaContacto() {
   const [ficha, setFicha] = useState<Ficha | null>(null)
   const [filtro, setFiltro] = useState<(typeof filtros)[number][0]>('todo')
   const [confirmar, setConfirmar] = useState(false)
+  const [editando, setEditando] = useState(false)
   const { error, ocupado, correr } = useAccion()
 
+  const cargar = () => correr(async () => setFicha(await window.dmm.contactos.ficha(id)))
+
   useEffect(() => {
-    correr(async () => setFicha(await window.dmm.contactos.ficha(id)))
+    cargar()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only when the Contacto changes
   }, [id])
+
+  const guardado = () => {
+    setEditando(false)
+    cargar()
+  }
 
   const eliminar = () => {
     setConfirmar(false)
@@ -69,12 +78,19 @@ export function FichaContacto() {
       <div className="acts flex flex-wrap items-center justify-between gap-3">
         <h1 className={tituloCls}>{c?.nombre ?? 'Contacto'}</h1>
         {ficha && (
-          <Button variant="secondary" disabled={ocupado} onClick={() => setConfirmar(true)}>
-            Eliminar
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" disabled={ocupado} onClick={() => setConfirmar(true)}>
+              Eliminar
+            </Button>
+            <Button disabled={ocupado} onClick={() => setEditando(true)}>
+              Editar
+            </Button>
+          </div>
         )}
       </div>
       <Aviso error={error} />
+
+      {editando && c && <FormContacto inicial={c} onGuardado={guardado} onCerrar={() => setEditando(false)} />}
 
       {confirmar && c && (
         <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/60 p-4">

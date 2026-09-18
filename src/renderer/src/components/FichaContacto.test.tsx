@@ -36,7 +36,7 @@ let api: DmmApi['contactos']
 let router: ReturnType<typeof createMemoryRouter>
 
 beforeEach(() => {
-  api = { listar: vi.fn(), ficha: vi.fn(async () => ficha), borrar: vi.fn(async () => undefined), csv: vi.fn() }
+  api = { listar: vi.fn(), ficha: vi.fn(async () => ficha), guardar: vi.fn(async () => 7), borrar: vi.fn(async () => undefined), csv: vi.fn() }
   window.dmm = { contactos: api } as unknown as DmmApi
   router = createMemoryRouter(
     [
@@ -92,5 +92,26 @@ describe('Ficha de contacto', () => {
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Sí, eliminar' }))
     expect((await screen.findByRole('alert')).textContent).toMatch(/registros vinculados/)
     expect(router.state.location.pathname).toBe('/contactos/7')
+  })
+
+  it('edits its data, notes included, then shows the saved record', async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }))
+    const dialogo = screen.getByRole('dialog', { name: 'Editar contacto' })
+    expect((within(dialogo).getByLabelText('Nombre') as HTMLInputElement).value).toBe('Hotel Aura')
+    expect((within(dialogo).getByLabelText('Dirección') as HTMLInputElement).value).toBe('')
+    fireEvent.change(within(dialogo).getByLabelText('Notas'), { target: { value: 'Prefiere correo.' } })
+    vi.mocked(api.ficha).mockResolvedValue({ ...ficha, contacto: { ...ficha.contacto, notas: 'Prefiere correo.' } })
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Guardar' }))
+    expect(await screen.findByText('Prefiere correo.')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(api.guardar).toHaveBeenCalledWith({
+      id: 7,
+      nombre: 'Hotel Aura',
+      empresa: 'Laura Méndez',
+      email: 'reservas@hotelaura.mx',
+      telefono: '998 456 7890',
+      direccion: '',
+      notas: 'Prefiere correo.'
+    })
   })
 })

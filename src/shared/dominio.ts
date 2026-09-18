@@ -148,6 +148,17 @@ export interface FilaContacto {
   valor: number
 }
 
+/** What the user writes by hand for a new or edited Contacto. Estado is derived, never written. */
+export interface ContactoNuevo {
+  id?: number
+  nombre: string
+  empresa: string | null
+  email: string | null
+  telefono: string | null
+  direccion: string | null
+  notas: string | null
+}
+
 export interface ListaContactos {
   /** Ascending by name. */
   contactos: FilaContacto[]

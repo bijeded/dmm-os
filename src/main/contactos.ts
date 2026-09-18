@@ -5,7 +5,7 @@ import type { Db } from './db'
 import { borrar } from './db/cancelacion'
 import { contactos, cotizaciones, ingresos, proyectos } from './db/schema'
 import { clave } from './nombres'
-import { ESTADOS_CONTACTO, NOMBRES_ESTADO_CONTACTO, type ArchivoCliente, type EstadoContacto, type FichaContacto, type ListaContactos, type Movimiento } from '../shared/dominio'
+import { ESTADOS_CONTACTO, NOMBRES_ESTADO_CONTACTO, type ArchivoCliente, type ContactoNuevo, type EstadoContacto, type FichaContacto, type ListaContactos, type Movimiento } from '../shared/dominio'
 
 type EstadoProyecto = (typeof proyectos.$inferSelect)['estado']
 type EstadoCotizacion = (typeof cotizaciones.$inferSelect)['estado']
@@ -172,6 +172,28 @@ function archivosDe(dir: string): ArchivoCliente[] {
   } catch {
     return []
   }
+}
+
+const texto = (v: string | null) => v?.trim() || null
+
+/**
+ * Adds or edits a Contacto and returns its id. The name is written as typed (Nombre canónico);
+ * one that matches another Contacto's, accents and case aside, is refused rather than duplicated.
+ */
+export function guardarContacto(db: Db, { id, nombre, empresa, email, telefono, direccion, notas }: ContactoNuevo): number {
+  const limpio = nombre.trim()
+  if (!limpio) throw new Error('El contacto necesita nombre')
+  const igual = db
+    .select({ id: contactos.id, nombre: contactos.nombre })
+    .from(contactos)
+    .all()
+    .find((c) => c.id !== id && clave(c.nombre) === clave(limpio))
+  if (igual) throw new Error(`Ya existe el contacto ${igual.nombre}`)
+
+  const valores = { nombre: limpio, empresa: texto(empresa), email: texto(email), telefono: texto(telefono), direccion: texto(direccion), notas: texto(notas) }
+  if (id === undefined) return db.insert(contactos).values(valores).returning({ id: contactos.id }).get().id
+  if (db.update(contactos).set(valores).where(eq(contactos.id, id)).run().changes === 0) throw new Error(`El contacto ${id} no existe`)
+  return id
 }
 
 /** Borrar vs cancelar: a Contacto with Cotizaciones, Proyectos or Ingresos is refused. */
