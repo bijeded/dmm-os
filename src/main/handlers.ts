@@ -5,6 +5,20 @@ import { borrarContacto, contactosCsv, fichaContacto, listarContactos } from './
 import type { Conexion } from './db'
 import { coberturaCostos } from './db/cobertura'
 import {
+  borrarCosto,
+  borrarIngreso,
+  cancelarCosto,
+  cancelarIngreso,
+  detenerCosto,
+  DIAS_VENCIDA,
+  nuevoCosto,
+  nuevoIngreso,
+  pagarCosto,
+  pagarIngreso,
+  reembolsar,
+  resumenFinanzas
+} from './finanzas'
+import {
   aceptarCotizacion,
   borrarCotizacion,
   cancelarCotizacion,
@@ -70,6 +84,7 @@ export function crearHandlers({
   const rutas = () => leerRutas(info.dmmOsRoot, hddRoot())
   // Logs shows the last run of each importer; the runs themselves are not worth a table.
   const ultimo: EstadoImportacion = { facturas: null, carpetas: null }
+  const diasVencida = () => Number(conexion.ajustes.leer('finanzas.diasVencida')) || DIAS_VENCIDA
 
   return {
     getAppInfo: () => info,
@@ -114,7 +129,8 @@ export function crearHandlers({
         return rutas()
       },
       abrir: async (carpeta) => {
-        const error = await abrirCarpeta(carpeta === 'entrada' ? join(info.dmmOsRoot, 'Entrada') : info.dmmOsRoot)
+        const sub = { raiz: '', entrada: 'Entrada', facturas: 'Facturas' }[carpeta]
+        const error = await abrirCarpeta(join(info.dmmOsRoot, sub))
         if (error) throw new Error(error)
       }
     },
@@ -167,7 +183,22 @@ export function crearHandlers({
       }
     },
     finanzas: {
-      coberturaCostos: (desde, hasta) => coberturaCostos(conexion.db, desde, hasta)
+      coberturaCostos: (desde, hasta) => coberturaCostos(conexion.db, desde, hasta),
+      resumen: (periodo) => resumenFinanzas(conexion.db, periodo, hoy(), diasVencida()),
+      configurarVencida: (dias) => {
+        if (!Number.isInteger(dias) || dias < 1) throw new Error('Los días deben ser un entero mayor a cero')
+        conexion.ajustes.escribir('finanzas.diasVencida', String(dias))
+      },
+      nuevoIngreso: (ingreso) => nuevoIngreso(conexion.db, ingreso, hoy()),
+      nuevoCosto: (costo) => nuevoCosto(conexion.db, costo, hoy()),
+      pagarIngreso: (id) => pagarIngreso(conexion.db, id, hoy()),
+      cancelarIngreso: (id) => cancelarIngreso(conexion.db, id),
+      borrarIngreso: (id) => borrarIngreso(conexion.db, id),
+      reembolsar: (id, subtotal, iva, fecha) => reembolsar(conexion.db, id, subtotal, iva, fecha),
+      pagarCosto: (id) => pagarCosto(conexion.db, id, hoy()),
+      cancelarCosto: (id) => cancelarCosto(conexion.db, id),
+      borrarCosto: (id) => borrarCosto(conexion.db, id),
+      detenerCosto: (id) => detenerCosto(conexion.db, id, hoy())
     }
   }
 }

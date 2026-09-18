@@ -7,7 +7,9 @@ import { Cotizaciones } from './components/Cotizaciones'
 import { FichaCotizacion } from './components/FichaCotizacion'
 import { FichaContacto } from './components/FichaContacto'
 import { FichaProyecto } from './components/FichaProyecto'
+import { Finanzas } from './components/Finanzas'
 import { NuevaCotizacion } from './components/NuevaCotizacion'
+import { NuevoCosto, NuevoIngreso } from './components/NuevoMovimiento'
 import { NuevoProyecto } from './components/NuevoProyecto'
 import { Proyectos } from './components/Proyectos'
 import { SectionPage } from './components/SectionPage'
@@ -18,6 +20,7 @@ const pantallas: Record<string, ReactElement> = {
   '/configuracion': <Configuracion />,
   '/contactos': <Contactos />,
   '/cotizaciones': <Cotizaciones />,
+  '/finanzas': <Finanzas />,
   '/proyectos': <Proyectos />
 }
 
@@ -36,7 +39,9 @@ export const routes: RouteObject[] = [
       { path: 'cotizaciones/:id/editar', element: <NuevaCotizacion /> },
       { path: 'proyectos/nuevo', element: <NuevoProyecto /> },
       { path: 'proyectos/:id', element: <FichaProyecto /> },
-      { path: 'proyectos/:id/editar', element: <NuevoProyecto /> }
+      { path: 'proyectos/:id/editar', element: <NuevoProyecto /> },
+      { path: 'finanzas/ingresos/nuevo', element: <NuevoIngreso /> },
+      { path: 'finanzas/costos/nuevo', element: <NuevoCosto /> }
     ]
   }
 ]

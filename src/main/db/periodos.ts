@@ -14,13 +14,13 @@ export function periodoDe(fecha: Date): string {
   return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`
 }
 
-function sumarMeses(periodo: string, n: number): string {
+export function sumarMeses(periodo: string, n: number): string {
   const [y, m] = periodo.split('-').map(Number)
   const total = y * 12 + (m - 1) + n
   return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`
 }
 
-function fechaEnPeriodo(periodo: string, dia: number): string {
+export function fechaEnPeriodo(periodo: string, dia: number): string {
   const [y, m] = periodo.split('-').map(Number)
   const ultimo = new Date(y, m, 0).getDate()
   return `${periodo}-${String(Math.min(dia, ultimo)).padStart(2, '0')}`

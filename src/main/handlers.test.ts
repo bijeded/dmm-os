@@ -195,3 +195,12 @@ describe('proyectos', () => {
     expect((await h.proyectos.listar()).conteo.completado).toBe(1)
   })
 })
+
+describe('finanzas', () => {
+  it('reads Cobranza vencida after 30 days until another number is configured', async () => {
+    expect((await h.finanzas.resumen('mes')).diasVencida).toBe(30)
+    await h.finanzas.configurarVencida(45)
+    expect((await h.finanzas.resumen('mes')).diasVencida).toBe(45)
+    expect(() => h.finanzas.configurarVencida(0)).toThrow(/mayor a cero/)
+  })
+})
