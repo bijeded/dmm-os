@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { and, eq } from 'drizzle-orm'
 import type { Db } from './db'
-import { estadoCobro } from './cobranza'
+import { estadoCobro, estadosCobro } from './cobranza'
 import { cancelar, RegistroVinculadoError } from './db/cancelacion'
 import { contactos, cotizaciones, proyectos, ubicacionesArchivo } from './db/schema'
 import { folioDe } from './cotizar'
@@ -58,7 +58,11 @@ const ARCHIVO = ['archivo', 'hdd_externo', 'google_drive'] as const
  * archive location means Archivado. Only folders under the DMM OS root are opened.
  */
 function ubicar(db: Db, root: string, proyectoId: number): CarpetaProyecto & { absoluta: string | null } {
-  const todas = db.select().from(ubicacionesArchivo).where(eq(ubicacionesArchivo.proyectoId, proyectoId)).all()
+  return ubicarEntre(root, db.select().from(ubicacionesArchivo).where(eq(ubicacionesArchivo.proyectoId, proyectoId)).all())
+}
+
+/** `ubicar` over a Proyecto's already-loaded locations. */
+function ubicarEntre(root: string, todas: (typeof ubicacionesArchivo.$inferSelect)[]): CarpetaProyecto & { absoluta: string | null } {
   const trabajo = todas.find((u) => u.tipo === 'proyectos')
   if (trabajo && trabajo.disponible && esCarpeta(join(root, trabajo.rutaRelativa))) {
     const absoluta = join(root, trabajo.rutaRelativa)
@@ -74,10 +78,8 @@ function ubicar(db: Db, root: string, proyectoId: number): CarpetaProyecto & { a
   return { estado: 'sin_carpeta', ruta: null, abrible: false, absoluta: null }
 }
 
-const carpeta = (db: Db, root: string, id: number): CarpetaProyecto => {
-  const { estado, ruta, abrible } = ubicar(db, root, id)
-  return { estado, ruta, abrible }
-}
+const visible = ({ estado, ruta, abrible }: CarpetaProyecto): CarpetaProyecto => ({ estado, ruta, abrible })
+const carpeta = (db: Db, root: string, id: number): CarpetaProyecto => visible(ubicar(db, root, id))
 
 /** The folder to reveal in Finder; refused when it cannot be reached. */
 export function carpetaAbrible(db: Db, root: string, id: number): string {
@@ -239,17 +241,6 @@ export function borrarProyecto(db: Db, id: number): void {
   }
 }
 
-/**
- * A completed Proyecto with files somewhere (local or external HDD) and a Cotización whose paid
- * Ingresos never reached its total: imported history (ADR-0002) waiting for its uninvoiced
- * Ingresos to be entered by hand. Derived, so it clears itself once they are.
- */
-function sinIngresosRegistrados(db: Db, p: { id: number; estado: EstadoProyecto; cotizacionId: number | null }) {
-  if (p.estado !== 'completado' || p.cotizacionId === null) return false
-  if (!db.select().from(ubicacionesArchivo).where(eq(ubicacionesArchivo.proyectoId, p.id)).get()) return false
-  return (estadoCobro(db, p.id).falta?.faltante ?? 0) > 0
-}
-
 export function listarProyectos(db: Db, root: string): ListaProyectos {
   const filas = db
     .select({ p: proyectos, contacto: contactos.nombre })
@@ -257,25 +248,34 @@ export function listarProyectos(db: Db, root: string): ListaProyectos {
     .leftJoin(contactos, eq(contactos.id, proyectos.contactoId))
     .all()
     .sort((a, b) => b.p.id - a.p.id)
-    .map(({ p, contacto }) => ({
-      id: p.id,
-      referencia: referenciaProyecto(p.id),
-      nombre: p.nombre,
-      etiqueta: p.etiqueta,
-      contactoId: p.contactoId,
-      contacto,
-      clienteFinal: p.clienteFinal,
-      categoria: p.categoria,
-      fechaInicio: p.fechaInicio,
-      estado: p.estado,
-      carpeta: carpeta(db, root, p.id),
-      sinIngresosRegistrados: sinIngresosRegistrados(db, p)
-    }))
+  // Every location, and the Ingresos of every Proyecto that could be flagged, read once rather than per row.
+  const ubicaciones = new Map<number, (typeof ubicacionesArchivo.$inferSelect)[]>()
+  for (const u of db.select().from(ubicacionesArchivo).all()) ubicaciones.set(u.proyectoId, [...(ubicaciones.get(u.proyectoId) ?? []), u])
+  const cobros = estadosCobro(
+    db,
+    filas.map(({ p }) => p).filter((p) => p.estado === 'completado' && p.cotizacionId !== null && ubicaciones.has(p.id))
+  )
+  const lista = filas.map(({ p, contacto }) => ({
+    id: p.id,
+    referencia: referenciaProyecto(p.id),
+    nombre: p.nombre,
+    etiqueta: p.etiqueta,
+    contactoId: p.contactoId,
+    contacto,
+    clienteFinal: p.clienteFinal,
+    categoria: p.categoria,
+    fechaInicio: p.fechaInicio,
+    estado: p.estado,
+    carpeta: visible(ubicarEntre(root, ubicaciones.get(p.id) ?? [])),
+    // Completed, with files somewhere and a Cotización its paid Ingresos never reached: imported
+    // history (ADR-0002) waiting for its uninvoiced Ingresos to be entered by hand.
+    sinIngresosRegistrados: (cobros.get(p.id)?.falta?.faltante ?? 0) > 0
+  }))
   const conteo = Object.fromEntries(ESTADOS_PROYECTO.map((e) => [e, 0])) as Record<EstadoProyecto, number>
   const porCategoria = Object.fromEntries(CATEGORIAS.map((c) => [c, 0])) as Record<Categoria, number>
-  for (const f of filas) {
+  for (const f of lista) {
     conteo[f.estado]++
     porCategoria[f.categoria]++
   }
-  return { proyectos: filas, conteo, porCategoria }
+  return { proyectos: lista, conteo, porCategoria }
 }
