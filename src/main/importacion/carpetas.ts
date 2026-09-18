@@ -1,5 +1,6 @@
 import { and, eq, isNull } from 'drizzle-orm'
 import { nombresDeProyecto, type NombreCotizacion } from '../cotizaciones'
+import { diaLocal } from '../../shared/formato'
 import { clave, mejorEscrito, parecidos } from '../nombres'
 import type { Db } from '../db'
 import { proponer } from '../sugerencias'
@@ -152,7 +153,7 @@ export function importarCarpetaProyecto(db: Db, entrada: EntradaCarpeta): Result
       .get()
     if (conocida) {
       tx.update(ubicacionesArchivo)
-        .set({ disponible: true, verificadoEn: new Date().toISOString().slice(0, 10) })
+        .set({ disponible: true, verificadoEn: diaLocal(new Date()) })
         .where(eq(ubicacionesArchivo.id, conocida.id))
         .run()
       return { proyectoId: conocida.proyectoId, creado: false, contactosCreados: 0, sugerencias: 0 }

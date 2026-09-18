@@ -83,7 +83,7 @@ export function FichaProyecto() {
           <Seccion id="datos" titulo="Datos">
             <Datos>
               <Fila label="Estado">{NOMBRES_ESTADO_PROYECTO[f.estado]}</Fila>
-              <Fila label="Cliente">
+              <Fila label="Contacto">
                 {f.contactoId !== null ? (
                   <Link to={`/contactos/${f.contactoId}`} className="text-primary-text">
                     {f.contacto}

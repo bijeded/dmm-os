@@ -139,7 +139,7 @@ export function crearHandlers({
         expirar()
         const ficha = aceptarCotizacion(conexion.db, id, hoy(), tipoCambio)
         // The Proyecto the quote became gets its folder like any other.
-        crearCarpeta(conexion.db, info.dmmOsRoot, ficha.proyectoId!)
+        crearCarpeta(conexion.db, info.dmmOsRoot, ficha.proyectoId!, hoy())
         return ficha
       },
       rechazar: (id) => rechazarCotizacion(conexion.db, id),

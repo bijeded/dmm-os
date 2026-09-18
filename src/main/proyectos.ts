@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm'
 import type { Db } from './db'
 import { cancelar, RegistroVinculadoError } from './db/cancelacion'
 import { contactos, cotizaciones, ingresos, proyectos, ubicacionesArchivo } from './db/schema'
+import { folioDe } from './cotizar'
 import { rutaDeProyecto } from './paths'
 import {
   CATEGORIAS,
@@ -58,16 +59,17 @@ const ARCHIVO = ['archivo', 'hdd_externo', 'google_drive'] as const
 function ubicar(db: Db, root: string, proyectoId: number): CarpetaProyecto & { absoluta: string | null } {
   const todas = db.select().from(ubicacionesArchivo).where(eq(ubicacionesArchivo.proyectoId, proyectoId)).all()
   const trabajo = todas.find((u) => u.tipo === 'proyectos')
-  if (trabajo) {
+  if (trabajo && trabajo.disponible && esCarpeta(join(root, trabajo.rutaRelativa))) {
     const absoluta = join(root, trabajo.rutaRelativa)
-    const ahi = trabajo.disponible && esCarpeta(absoluta)
-    return { estado: ahi ? 'disponible' : 'no_disponible', ruta: trabajo.rutaRelativa, abrible: ahi, absoluta: ahi ? absoluta : null }
+    return { estado: 'disponible', ruta: trabajo.rutaRelativa, abrible: true, absoluta }
   }
+  // Files that left `Proyectos/` for an archive are Archivado, not a broken link.
   const archivo = ARCHIVO.map((t) => todas.find((u) => u.tipo === t)).find((u) => u !== undefined)
   if (archivo) {
     const absoluta = archivo.tipo === 'archivo' && esCarpeta(join(root, archivo.rutaRelativa)) ? join(root, archivo.rutaRelativa) : null
     return { estado: 'archivado', ruta: archivo.rutaRelativa, abrible: absoluta !== null, absoluta }
   }
+  if (trabajo) return { estado: 'no_disponible', ruta: trabajo.rutaRelativa, abrible: false, absoluta: null }
   return { estado: 'sin_carpeta', ruta: null, abrible: false, absoluta: null }
 }
 
@@ -110,7 +112,7 @@ export function fichaProyecto(db: Db, root: string, id: number): FichaProyecto {
     clienteFinal: p.clienteFinal,
     categoria: p.categoria,
     cotizacionId: p.cotizacionId,
-    folio: cotizacion?.folio == null ? null : `${cotizacion.folio}${cotizacion.folioSufijo}`,
+    folio: cotizacion ? folioDe(cotizacion) : null,
     fechaInicio: p.fechaInicio,
     fechaEntrega: p.fechaEntrega,
     fechaFin: p.fechaFin,
@@ -129,7 +131,7 @@ const nombreSeguro = (s: string) => s.replace(/[/\\:*?"<>|]/g, '-').trim()
  * working folder. `<Contacto> - <Nombre>`, or just the name for a personal Proyecto; a folder
  * of that name that exists already belongs to someone else, so a number is added.
  */
-export function crearCarpeta(db: Db, root: string, id: number): void {
+export function crearCarpeta(db: Db, root: string, id: number, hoy: string): void {
   const p = leer(db, id)
   const tiene = db
     .select()
@@ -144,7 +146,7 @@ export function crearCarpeta(db: Db, root: string, id: number): void {
   const rutaRelativa = rutaDeProyecto('proyectos', nombre)
   mkdirSync(join(root, rutaRelativa), { recursive: true })
   db.insert(ubicacionesArchivo)
-    .values({ proyectoId: id, tipo: 'proyectos', rutaRelativa, disponible: true, verificadoEn: new Date().toISOString().slice(0, 10) })
+    .values({ proyectoId: id, tipo: 'proyectos', rutaRelativa, disponible: true, verificadoEn: hoy })
     .run()
 }
 
@@ -181,7 +183,7 @@ export function guardarProyecto(db: Db, root: string, p: ProyectoNuevo, hoy: str
       .values({ ...valores, fechaInicio: valores.fechaInicio ?? hoy })
       .returning({ id: proyectos.id })
       .get().id
-    crearCarpeta(db, root, id)
+    crearCarpeta(db, root, id, hoy)
     return fichaProyecto(db, root, id)
   }
   const actual = leer(db, p.id)

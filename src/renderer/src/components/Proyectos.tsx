@@ -29,7 +29,7 @@ export function Proyectos() {
   const navigate = useNavigate()
   const [lista, setLista] = useState<ListaProyectos | null>(null)
   const [busqueda, setBusqueda] = useState('')
-  const [cliente, setCliente] = useState('')
+  const [contacto, setContacto] = useState('')
   const [anio, setAnio] = useState('')
   const [categoria, setCategoria] = useState<Categoria | ''>('')
   const [estado, setEstado] = useState<EstadoProyecto | ''>('')
@@ -41,7 +41,7 @@ export function Proyectos() {
   }, [])
 
   const todos = useMemo(() => lista?.proyectos ?? [], [lista])
-  const clientes = useMemo(
+  const contactos = useMemo(
     () =>
       [...new Map(todos.filter((p) => p.contactoId !== null).map((p) => [p.contactoId!, p.contacto!])).entries()].sort((a, b) =>
         a[1].localeCompare(b[1], 'es')
@@ -53,13 +53,13 @@ export function Proyectos() {
     const q = normalizar(busqueda.trim())
     return todos.filter(
       (p) =>
-        (!cliente || (cliente === 'personal' ? p.etiqueta === 'personal' : String(p.contactoId) === cliente)) &&
+        (!contacto || (contacto === 'personal' ? p.etiqueta === 'personal' : String(p.contactoId) === contacto)) &&
         (!anio || p.fechaInicio?.startsWith(anio)) &&
         (!categoria || p.categoria === categoria) &&
         (!estado || p.estado === estado) &&
         (!q || [p.referencia, p.nombre, p.contacto, p.clienteFinal].some((v) => v && normalizar(v).includes(q)))
     )
-  }, [todos, busqueda, cliente, anio, categoria, estado])
+  }, [todos, busqueda, contacto, anio, categoria, estado])
 
   const c = lista?.conteo
   const abrir = (id: number) => correr(() => window.dmm.proyectos.abrirCarpeta(id))
@@ -100,10 +100,10 @@ export function Proyectos() {
               onChange={(e) => setBusqueda(e.target.value)}
               className="srch h-9 w-56 rounded-control border border-border-strong bg-surface-sunken px-3 text-[13px] text-on-surface"
             />
-            <select aria-label="Cliente" value={cliente} onChange={(e) => setCliente(e.target.value)} className={selectCls}>
-              <option value="">Cliente: Todos</option>
+            <select aria-label="Contacto" value={contacto} onChange={(e) => setContacto(e.target.value)} className={selectCls}>
+              <option value="">Contacto: Todos</option>
               <option value="personal">Personal</option>
-              {clientes.map(([id, nombre]) => (
+              {contactos.map(([id, nombre]) => (
                 <option key={id} value={id}>
                   {nombre}
                 </option>
@@ -138,7 +138,7 @@ export function Proyectos() {
               <tr className={etiquetaCls}>
                 <th className={celdaCls}>Ref.</th>
                 <th className={celdaCls}>Proyecto</th>
-                <th className={celdaCls}>Cliente</th>
+                <th className={celdaCls}>Contacto</th>
                 <th className={celdaCls}>Categoría</th>
                 <th className={celdaCls}>Inicio</th>
                 <th className={celdaCls}>Estado</th>
@@ -154,7 +154,7 @@ export function Proyectos() {
                   <td data-label="Proyecto" className={celdaCls}>
                     {p.nombre}
                   </td>
-                  <td data-label="Cliente" className={celdaCls}>
+                  <td data-label="Contacto" className={celdaCls}>
                     {p.etiqueta === 'personal' ? <span className="text-on-surface-muted">Personal</span> : p.contacto}
                     {p.clienteFinal && <span className="text-on-surface-muted"> · {p.clienteFinal}</span>}
                   </td>

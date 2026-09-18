@@ -90,8 +90,8 @@ describe('guardar', () => {
 describe('crearCarpeta', () => {
   it('scaffolds the folder of a Proyecto created by accepting a Cotización, once', () => {
     const p = proyecto(contactoId, cotizacionAceptada(contactoId).id)
-    crearCarpeta(db, root, p.id)
-    crearCarpeta(db, root, p.id)
+    crearCarpeta(db, root, p.id, hoy)
+    crearCarpeta(db, root, p.id, hoy)
     expect(db.select().from(ubicacionesArchivo).all()).toHaveLength(1)
     expect(existsSync(join(root, 'Proyectos/Clínica Sol - Hospital Jardín'))).toBe(true)
   })
@@ -177,6 +177,13 @@ describe('carpeta', () => {
     rmSync(join(root, 'Proyectos'), { recursive: true })
     expect(fichaProyecto(db, root, id).carpeta).toEqual({ estado: 'no_disponible', ruta: 'Proyectos/Clínica Sol - Sitio web', abrible: false })
     expect(() => carpetaAbrible(db, root, id)).toThrow(/no disponible/i)
+  })
+
+  it('shows Archivado, not No disponible, once the working folder left for Archivo/', () => {
+    const { id } = guardarProyecto(db, root, nuevo(), hoy)
+    rmSync(join(root, 'Proyectos'), { recursive: true })
+    ubicar(id, 'archivo', 'Archivo/Proyectos/Clínica Sol - Sitio web', false)
+    expect(fichaProyecto(db, root, id).carpeta).toEqual({ estado: 'archivado', ruta: 'Archivo/Proyectos/Clínica Sol - Sitio web', abrible: false })
   })
 
   it('shows only an external HDD location as Archivado', () => {
