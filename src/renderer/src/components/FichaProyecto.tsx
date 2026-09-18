@@ -63,8 +63,8 @@ export function FichaProyecto() {
                 Reanudar
               </Button>
             )}
-            {puede('completar') && (
-              <Button disabled={ocupado} onClick={accion(api.completar)}>
+            {(puede('completar') || f.falta) && (
+              <Button disabled={ocupado || f.falta !== null} aria-describedby={f.falta ? 'sin-completar' : undefined} onClick={accion(api.completar)}>
                 Completar
               </Button>
             )}
@@ -114,8 +114,17 @@ export function FichaProyecto() {
                 <Fila label="Cobrado">{pesos(f.cobrado)}</Fila>
                 <Fila label="Por cobrar">{pesos(f.porCobrar)}</Fila>
               </Datos>
-              {f.porCobrar > 0 && (f.estado === 'en_curso' || f.estado === 'pausado') && (
-                <p className="m-0 text-[13px] text-on-surface-muted">Se completa cuando esté pagado por completo.</p>
+              {f.falta && (
+                <p id="sin-completar" className="m-0 text-[13px] text-on-surface-muted">
+                  Se completa cuando esté pagado por completo:{' '}
+                  {[
+                    f.falta.pendientes > 0 && `${f.falta.pendientes} ${f.falta.pendientes === 1 ? 'pago pendiente' : 'pagos pendientes'} por cobrar`,
+                    f.falta.faltante > 0 && `faltan ${pesos(f.falta.faltante)}${f.falta.moneda === 'USD' ? ' USD' : ''} para el total de la cotización`
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                  .
+                </p>
               )}
             </Seccion>
             <Seccion id="carpeta" titulo="Carpeta">

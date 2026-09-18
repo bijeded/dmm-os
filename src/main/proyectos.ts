@@ -97,21 +97,27 @@ function cobros(db: Db, p: { id: number; cotizacionId: number | null }) {
   const pagados = suyos.filter((i) => i.estado === 'pagado')
   const pendientes = suyos.filter((i) => i.estado === 'pendiente')
   const suma = (is: typeof suyos) => is.reduce((s, i) => s + i.subtotal, 0)
-  let pagadoCompleto = pendientes.length === 0
+  let faltante = 0
   const c = p.cotizacionId === null ? undefined : db.select().from(cotizaciones).where(eq(cotizaciones.id, p.cotizacionId)).get()
+  const usd = c?.moneda === 'USD'
   if (c && c.facturacion !== 'mensual') {
-    const usd = c.moneda === 'USD'
     const pagado = pagados.reduce((s, i) => s + (usd ? (i.monedaOriginal === 'USD' ? (i.montoOriginal ?? 0) : 0) : i.total), 0)
-    pagadoCompleto &&= pagado >= c.total
+    faltante = Math.max(0, c.total - pagado)
   }
-  return { porCobrar: suma(pendientes), cobrado: suma(pagados), pagadoCompleto }
+  const pagadoCompleto = pendientes.length === 0 && faltante === 0
+  return {
+    porCobrar: suma(pendientes),
+    cobrado: suma(pagados),
+    pagadoCompleto,
+    falta: pagadoCompleto ? null : { pendientes: pendientes.length, faltante, moneda: usd ? ('USD' as const) : ('MXN' as const) }
+  }
 }
 
 export function fichaProyecto(db: Db, root: string, id: number): FichaProyecto {
   const p = leer(db, id)
   const contacto = p.contactoId === null ? undefined : db.select({ nombre: contactos.nombre }).from(contactos).where(eq(contactos.id, p.contactoId)).get()
   const cotizacion = p.cotizacionId === null ? undefined : db.select().from(cotizaciones).where(eq(cotizaciones.id, p.cotizacionId)).get()
-  const { porCobrar, cobrado, pagadoCompleto } = cobros(db, p)
+  const { porCobrar, cobrado, pagadoCompleto, falta } = cobros(db, p)
   const acciones = (Object.keys(PERMITIDA_EN) as AccionProyecto[]).filter(
     (a) => PERMITIDA_EN[a].includes(p.estado) && !(a === 'completar' && !pagadoCompleto)
   )
@@ -134,6 +140,7 @@ export function fichaProyecto(db: Db, root: string, id: number): FichaProyecto {
     carpeta: carpeta(db, root, id),
     porCobrar,
     cobrado,
+    falta: PERMITIDA_EN.completar.includes(p.estado) ? falta : null,
     acciones
   }
 }
