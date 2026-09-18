@@ -1,7 +1,8 @@
 import { and, eq, lte } from 'drizzle-orm'
 import type { Db } from './db'
 import { coberturaCostos } from './db/cobertura'
-import { fechaEnPeriodo, generarPeriodos, sumarMeses } from './db/periodos'
+import { fechaEnPeriodo, sumarAnios, sumarDias, sumarMeses } from './db/fechas'
+import { generarPeriodos } from './db/periodos'
 import { RegistroVinculadoError } from './db/cancelacion'
 import { registrarReembolso } from './db/dominio'
 import {
@@ -38,21 +39,8 @@ const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'o
 
 const anioDe = (fecha: string) => Number(fecha.slice(0, 4))
 
-/** The same day `n` years earlier; a leap day becomes the last day of February. */
-function restarAnios(fecha: string, n: number): string {
-  const [y, m, d] = fecha.split('-').map(Number)
-  const ultimo = new Date(y - n, m, 0).getDate()
-  return `${y - n}-${String(m).padStart(2, '0')}-${String(Math.min(d, ultimo)).padStart(2, '0')}`
-}
-
-function sumarDias(fecha: string, n: number): string {
-  const d = new Date(`${fecha}T12:00:00Z`)
-  d.setUTCDate(d.getUTCDate() + n)
-  return d.toISOString().slice(0, 10)
-}
-
 /** How many years back the comparison span lies: the same period last year, or the five before. */
-const atras = (periodo: PeriodoFinanzas) => (periodo === 'cinco_anios' ? 5 : 1)
+const aniosAtras = (periodo: PeriodoFinanzas) => (periodo === 'cinco_anios' ? 5 : 1)
 
 /**
  * The period to date, and the same days a period earlier: this year's Q3 so far against last
@@ -71,8 +59,8 @@ export function rangos(periodo: PeriodoFinanzas, hoy: string, primero = hoy): { 
   }[periodo]
   const rango = { desde, hasta: hoy }
   if (periodo === 'todo') return { rango, anterior: null }
-  const n = atras(periodo)
-  return { rango, anterior: { desde: restarAnios(desde, n), hasta: restarAnios(hoy, n) } }
+  const n = aniosAtras(periodo)
+  return { rango, anterior: { desde: sumarAnios(desde, -n), hasta: sumarAnios(hoy, -n) } }
 }
 
 type Ingreso = typeof ingresos.$inferSelect
@@ -85,30 +73,35 @@ const fechaIngreso = (i: Ingreso) => i.fechaPago ?? i.fechaRegistro
 const cuentaIngreso = (i: Ingreso) => (i.estado === 'pendiente' || i.estado === 'pagado') && fechaIngreso(i) !== null
 const cuentaCosto = (c: Costo) => c.estado !== 'cancelado'
 
-const dentro = (fecha: string | null, r: Rango) => fecha !== null && fecha >= r.desde && fecha <= r.hasta
+const dentro = (fecha: string | null, rango: Rango) => fecha !== null && fecha >= rango.desde && fecha <= rango.hasta
 
-function cifras(is: Ingreso[], cs: Costo[], r: Rango, sinDatos: Set<number>): CifrasFinanzas {
-  const ins = is.filter((i) => cuentaIngreso(i) && dentro(fechaIngreso(i), r))
-  const cos = cs.filter((c) => cuentaCosto(c) && dentro(c.fecha, r))
+/** The Ingresos and Costos that count within `rango`. */
+const delRango = (todosIngresos: Ingreso[], todosCostos: Costo[], rango: Rango) => ({
+  ingresos: todosIngresos.filter((i) => cuentaIngreso(i) && dentro(fechaIngreso(i), rango)),
+  costos: todosCostos.filter((c) => cuentaCosto(c) && dentro(c.fecha, rango))
+})
+
+function cifras(todosIngresos: Ingreso[], todosCostos: Costo[], rango: Rango, sinDatos: Set<number>): CifrasFinanzas {
+  const { ingresos: delPeriodo, costos: costosDelPeriodo } = delRango(todosIngresos, todosCostos, rango)
   const suma = <T>(xs: T[], f: (x: T) => number) => xs.reduce((s, x) => s + f(x), 0)
-  const ingresosTotal = suma(ins, (i) => i.subtotal)
-  const costosTotal = suma(cos, (c) => c.subtotal)
-  const sinCostos = [...sinDatos].some((a) => a >= anioDe(r.desde) && a <= anioDe(r.hasta))
+  const ingresosTotal = suma(delPeriodo, (i) => i.subtotal)
+  const costosTotal = suma(costosDelPeriodo, (c) => c.subtotal)
+  const sinCostos = [...sinDatos].some((anio) => anio >= anioDe(rango.desde) && anio <= anioDe(rango.hasta))
   return {
     ingresos: ingresosTotal,
-    ingresosFactura: suma(ins.filter((i) => i.categoria === 'factura'), (i) => i.subtotal),
-    ingresosSinFactura: suma(ins.filter((i) => i.categoria === 'sin_factura'), (i) => i.subtotal),
-    ivaIngresos: suma(ins, (i) => i.iva),
+    ingresosFactura: suma(delPeriodo.filter((i) => i.categoria === 'factura'), (i) => i.subtotal),
+    ingresosSinFactura: suma(delPeriodo.filter((i) => i.categoria === 'sin_factura'), (i) => i.subtotal),
+    ivaIngresos: suma(delPeriodo, (i) => i.iva),
     costos: costosTotal,
-    ivaCostos: suma(cos, (c) => c.iva),
+    ivaCostos: suma(costosDelPeriodo, (c) => c.iva),
     utilidad: sinCostos ? null : ingresosTotal - costosTotal
   }
 }
 
 /** The chart's buckets: weeks of a month, months of a quarter or year, years beyond that. */
-function cubetas(periodo: PeriodoFinanzas, r: Rango): { etiqueta: string; clave: (fecha: string) => boolean }[] {
+function cubetas(periodo: PeriodoFinanzas, rango: Rango): { etiqueta: string; clave: (fecha: string) => boolean }[] {
   if (periodo === 'mes') {
-    const ultimoDia = Number(r.hasta.slice(8, 10))
+    const ultimoDia = Number(rango.hasta.slice(8, 10))
     return Array.from({ length: Math.ceil(ultimoDia / 7) }, (_, k) => {
       const [a, b] = [k * 7 + 1, Math.min(k * 7 + 7, ultimoDia)]
       return { etiqueta: `${a}–${b}`, clave: (f: string) => Number(f.slice(8, 10)) >= a && Number(f.slice(8, 10)) <= b }
@@ -116,30 +109,33 @@ function cubetas(periodo: PeriodoFinanzas, r: Rango): { etiqueta: string; clave:
   }
   if (periodo === 'trimestre' || periodo === 'anio') {
     const out = []
-    for (let p = r.desde.slice(0, 7); p <= r.hasta.slice(0, 7); p = sumarMeses(p, 1)) {
-      const mes = p.slice(5, 7)
+    for (let periodoMes = rango.desde.slice(0, 7); periodoMes <= rango.hasta.slice(0, 7); periodoMes = sumarMeses(periodoMes, 1)) {
+      const mes = periodoMes.slice(5, 7)
       out.push({ etiqueta: MESES[Number(mes) - 1], clave: (f: string) => f.slice(5, 7) === mes })
     }
     return out
   }
-  const desde = anioDe(r.desde)
-  return Array.from({ length: anioDe(r.hasta) - desde + 1 }, (_, k) => ({
+  const desde = anioDe(rango.desde)
+  return Array.from({ length: anioDe(rango.hasta) - desde + 1 }, (_, k) => ({
     etiqueta: String(desde + k),
     clave: (f: string) => anioDe(f) === desde + k
   }))
 }
 
-function serie(periodo: PeriodoFinanzas, is: Ingreso[], cs: Costo[], r: Rango, anterior: Rango | null): PuntoFinanzas[] {
-  const n = atras(periodo)
+function serie(periodo: PeriodoFinanzas, todosIngresos: Ingreso[], todosCostos: Costo[], rango: Rango, anterior: Rango | null): PuntoFinanzas[] {
   // The earlier span is moved forward onto the current one, so both fall into the same buckets.
-  const movimientos = (rr: Rango, corrimiento: number) => ({
-    ingresos: is.filter((i) => cuentaIngreso(i) && dentro(fechaIngreso(i), rr)).map((i) => ({ fecha: restarAnios(fechaIngreso(i)!, -corrimiento), monto: i.subtotal })),
-    costos: cs.filter((c) => cuentaCosto(c) && dentro(c.fecha, rr)).map((c) => ({ fecha: restarAnios(c.fecha, -corrimiento), monto: c.subtotal }))
-  })
-  const ahora = movimientos(r, 0)
-  const antes = anterior ? movimientos(anterior, n) : null
-  const sumar = (ms: { fecha: string; monto: number }[], clave: (f: string) => boolean) => ms.filter((m) => clave(m.fecha)).reduce((s, m) => s + m.monto, 0)
-  return cubetas(periodo, r).map(({ etiqueta, clave }) => ({
+  const movimientos = (span: Rango, anios: number) => {
+    const { ingresos: delSpan, costos: costosDelSpan } = delRango(todosIngresos, todosCostos, span)
+    return {
+      ingresos: delSpan.map((i) => ({ fecha: sumarAnios(fechaIngreso(i)!, anios), monto: i.subtotal })),
+      costos: costosDelSpan.map((c) => ({ fecha: sumarAnios(c.fecha, anios), monto: c.subtotal }))
+    }
+  }
+  const ahora = movimientos(rango, 0)
+  const antes = anterior ? movimientos(anterior, aniosAtras(periodo)) : null
+  const sumar = (montos: { fecha: string; monto: number }[], clave: (fecha: string) => boolean) =>
+    montos.filter((m) => clave(m.fecha)).reduce((total, m) => total + m.monto, 0)
+  return cubetas(periodo, rango).map(({ etiqueta, clave }) => ({
     etiqueta,
     ingresos: sumar(ahora.ingresos, clave),
     costos: sumar(ahora.costos, clave),
@@ -229,23 +225,23 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
   const periodoActual = hoy.slice(0, 7)
   generarPeriodos(db, periodoActual)
 
-  const is = db.select().from(ingresos).all()
-  const cs = db.select().from(costos).all()
+  const todosIngresos = db.select().from(ingresos).all()
+  const todosCostos = db.select().from(costos).all()
   const defs = db.select().from(definicionesCosto).all()
   const definicion = new Map(defs.map((d) => [d.id, d]))
   const nombreContacto = new Map(db.select({ id: contactos.id, nombre: contactos.nombre }).from(contactos).all().map((c) => [c.id, c.nombre]))
   const nombreProyecto = new Map(db.select({ id: proyectos.id, nombre: proyectos.nombre }).from(proyectos).all().map((p) => [p.id, p.nombre]))
 
-  const fechas = [...is.filter(cuentaIngreso).map((i) => fechaIngreso(i)!), ...cs.filter(cuentaCosto).map((c) => c.fecha)]
+  const fechas = [...todosIngresos.filter(cuentaIngreso).map((i) => fechaIngreso(i)!), ...todosCostos.filter(cuentaCosto).map((c) => c.fecha)]
   const primero = fechas.reduce((min, f) => (f < min ? f : min), hoy)
   const { rango, anterior: rangoAnterior } = rangos(periodo, hoy, primero)
 
   const desde = anioDe(rangoAnterior?.desde ?? rango.desde)
   const sinDatos = new Set(coberturaCostos(db, desde, anioDe(hoy)).filter((c) => c.sinDatos).map((c) => c.anio))
-  const aniosVistos = (r: Rango | null) => (r ? [...sinDatos].filter((a) => a >= anioDe(r.desde) && a <= anioDe(r.hasta)) : [])
+  const aniosSinDatos = (span: Rango | null) => (span ? [...sinDatos].filter((anio) => anio >= anioDe(span.desde) && anio <= anioDe(span.hasta)) : [])
 
   const asignados = new Set(db.select({ costoId: asignacionesCosto.costoId }).from(asignacionesCosto).all().map((a) => a.costoId))
-  const conReembolsos = new Set(is.flatMap((i) => (i.reembolsoDeId === null ? [] : [i.reembolsoDeId])))
+  const conReembolsos = new Set(todosIngresos.flatMap((i) => (i.reembolsoDeId === null ? [] : [i.reembolsoDeId])))
   const limiteVencida = sumarDias(hoy, -diasVencida)
   const filaIngreso = (i: Ingreso): FilaIngreso => ({
     id: i.id,
@@ -281,7 +277,7 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
   })
 
   const porFecha = <T>(f: (x: T) => string | null) => (a: T, b: T) => (f(a) ?? '').localeCompare(f(b) ?? '')
-  const pendientesCosto = cs.filter((c) => c.estado === 'pendiente').sort(porFecha((c) => c.fecha))
+  const pendientesCosto = todosCostos.filter((c) => c.estado === 'pendiente').sort(porFecha((c) => c.fecha))
   const horizonte = sumarDias(hoy, DIAS_PROXIMOS)
   const proximosPagos = [
     ...pendientesCosto
@@ -294,14 +290,15 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     periodo,
     rango,
     rangoAnterior,
-    actual: cifras(is, cs, rango, sinDatos),
-    anterior: rangoAnterior ? cifras(is, cs, rangoAnterior, sinDatos) : null,
-    serie: serie(periodo, is, cs, rango, rangoAnterior),
-    sinDatos: [...new Set([...aniosVistos(rangoAnterior), ...aniosVistos(rango)])].sort(),
-    cobranza: is.filter((i) => i.estado === 'pendiente').sort(porFecha(fechaIngreso)).map(filaIngreso),
+    actual: cifras(todosIngresos, todosCostos, rango, sinDatos),
+    anterior: rangoAnterior ? cifras(todosIngresos, todosCostos, rangoAnterior, sinDatos) : null,
+    serie: serie(periodo, todosIngresos, todosCostos, rango, rangoAnterior),
+    sinDatos: [...new Set([...aniosSinDatos(rangoAnterior), ...aniosSinDatos(rango)])].sort(),
+    cobrado: todosIngresos.filter((i) => i.estado === 'pagado' && dentro(i.fechaPago, rango)).sort(porFecha(fechaIngreso)).reverse().map(filaIngreso),
+    cobranza: todosIngresos.filter((i) => i.estado === 'pendiente').sort(porFecha(fechaIngreso)).map(filaIngreso),
     costosPendientes: pendientesCosto.map(filaCosto),
-    ingresos: is.filter((i) => i.estado !== 'cancelado' && dentro(fechaIngreso(i), rango)).sort(porFecha(fechaIngreso)).reverse().map(filaIngreso),
-    costos: cs.filter((c) => cuentaCosto(c) && dentro(c.fecha, rango)).sort(porFecha((c) => c.fecha)).reverse().map(filaCosto),
+    ingresos: todosIngresos.filter((i) => i.estado !== 'cancelado' && dentro(fechaIngreso(i), rango)).sort(porFecha(fechaIngreso)).reverse().map(filaIngreso),
+    costos: todosCostos.filter((c) => cuentaCosto(c) && dentro(c.fecha, rango)).sort(porFecha((c) => c.fecha)).reverse().map(filaCosto),
     proximosPagos,
     diasVencida
   }
@@ -434,7 +431,7 @@ export function reembolsar(db: Db, id: number, subtotal: number, iva: number, fe
     .from(ingresos)
     .where(eq(ingresos.reembolsoDeId, id))
     .all()
-    .reduce((s, r) => s - r.total, 0)
+    .reduce((suma, reembolso) => suma - reembolso.total, 0)
   if (devuelto + subtotal + iva > i.total) throw new Error('No se puede reembolsar más de lo pagado')
   registrarReembolso(db, id, { subtotal, iva, fecha, montoOriginal })
 }

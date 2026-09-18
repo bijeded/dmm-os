@@ -53,6 +53,7 @@ const resumen = (cambios: Partial<ResumenFinanzas> = {}): ResumenFinanzas => ({
     { etiqueta: '8–14', ingresos: 200, costos: 60, ingresosAnterior: 90, costosAnterior: 0 }
   ],
   sinDatos: [2025],
+  cobrado: [ingreso(4, { contacto: 'Estudio Ocho', estado: 'pagado', acciones: ['reembolsar'] })],
   cobranza: [ingreso(1), ingreso(2, { contacto: 'Hotel Aura', vencida: true, fecha: '2026-08-05' })],
   costosPendientes: [costo(10)],
   ingresos: [ingreso(3, { contacto: 'Netdeckr', categoria: 'sin_factura', estadoFacturacion: null, estado: 'pagado', origen: 'manual', acciones: ['borrar', 'reembolsar'] })],
@@ -125,9 +126,16 @@ describe('Finanzas', () => {
     expect(screen.getByRole('note').textContent).toContain('2025')
   })
 
-  it('splits Cobranza into actual and vencida', async () => {
+  it('lists what was collected under Cobrado, and nothing pending', async () => {
     montar()
-    const cobranza = (await screen.findByRole('heading', { name: 'Cobranza' })).closest('section')!
+    const cobrado = (await screen.findByRole('heading', { name: 'Cobrado' })).closest('section')!
+    expect(within(cobrado).getByText('Estudio Ocho')).toBeTruthy()
+    expect(within(cobrado).queryByText('Café Nómada')).toBeNull()
+  })
+
+  it('splits what is still to collect into actual and vencida', async () => {
+    montar()
+    const cobranza = (await screen.findByRole('heading', { name: 'Por cobrar' })).closest('section')!
     expect(within(cobranza).getByText('Café Nómada')).toBeTruthy()
     expect(within(cobranza).queryByText('Hotel Aura')).toBeNull()
     fireEvent.click(within(cobranza).getByRole('button', { name: 'Vencida (1)' }))
@@ -137,7 +145,7 @@ describe('Finanzas', () => {
 
   it('marks an Ingreso paid and reads Finanzas again', async () => {
     montar()
-    const cobranza = (await screen.findByRole('heading', { name: 'Cobranza' })).closest('section')!
+    const cobranza = (await screen.findByRole('heading', { name: 'Por cobrar' })).closest('section')!
     fireEvent.click(within(cobranza).getByRole('button', { name: 'Pagado' }))
     await waitFor(() => expect(api.pagarIngreso).toHaveBeenCalledWith(1))
     await waitFor(() => expect(api.resumen).toHaveBeenCalledTimes(2))
@@ -145,7 +153,8 @@ describe('Finanzas', () => {
 
   it('registers a Reembolso against a paid Ingreso', async () => {
     montar()
-    fireEvent.click(await screen.findByRole('button', { name: 'Reembolsar' }))
+    const delPeriodo = (await screen.findByRole('heading', { name: 'Ingresos del periodo' })).closest('section')!
+    fireEvent.click(within(delPeriodo).getByRole('button', { name: 'Reembolsar' }))
     fireEvent.change(screen.getByRole('textbox', { name: 'Monto del reembolso' }), { target: { value: '1,500.50' } })
     fireEvent.click(screen.getByRole('button', { name: 'Registrar reembolso' }))
     await waitFor(() => expect(api.reembolsar).toHaveBeenCalledWith(3, 150_050, 0, expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)))

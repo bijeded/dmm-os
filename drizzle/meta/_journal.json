@@ -64,6 +64,13 @@
       "when": 1789716590696,
       "tag": "0008_cotizacion_nueva",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1789769296395,
+      "tag": "0009_cfdi_pagados",
+      "breakpoints": true
     }
   ]
 }

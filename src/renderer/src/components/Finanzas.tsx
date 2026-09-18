@@ -39,13 +39,13 @@ const origenCosto: Record<FilaCosto['origen'], string> = { cfdi: 'CFDI', recurre
 export function Finanzas() {
   const navigate = useNavigate()
   const [periodo, setPeriodo] = useState<PeriodoFinanzas>('mes')
-  const [r, setR] = useState<ResumenFinanzas | null>(null)
+  const [resumen, setResumen] = useState<ResumenFinanzas | null>(null)
   const [busqueda, setBusqueda] = useState('')
   const [vencidas, setVencidas] = useState(false)
   const [reembolso, setReembolso] = useState<{ id: number; monto: string } | null>(null)
   const { error, ocupado, correr } = useAccion()
 
-  const cargar = (p = periodo) => correr(async () => setR(await window.dmm.finanzas.resumen(p)))
+  const cargar = (p = periodo) => correr(async () => setResumen(await window.dmm.finanzas.resumen(p)))
   useEffect(() => {
     cargar(periodo)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload per period
@@ -55,15 +55,16 @@ export function Finanzas() {
   const hacer = (fn: () => Promise<unknown>) =>
     correr(async () => {
       await fn()
-      setR(await window.dmm.finanzas.resumen(periodo))
+      setResumen(await window.dmm.finanzas.resumen(periodo))
     })
 
-  const q = normalizar(busqueda.trim())
-  const coincide = (...vs: (string | null)[]) => !q || vs.some((v) => v && normalizar(v).includes(q))
-  const ingresos = useMemo(() => (r?.ingresos ?? []).filter((i) => coincide(i.contacto, i.proyecto, i.notas)), [r, q]) // eslint-disable-line react-hooks/exhaustive-deps
-  const costos = useMemo(() => (r?.costos ?? []).filter((c) => coincide(c.nombre, c.proveedor, c.proyecto)), [r, q]) // eslint-disable-line react-hooks/exhaustive-deps
-  const cobranza = (r?.cobranza ?? []).filter((i) => i.vencida === vencidas && coincide(i.contacto, i.proyecto, i.notas))
-  const costosPendientes = (r?.costosPendientes ?? []).filter((c) => coincide(c.nombre, c.proveedor, c.proyecto))
+  const consulta = normalizar(busqueda.trim())
+  const coincide = (...textos: (string | null)[]) => !consulta || textos.some((texto) => texto && normalizar(texto).includes(consulta))
+  const ingresos = useMemo(() => (resumen?.ingresos ?? []).filter((i) => coincide(i.contacto, i.proyecto, i.notas)), [resumen, consulta]) // eslint-disable-line react-hooks/exhaustive-deps
+  const costos = useMemo(() => (resumen?.costos ?? []).filter((c) => coincide(c.nombre, c.proveedor, c.proyecto)), [resumen, consulta]) // eslint-disable-line react-hooks/exhaustive-deps
+  const cobrado = (resumen?.cobrado ?? []).filter((i) => coincide(i.contacto, i.proyecto, i.notas))
+  const cobranza = (resumen?.cobranza ?? []).filter((i) => i.vencida === vencidas && coincide(i.contacto, i.proyecto, i.notas))
+  const costosPendientes = (resumen?.costosPendientes ?? []).filter((c) => coincide(c.nombre, c.proveedor, c.proyecto))
 
   const accionesIngreso = (i: FilaIngreso) => (
     <span className="flex flex-wrap gap-3">
@@ -123,10 +124,10 @@ export function Finanzas() {
       setReembolso(null)
     })
 
-  const a = r?.actual
-  const b = r?.anterior
-  const anio = r?.rango.hasta.slice(0, 4)
-  const vsAnterior = r?.rangoAnterior ? `vs ${r.rangoAnterior.desde.slice(0, 4)}` : ''
+  const actual = resumen?.actual
+  const anterior = resumen?.anterior
+  const anio = resumen?.rango.hasta.slice(0, 4)
+  const vsAnterior = resumen?.rangoAnterior ? `vs ${resumen.rangoAnterior.desde.slice(0, 4)}` : ''
 
   return (
     <>
@@ -167,83 +168,90 @@ export function Finanzas() {
       </div>
       <Aviso error={error} />
 
-      {r && r.sinDatos.length > 0 && (
+      {resumen && resumen.sinDatos.length > 0 && (
         <p role="note" className="m-0 rounded-control border border-border-strong p-3 text-[13px] text-on-surface">
-          <strong>Datos de costos incompletos.</strong> Sin costos registrados para {r.sinDatos.join(', ')}: la utilidad de esos años se muestra como Sin datos, no
+          <strong>Datos de costos incompletos.</strong> Sin costos registrados para {resumen.sinDatos.join(', ')}: la utilidad de esos años se muestra como Sin datos, no
           se estima.
         </p>
       )}
 
-      {a && (
+      {actual && (
         <ul aria-label="Resumen" className="g-stats m-0 grid list-none grid-cols-3 gap-3 p-0">
           <Cifra
             label={`Ingresos · ${NOMBRES_PERIODO_FINANZAS[periodo]}`}
-            valor={pesos(a.ingresos)}
-            detalle={[variacion(a.ingresos, b?.ingresos) && `${variacion(a.ingresos, b?.ingresos)} ${vsAnterior}`, `factura ${pesos(a.ingresosFactura)}`, `sin factura ${pesos(a.ingresosSinFactura)}`, `IVA ${pesos(a.ivaIngresos)}`]}
+            valor={pesos(actual.ingresos)}
+            detalle={[variacion(actual.ingresos, anterior?.ingresos) && `${variacion(actual.ingresos, anterior?.ingresos)} ${vsAnterior}`, `factura ${pesos(actual.ingresosFactura)}`, `sin factura ${pesos(actual.ingresosSinFactura)}`, `IVA ${pesos(actual.ivaIngresos)}`]}
           />
           <Cifra
             label={`Costos · ${NOMBRES_PERIODO_FINANZAS[periodo]}`}
-            valor={pesos(a.costos)}
-            detalle={[variacion(a.costos, b?.costos) && `${variacion(a.costos, b?.costos)} ${vsAnterior}`, `IVA ${pesos(a.ivaCostos)}`]}
+            valor={pesos(actual.costos)}
+            detalle={[variacion(actual.costos, anterior?.costos) && `${variacion(actual.costos, anterior?.costos)} ${vsAnterior}`, `IVA ${pesos(actual.ivaCostos)}`]}
           />
           <Cifra
             label={`Utilidad · ${NOMBRES_PERIODO_FINANZAS[periodo]}`}
-            valor={a.utilidad === null ? 'Sin datos' : pesos(a.utilidad)}
+            valor={actual.utilidad === null ? 'Sin datos' : pesos(actual.utilidad)}
             detalle={[
-              b === null || b === undefined
+              anterior === null || anterior === undefined
                 ? null
-                : b.utilidad === null
+                : anterior.utilidad === null
                   ? `${vsAnterior}: sin datos de costos`
-                  : a.utilidad === null
+                  : actual.utilidad === null
                     ? null
-                    : `${variacion(a.utilidad, b.utilidad) ?? ''} ${vsAnterior} (${pesos(b.utilidad)})`
+                    : `${variacion(actual.utilidad, anterior.utilidad) ?? ''} ${vsAnterior} (${pesos(anterior.utilidad)})`
             ]}
           />
         </ul>
       )}
 
-      {r && (
+      {resumen && (
         <section className={cardCls} aria-labelledby="grafica">
           <h2 id="grafica" className={`m-0 ${etiquetaCls}`}>
-            Ingresos vs costos · {dia(r.rango.desde)} – {dia(r.rango.hasta)}
+            Ingresos vs costos · {dia(resumen.rango.desde)} – {dia(resumen.rango.hasta)}
           </h2>
-          <Grafica serie={r.serie} actual={anio ?? ''} anterior={r.rangoAnterior ? r.rangoAnterior.desde.slice(0, 4) : null} />
-          {r.rangoAnterior && <p className="m-0 text-[12px] text-on-surface-muted">Comparado con el mismo periodo, a la misma fecha, {periodo === 'cinco_anios' ? 'de los cinco años anteriores' : 'del año anterior'}.</p>}
+          <Grafica serie={resumen.serie} actual={anio ?? ''} anterior={resumen.rangoAnterior ? resumen.rangoAnterior.desde.slice(0, 4) : null} />
+          {resumen.rangoAnterior && <p className="m-0 text-[12px] text-on-surface-muted">Comparado con el mismo periodo, a la misma fecha, {periodo === 'cinco_anios' ? 'de los cinco años anteriores' : 'del año anterior'}.</p>}
         </section>
       )}
 
       <div className="g-split grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] items-start gap-[18px]">
         <div className="flex flex-col gap-[18px]">
-          <section className={cardCls} aria-labelledby="cobranza">
+          <section className={cardCls} aria-labelledby="cobrado">
+            <h2 id="cobrado" className={`m-0 ${etiquetaCls}`}>
+              Cobrado
+            </h2>
+            <TablaIngresos filas={cobrado} acciones={accionesIngreso} vacio="Nada cobrado en el periodo." />
+          </section>
+
+          <section className={cardCls} aria-labelledby="por-cobrar">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 id="cobranza" className={`m-0 ${etiquetaCls}`}>
-                Cobranza
+              <h2 id="por-cobrar" className={`m-0 ${etiquetaCls}`}>
+                Por cobrar
               </h2>
-              <div role="group" aria-label="Cobranza" className="flex gap-1">
-                {([false, true] as const).map((v) => (
+              <div role="group" aria-label="Por cobrar" className="flex gap-1">
+                {([false, true] as const).map((vencida) => (
                   <button
-                    key={String(v)}
+                    key={String(vencida)}
                     type="button"
-                    aria-pressed={vencidas === v}
-                    onClick={() => setVencidas(v)}
-                    className={`cursor-pointer rounded-control border px-2 py-1 text-[12px] ${vencidas === v ? 'border-primary text-primary-text' : 'border-border-strong text-on-surface-muted'}`}
+                    aria-pressed={vencidas === vencida}
+                    onClick={() => setVencidas(vencida)}
+                    className={`cursor-pointer rounded-control border px-2 py-1 text-[12px] ${vencidas === vencida ? 'border-primary text-primary-text' : 'border-border-strong text-on-surface-muted'}`}
                   >
-                    {v ? `Vencida (${(r?.cobranza ?? []).filter((i) => i.vencida).length})` : 'Actual'}
+                    {vencida ? `Vencida (${(resumen?.cobranza ?? []).filter((i) => i.vencida).length})` : 'Actual'}
                   </button>
                 ))}
               </div>
             </div>
             <TablaIngresos filas={cobranza} acciones={accionesIngreso} vacio={vencidas ? 'Nada vencido.' : 'Nada por cobrar.'} />
-            {r && (
+            {resumen && (
               <label className="flex items-center gap-2 text-[12px] text-on-surface-muted">
                 Vencida después de
                 <input
                   type="number"
                   min={1}
                   aria-label="Días para vencer"
-                  defaultValue={r.diasVencida}
-                  key={r.diasVencida}
-                  onBlur={(e) => Number(e.target.value) !== r.diasVencida && hacer(() => window.dmm.finanzas.configurarVencida(Number(e.target.value)))}
+                  defaultValue={resumen.diasVencida}
+                  key={resumen.diasVencida}
+                  onBlur={(e) => Number(e.target.value) !== resumen.diasVencida && hacer(() => window.dmm.finanzas.configurarVencida(Number(e.target.value)))}
                   className={inputCls}
                 />
                 días sin pagar (solo facturas emitidas)
@@ -264,7 +272,7 @@ export function Finanzas() {
             Próximos pagos
           </h2>
           <ul className="m-0 flex list-none flex-col gap-2 p-0 text-[13px]">
-            {(r?.proximosPagos ?? []).map((p, k) => (
+            {(resumen?.proximosPagos ?? []).map((p, k) => (
               <li key={k} className="flex items-baseline justify-between gap-3">
                 <span className="w-16 shrink-0 font-mono text-[11px] text-on-surface-muted">{dia(p.fecha)}</span>
                 <span className="flex-1">
@@ -275,7 +283,7 @@ export function Finanzas() {
               </li>
             ))}
           </ul>
-          {r && r.proximosPagos.length === 0 && <p className="m-0 text-[13px] text-on-surface-muted">Nada en los próximos 60 días.</p>}
+          {resumen && resumen.proximosPagos.length === 0 && <p className="m-0 text-[13px] text-on-surface-muted">Nada en los próximos 60 días.</p>}
         </section>
       </div>
 
