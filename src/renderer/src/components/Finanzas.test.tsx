@@ -19,6 +19,8 @@ const ingreso = (id: number, cambios: Partial<FilaIngreso> = {}): FilaIngreso =>
   total: 2_088_000,
   origen: 'cfdi',
   vencida: false,
+  moneda: 'MXN',
+  reembolsable: 0,
   reembolsoDeId: null,
   notas: null,
   acciones: ['pagar', 'cancelar'],
@@ -56,7 +58,7 @@ const resumen = (cambios: Partial<ResumenFinanzas> = {}): ResumenFinanzas => ({
   cobrado: [ingreso(4, { contacto: 'Estudio Ocho', estado: 'pagado', acciones: ['reembolsar'] })],
   cobranza: [ingreso(1), ingreso(2, { contacto: 'Hotel Aura', vencida: true, fecha: '2026-08-05' })],
   costosPendientes: [costo(10)],
-  ingresos: [ingreso(3, { contacto: 'Netdeckr', categoria: 'sin_factura', estadoFacturacion: null, estado: 'pagado', origen: 'manual', acciones: ['borrar', 'reembolsar'] })],
+  ingresos: [ingreso(3, { contacto: 'Netdeckr', categoria: 'sin_factura', estadoFacturacion: null, estado: 'pagado', origen: 'manual', reembolsable: 200_000, acciones: ['borrar', 'reembolsar'] })],
   costos: [costo(10)],
   proximosPagos: [{ fecha: '2026-09-22', nombre: 'Hosting anual', proveedor: 'Hostinger', categoria: 'anual', total: 289_000 }],
   diasVencida: 30,
@@ -155,9 +157,10 @@ describe('Finanzas', () => {
     montar()
     const delPeriodo = (await screen.findByRole('heading', { name: 'Ingresos del periodo' })).closest('section')!
     fireEvent.click(within(delPeriodo).getByRole('button', { name: 'Reembolsar' }))
+    expect((screen.getByRole('textbox', { name: 'Monto del reembolso' }) as HTMLInputElement).value).toBe('2000.00')
     fireEvent.change(screen.getByRole('textbox', { name: 'Monto del reembolso' }), { target: { value: '1,500.50' } })
     fireEvent.click(screen.getByRole('button', { name: 'Registrar reembolso' }))
-    await waitFor(() => expect(api.reembolsar).toHaveBeenCalledWith(3, 150_050, 0, expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)))
+    await waitFor(() => expect(api.reembolsar).toHaveBeenCalledWith(3, 150_050))
   })
 
   it('searches every table at once', async () => {

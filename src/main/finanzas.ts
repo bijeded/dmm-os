@@ -155,12 +155,25 @@ const borrableIngreso = (i: Ingreso, reembolsado: boolean) => origenIngreso(i) =
 /** Borrar vs cancelar: only a hand-entered one-time Costo nothing is attributed from. */
 const borrableCosto = (c: Costo, asignado: boolean) => origenCosto(c) === 'manual' && c.cotizacionId === null && !asignado
 
-function accionesIngreso(i: Ingreso, conReembolsos: Set<number>): AccionIngreso[] {
+const reembolsableIngreso = (i: Ingreso) => i.estado === 'pagado' && i.total > 0 && i.reembolsoDeId === null
+
+/**
+ * What is left to give back of an Ingreso after its Reembolsos: in pesos, its IVA, and in its own
+ * currency (`original`, USD cents for a USD Ingreso, else the same as `total`).
+ */
+function restante(i: Ingreso, reembolsos: Ingreso[]) {
+  const usd = i.monedaOriginal === 'USD'
+  const suma = (f: (r: Ingreso) => number) => reembolsos.reduce((s, r) => s + f(r), 0)
+  const total = i.total + suma((r) => r.total)
+  return { usd, total, iva: i.iva + suma((r) => r.iva), original: usd ? (i.montoOriginal ?? 0) + suma((r) => r.montoOriginal ?? 0) : total }
+}
+
+function accionesIngreso(i: Ingreso, reembolsos: Ingreso[] | undefined): AccionIngreso[] {
   const puede: Record<AccionIngreso, boolean> = {
     pagar: i.estado === 'pendiente',
     cancelar: i.estado === 'pendiente',
-    borrar: borrableIngreso(i, conReembolsos.has(i.id)),
-    reembolsar: i.estado === 'pagado' && i.total > 0 && i.reembolsoDeId === null
+    borrar: borrableIngreso(i, reembolsos !== undefined),
+    reembolsar: reembolsableIngreso(i) && restante(i, reembolsos ?? []).original > 0
   }
   return (Object.keys(puede) as AccionIngreso[]).filter((a) => puede[a])
 }
@@ -241,7 +254,8 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
   const aniosSinDatos = (span: Rango | null) => (span ? [...sinDatos].filter((anio) => anio >= anioDe(span.desde) && anio <= anioDe(span.hasta)) : [])
 
   const asignados = new Set(db.select({ costoId: asignacionesCosto.costoId }).from(asignacionesCosto).all().map((a) => a.costoId))
-  const conReembolsos = new Set(todosIngresos.flatMap((i) => (i.reembolsoDeId === null ? [] : [i.reembolsoDeId])))
+  const reembolsosDe = new Map<number, Ingreso[]>()
+  for (const i of todosIngresos) if (i.reembolsoDeId !== null) reembolsosDe.set(i.reembolsoDeId, [...(reembolsosDe.get(i.reembolsoDeId) ?? []), i])
   const limiteVencida = sumarDias(hoy, -diasVencida)
   const filaIngreso = (i: Ingreso): FilaIngreso => ({
     id: i.id,
@@ -256,9 +270,11 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     total: i.total,
     origen: origenIngreso(i),
     vencida: i.estado === 'pendiente' && i.estadoFacturacion === 'facturado' && i.fechaRegistro !== null && i.fechaRegistro < limiteVencida,
+    moneda: i.monedaOriginal === 'USD' ? 'USD' : 'MXN',
+    reembolsable: reembolsableIngreso(i) ? restante(i, reembolsosDe.get(i.id) ?? []).original : 0,
     reembolsoDeId: i.reembolsoDeId,
     notas: i.notas,
-    acciones: accionesIngreso(i, conReembolsos)
+    acciones: accionesIngreso(i, reembolsosDe.get(i.id))
   })
   const filaCosto = (c: Costo): FilaCosto => ({
     id: c.id,
@@ -420,20 +436,22 @@ export function borrarIngreso(db: Db, id: number) {
   db.delete(ingresos).where(eq(ingresos.id, id)).run()
 }
 
-/** Reembolso against a paid Ingreso, never more than what is left of it; a USD one needs its USD amount. */
-export function reembolsar(db: Db, id: number, subtotal: number, iva: number, fecha: string, montoOriginal?: number) {
-  exigirMonto(subtotal, iva)
-  exigirFecha(fecha)
+/**
+ * Reembolso of `monto` (the total, in the Ingreso's own currency) against a paid Ingreso, dated
+ * today, never more than what is left of it. A USD one converts at the Ingreso's own rate; IVA is
+ * in the Ingreso's proportion; giving back all that is left takes the exact remainders.
+ */
+export function reembolsar(db: Db, id: number, monto: number, hoy: string) {
+  if (!Number.isInteger(monto) || monto <= 0) throw new Error('El monto debe ser mayor a cero')
   const i = leerIngreso(db, id)
-  if (i.estado !== 'pagado' || i.total <= 0 || i.reembolsoDeId !== null) throw new Error('Solo se reembolsa un ingreso pagado')
-  const devuelto = db
-    .select({ total: ingresos.total })
-    .from(ingresos)
-    .where(eq(ingresos.reembolsoDeId, id))
-    .all()
-    .reduce((suma, reembolso) => suma - reembolso.total, 0)
-  if (devuelto + subtotal + iva > i.total) throw new Error('No se puede reembolsar más de lo pagado')
-  registrarReembolso(db, id, { subtotal, iva, fecha, montoOriginal })
+  if (!reembolsableIngreso(i)) throw new Error('Solo se reembolsa un ingreso pagado')
+  if (i.monedaOriginal === 'USD' && !i.montoOriginal) throw new Error('El ingreso en USD no tiene su monto en USD')
+  const queda = restante(i, db.select().from(ingresos).where(eq(ingresos.reembolsoDeId, id)).all())
+  if (monto > queda.original) throw new Error('No se puede reembolsar más de lo pagado')
+  const todo = monto === queda.original
+  const total = todo ? queda.total : Math.min(queda.total, queda.usd ? Math.round((monto * i.total) / i.montoOriginal!) : monto)
+  const iva = todo ? queda.iva : Math.min(queda.iva, Math.round((total * i.iva) / i.total))
+  registrarReembolso(db, id, { subtotal: total - iva, iva, fecha: hoy, montoOriginal: queda.usd ? monto : undefined })
 }
 
 export function pagarCosto(db: Db, id: number, hoy: string) {

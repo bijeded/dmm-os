@@ -200,33 +200,59 @@ describe('recurring and installment Costos', () => {
 })
 
 describe('Reembolso', () => {
-  it('is a negative paid Ingreso counted on the day the money went back', () => {
-    nuevoIngreso(db, ingreso({ fecha: '2025-12-01', subtotal: 10000 }), hoy)
-    const i = db.select().from(ingresos).get()!
-    reembolsar(db, i.id, 3000, 0, '2026-09-10')
-    const r = resumenFinanzas(db, 'mes', hoy, 30)
-    expect(r.actual.ingresos).toBe(-3000)
-    expect(r.ingresos[0]).toMatchObject({ total: -3000, reembolsoDeId: i.id, estado: 'pagado' })
-  })
-
-  it('refunds a USD Ingreso in USD too', () => {
-    const usd = db
+  const usdPagado = (cambios: Partial<typeof ingresos.$inferInsert> = {}) =>
+    db
       .insert(ingresos)
-      .values({ categoria: 'sin_factura', estado: 'pagado', subtotal: 170000, iva: 0, total: 170000, montoOriginal: 10000, monedaOriginal: 'USD', fechaRegistro: '2026-09-01', fechaPago: '2026-09-01' })
+      .values({ categoria: 'sin_factura', estado: 'pagado', subtotal: 170000, iva: 0, total: 170000, montoOriginal: 10000, monedaOriginal: 'USD', fechaRegistro: '2026-09-01', fechaPago: '2026-09-01', ...cambios })
       .returning()
       .get()
-    expect(() => reembolsar(db, usd.id, 17000, 0, hoy)).toThrow(/USD/)
-    reembolsar(db, usd.id, 17000, 0, hoy, 1000)
-    expect(db.select().from(ingresos).where(eq(ingresos.reembolsoDeId, usd.id)).get()).toMatchObject({ total: -17000, montoOriginal: -1000, monedaOriginal: 'USD' })
+  const reembolsoDe = (id: number) => db.select().from(ingresos).where(eq(ingresos.reembolsoDeId, id)).all()
+
+  it('is a negative paid Ingreso dated today', () => {
+    nuevoIngreso(db, ingreso({ fecha: '2025-12-01', subtotal: 10000 }), hoy)
+    const i = db.select().from(ingresos).get()!
+    reembolsar(db, i.id, 3000, hoy)
+    const r = resumenFinanzas(db, 'mes', hoy, 30)
+    expect(r.actual.ingresos).toBe(-3000)
+    expect(r.ingresos[0]).toMatchObject({ total: -3000, reembolsoDeId: i.id, estado: 'pagado', fecha: hoy })
   })
 
-  it('never gives back more than was paid, nor from an unpaid Ingreso', () => {
+  it('gives back IVA in the Ingreso’s proportion', () => {
+    const i = db
+      .insert(ingresos)
+      .values({ categoria: 'factura', estadoFacturacion: 'facturado', estado: 'pagado', subtotal: 10000, iva: 1600, total: 11600, fechaRegistro: '2026-09-01', fechaPago: '2026-09-01' })
+      .returning()
+      .get()
+    reembolsar(db, i.id, 5800, hoy)
+    expect(reembolsoDe(i.id)[0]).toMatchObject({ subtotal: -5000, iva: -800, total: -5800 })
+  })
+
+  it('takes a USD Ingreso’s amount in USD and converts at its own rate', () => {
+    const usd = usdPagado()
+    reembolsar(db, usd.id, 1000, hoy)
+    expect(reembolsoDe(usd.id)[0]).toMatchObject({ total: -17000, montoOriginal: -1000, monedaOriginal: 'USD' })
+    expect(resumenFinanzas(db, 'mes', hoy, 30).ingresos.find((f) => f.id === usd.id)).toMatchObject({ moneda: 'USD', reembolsable: 9000 })
+  })
+
+  it('giving back all that is left leaves nothing, in pesos, IVA and USD', () => {
+    const usd = usdPagado({ subtotal: 100000, iva: 16001, total: 116001, montoOriginal: 6667 })
+    reembolsar(db, usd.id, 3333, hoy)
+    reembolsar(db, usd.id, 3334, hoy)
+    const suma = (f: (i: typeof usd) => number) => [usd, ...reembolsoDe(usd.id)].reduce((s, i) => s + f(i), 0)
+    expect([suma((i) => i.total), suma((i) => i.iva), suma((i) => i.montoOriginal!)]).toEqual([0, 0, 0])
+    expect(resumenFinanzas(db, 'mes', hoy, 30).ingresos.find((f) => f.id === usd.id)?.acciones).not.toContain('reembolsar')
+  })
+
+  it('never gives back more than was paid, in the Ingreso’s currency, nor from an unpaid Ingreso', () => {
     nuevoIngreso(db, ingreso({ subtotal: 10000 }), hoy)
     const i = db.select().from(ingresos).get()!
-    reembolsar(db, i.id, 8000, 0, hoy)
-    expect(() => reembolsar(db, i.id, 3000, 0, hoy)).toThrow(/más de lo pagado/)
+    reembolsar(db, i.id, 8000, hoy)
+    expect(() => reembolsar(db, i.id, 3000, hoy)).toThrow(/más de lo pagado/)
+    const usd = usdPagado()
+    expect(() => reembolsar(db, usd.id, 10001, hoy)).toThrow(/más de lo pagado/)
     const pendiente = facturaPendiente('2026-09-01')
-    expect(() => reembolsar(db, pendiente.id, 100, 0, hoy)).toThrow(/pagado/)
+    expect(() => reembolsar(db, pendiente.id, 100, hoy)).toThrow(/pagado/)
+    expect(() => reembolsar(db, i.id, 0, hoy)).toThrow(/mayor a cero/)
   })
 })
 
@@ -245,7 +271,7 @@ describe('Borrar vs cancelar', () => {
     expect(() => borrarIngreso(db, importado.id)).toThrow(/cancélalo/)
     nuevoIngreso(db, ingreso(), hoy)
     const manual = db.select().from(ingresos).where(eq(ingresos.categoria, 'sin_factura')).get()!
-    reembolsar(db, manual.id, 100, 0, hoy)
+    reembolsar(db, manual.id, 100, hoy)
     expect(() => borrarIngreso(db, manual.id)).toThrow(/cancélalo/)
     nuevoCosto(db, costo({ categoria: 'mensual' }), hoy)
     const [generado] = resumenFinanzas(db, 'mes', hoy, 30).costos

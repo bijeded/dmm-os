@@ -11,7 +11,7 @@ import {
   type PuntoFinanzas,
   type ResumenFinanzas
 } from '../../../shared/ipc'
-import { diaLocal, normalizar } from '../../../shared/formato'
+import { normalizar } from '../../../shared/formato'
 import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
 import { dia } from './Cotizaciones'
 import { centavos } from './NuevoMovimiento'
@@ -42,7 +42,7 @@ export function Finanzas() {
   const [resumen, setResumen] = useState<ResumenFinanzas | null>(null)
   const [busqueda, setBusqueda] = useState('')
   const [vencidas, setVencidas] = useState(false)
-  const [reembolso, setReembolso] = useState<{ id: number; monto: string } | null>(null)
+  const [reembolso, setReembolso] = useState<{ id: number; monto: string; moneda: 'MXN' | 'USD' } | null>(null)
   const { error, ocupado, correr } = useAccion()
 
   const cargar = (p = periodo) => correr(async () => setResumen(await window.dmm.finanzas.resumen(p)))
@@ -79,7 +79,7 @@ export function Finanzas() {
         </button>
       )}
       {i.acciones.includes('reembolsar') && (
-        <button type="button" disabled={ocupado} className={accionCls} onClick={() => setReembolso({ id: i.id, monto: '' })}>
+        <button type="button" disabled={ocupado} className={accionCls} onClick={() => setReembolso({ id: i.id, monto: (i.reembolsable / 100).toFixed(2), moneda: i.moneda })}>
           Reembolsar
         </button>
       )}
@@ -118,9 +118,9 @@ export function Finanzas() {
 
   const reembolsar = () =>
     hacer(async () => {
-      const subtotal = centavos(reembolso!.monto)
-      if (!Number.isFinite(subtotal) || subtotal <= 0) throw new Error('Escribe un monto mayor a cero')
-      await window.dmm.finanzas.reembolsar(reembolso!.id, subtotal, 0, diaLocal(new Date()))
+      const monto = centavos(reembolso!.monto)
+      if (!Number.isFinite(monto) || monto <= 0) throw new Error('Escribe un monto mayor a cero')
+      await window.dmm.finanzas.reembolsar(reembolso!.id, monto)
       setReembolso(null)
     })
 
@@ -293,7 +293,7 @@ export function Finanzas() {
         </h2>
         {reembolso && (
           <div className="flex flex-wrap items-center gap-2 text-[13px]">
-            Reembolso del ingreso {reembolso.id}, hoy:
+            Reembolso del ingreso {reembolso.id}, hoy, en {reembolso.moneda}:
             <input
               inputMode="decimal"
               aria-label="Monto del reembolso"

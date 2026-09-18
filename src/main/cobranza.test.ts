@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { estadoCobro, estadosCobro } from './cobranza'
 import { cotizaciones, ingresos } from './db/schema'
 import { registrarReembolso } from './db/dominio'
+import { reembolsar } from './finanzas'
 import { contacto, db, ingresoBase, proyecto, reiniciarDb } from './db/test-db'
 
 const hoy = '2026-09-18'
@@ -59,6 +60,17 @@ describe('estadoCobro', () => {
     expect(estadoCobro(db, p.id).pagadoCompleto).toBe(true)
     registrarReembolso(db, o.id, { subtotal: 540, iva: 0, fecha: hoy, montoOriginal: 30 })
     expect(estadoCobro(db, p.id).falta).toEqual({ pendientes: 0, faltante: 30, moneda: 'USD' })
+  })
+
+  it('a Reembolso entered in USD stops a USD Cotización reading as fully paid', () => {
+    const p = proyecto(contactoId, cotizacion({ moneda: 'USD', subtotal: 100, iva: 0, total: 100 }).id)
+    const o = db
+      .insert(ingresos)
+      .values({ ...ingresoBase, categoria: 'sin_factura', proyectoId: p.id, estado: 'pagado', subtotal: 1800, iva: 0, total: 1800, montoOriginal: 100, monedaOriginal: 'USD' })
+      .returning()
+      .get()
+    reembolsar(db, o.id, 30, hoy)
+    expect(estadoCobro(db, p.id)).toMatchObject({ pagadoCompleto: false, falta: { pendientes: 0, faltante: 30, moneda: 'USD' } })
   })
 
   it('compares an MXN Cotización by pesos, even when paid in USD', () => {
