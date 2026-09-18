@@ -101,6 +101,27 @@ export function resolverContacto(db: Tx, nombre: string): ResultadoContacto {
 }
 
 /**
+ * The Contacto behind a new-format quote, whose filename names the Proyecto rather than the
+ * Contacto. Only a single known Proyecto of that name can say who it is; otherwise the quote
+ * is refused (it lands in the run's errors) instead of minting a Contacto named after a project.
+ */
+function contactoDeProyecto(db: Tx, nombre: string): ResultadoContacto {
+  const contactoIds = new Set(
+    db
+      .select()
+      .from(proyectos)
+      .all()
+      .filter((p) => clave(p.nombre) === clave(nombre))
+      .map((p) => p.contactoId)
+      .filter((id): id is number => id !== null)
+  )
+  if (contactoIds.size !== 1) {
+    throw new Error(`no se sabe de qué Contacto es el Proyecto "${nombre}"; regístralo y vuelve a escanear`)
+  }
+  return { contactoId: [...contactoIds][0], contactosCreados: 0, sugerencias: 0 }
+}
+
+/**
  * One archived PDF as a Cotización, keyed by its Folio (and the letter that tells two quotes
  * sharing a Folio apart). A PDF exists, so the quote was at least sent: that is the weakest
  * status its Folio allows. Re-importing the same Folio changes nothing.
@@ -119,7 +140,10 @@ export function importarCotizacion(db: Db, entrada: EntradaCotizacion): Resultad
 
   // The old filenames carry no date; the year the file is filed under is all the disk knows.
   const fecha = entrada.fecha ?? `${entrada.anio}-01-01`
-  const { contactoId, ...aportes } = resolverContacto(tx, nombresDeProyecto(entrada.nombre)[0] ?? entrada.nombre)
+  const { contactoId, ...aportes } =
+    entrada.fecha === null
+      ? resolverContacto(tx, nombresDeProyecto(entrada.nombre)[0] ?? entrada.nombre)
+      : contactoDeProyecto(tx, entrada.nombre)
   const cotizacion = tx
     .insert(cotizaciones)
     .values({
