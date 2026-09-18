@@ -179,13 +179,17 @@ describe('sin ingresos registrados', () => {
     expect(marcado(p.id)).toBe(false)
   })
 
-  it('leaves out a Proyecto still en curso, one with no Cotización, and one with no folder', () => {
+  it('leaves out a Proyecto still en curso, one with no Cotización, one with no folder, and a monthly one', () => {
     const enCurso = proyecto(contactoId, cotizacion(1).id)
     archivar(enCurso.id)
     const sinCotizacion = completado(null)
     archivar(sinCotizacion.id)
     const sinCarpeta = completado(cotizacion(2).id)
-    expect([enCurso, sinCotizacion, sinCarpeta].map((p) => marcado(p.id))).toEqual([false, false, false])
+    const c = cotizacion(3)
+    db.update(cotizaciones).set({ facturacion: 'mensual' }).where(eq(cotizaciones.id, c.id)).run()
+    const mensual = completado(c.id)
+    archivar(mensual.id)
+    expect([enCurso, sinCotizacion, sinCarpeta, mensual].map((p) => marcado(p.id))).toEqual([false, false, false, false])
   })
 })
 

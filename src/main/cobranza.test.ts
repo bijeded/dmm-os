@@ -48,6 +48,12 @@ describe('estadoCobro', () => {
     expect(estadoCobro(db, p.id).falta).toEqual({ pendientes: 0, faltante: 50, moneda: 'USD' })
   })
 
+  it('compares an MXN Cotización by pesos, even when paid in USD', () => {
+    const p = proyecto(contactoId, cotizacion().id)
+    ingreso(p.id, { subtotal: 2000, iva: 320, total: 2320, montoOriginal: 120, monedaOriginal: 'USD' })
+    expect(estadoCobro(db, p.id).pagadoCompleto).toBe(true)
+  })
+
   it('a monthly Cotización has no total to reach', () => {
     const p = proyecto(contactoId, cotizacion({ facturacion: 'mensual' }).id)
     expect(estadoCobro(db, p.id).pagadoCompleto).toBe(true)
