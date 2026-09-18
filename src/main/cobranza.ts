@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import type { Db } from './db'
 import { cotizaciones, ingresos, proyectos } from './db/schema'
 
@@ -21,11 +21,32 @@ export function estadoCobro(db: Db, proyectoId: number): EstadoCobro {
   const p = db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()
   if (!p) throw new Error(`El proyecto ${proyectoId} no existe`)
   const suyos = db.select().from(ingresos).where(eq(ingresos.proyectoId, p.id)).all()
+  const c = p.cotizacionId === null ? undefined : db.select().from(cotizaciones).where(eq(cotizaciones.id, p.cotizacionId)).get()
+  return cobro(c, suyos)
+}
+
+/** `estadoCobro` for many Proyectos at once, reading their Ingresos and Cotizaciones once. */
+export function estadosCobro(db: Db, ps: { id: number; cotizacionId: number | null }[]): Map<number, EstadoCobro> {
+  if (ps.length === 0) return new Map()
+  const porProyecto = new Map<number, Ingreso[]>()
+  const ids = ps.map((p) => p.id)
+  for (const i of db.select().from(ingresos).where(inArray(ingresos.proyectoId, ids)).all()) {
+    porProyecto.set(i.proyectoId!, [...(porProyecto.get(i.proyectoId!) ?? []), i])
+  }
+  const cotIds = ps.flatMap((p) => (p.cotizacionId === null ? [] : [p.cotizacionId]))
+  const cots = new Map(
+    (cotIds.length ? db.select().from(cotizaciones).where(inArray(cotizaciones.id, cotIds)).all() : []).map((c) => [c.id, c])
+  )
+  return new Map(ps.map((p) => [p.id, cobro(p.cotizacionId === null ? undefined : cots.get(p.cotizacionId), porProyecto.get(p.id) ?? [])]))
+}
+
+type Ingreso = typeof ingresos.$inferSelect
+
+function cobro(c: typeof cotizaciones.$inferSelect | undefined, suyos: Ingreso[]): EstadoCobro {
   const pagados = suyos.filter((i) => i.estado === 'pagado')
   const pendientes = suyos.filter((i) => i.estado === 'pendiente')
-  const suma = (is: typeof suyos) => is.reduce((s, i) => s + i.subtotal, 0)
+  const suma = (is: Ingreso[]) => is.reduce((s, i) => s + i.subtotal, 0)
   let faltante = 0
-  const c = p.cotizacionId === null ? undefined : db.select().from(cotizaciones).where(eq(cotizaciones.id, p.cotizacionId)).get()
   const usd = c?.moneda === 'USD'
   if (c && c.facturacion !== 'mensual') {
     const pagado = pagados.reduce((s, i) => s + (usd ? (i.monedaOriginal === 'USD' ? (i.montoOriginal ?? 0) : 0) : i.total), 0)

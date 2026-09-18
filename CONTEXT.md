@@ -60,6 +60,10 @@ _Avoid_: "pendiente" for not-yet-invoiced
 **Cobranza vencida**:
 An invoiced, unpaid Ingreso older than the configured number of days (default 30). Uninvoiced Ingresos are never overdue.
 
+**Sin ingresos registrados**:
+A completed Proyecto with files somewhere (local or external HDD) and a one-off or installment Cotización whose paid Ingresos never reached the quote total. Usually imported history (ADR-0002) whose uninvoiced Ingresos are still to be entered by hand. Derived, never stored: it clears once the Ingresos are entered.
+_Avoid_: "sin pagar" (it is about what the app has recorded, not what the client owes)
+
 **Sin datos**:
 What a period shows for margin or profit when its Costos were never imported. Never estimated.
 

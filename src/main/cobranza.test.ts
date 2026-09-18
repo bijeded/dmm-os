@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { estadoCobro } from './cobranza'
+import { estadoCobro, estadosCobro } from './cobranza'
 import { cotizaciones, ingresos } from './db/schema'
 import { contacto, db, ingresoBase, proyecto, reiniciarDb } from './db/test-db'
 
@@ -61,5 +61,22 @@ describe('estadoCobro', () => {
 
   it('refuses a Proyecto that does not exist', () => {
     expect(() => estadoCobro(db, 99)).toThrow(/no existe/)
+  })
+})
+
+describe('estadosCobro', () => {
+  it('answers for many Proyectos what estadoCobro answers for each', () => {
+    const conCotizacion = proyecto(contactoId, cotizacion().id)
+    ingreso(conCotizacion.id)
+    const sinCotizacion = proyecto(contactoId, null)
+    ingreso(sinCotizacion.id, { estado: 'pendiente' })
+    const vacio = proyecto(contactoId, cotizacion({ folio: 8 }).id)
+    const ps = [conCotizacion, sinCotizacion, vacio]
+    const todos = estadosCobro(db, ps)
+    expect(ps.map((p) => todos.get(p.id))).toEqual(ps.map((p) => estadoCobro(db, p.id)))
+  })
+
+  it('reads nothing for no Proyectos', () => {
+    expect(estadosCobro(db, []).size).toBe(0)
   })
 })
