@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDatabase, type Conexion } from './db'
+import { contactos } from './db/schema'
 import { crearHandlers, type HandlersOptions } from './handlers'
 import type { DmmHandlers } from '../shared/ipc'
 
@@ -100,5 +101,18 @@ describe('Sugerencias de importación', () => {
     writeFileSync(join(root, 'Entrada', 'x.pdf'), '')
     expect(await h.importacion.sugerencias()).toEqual([])
     expect((await h.rutas.leer()).entrada).toBe(1)
+  })
+})
+
+describe('contactos', () => {
+  it('reads each Contacto’s folder under the DMM OS root', async () => {
+    mkdirSync(join(root, 'Clientes', 'Sonrieme'), { recursive: true })
+    writeFileSync(join(root, 'Clientes', 'Sonrieme', 'Brief.docx'), 'x')
+    const { id } = conexion.db.insert(contactos).values({ nombre: 'Sonríeme' }).returning().get()
+
+    expect((await h.contactos.listar()).contactos.map((c) => c.nombre)).toEqual(['Sonríeme'])
+    expect((await h.contactos.ficha(id)).archivos.map((a) => a.nombre)).toEqual(['Brief.docx'])
+    await h.contactos.borrar(id)
+    expect(await h.contactos.csv()).toBe('nombre,empresa,email,telefono,estado\r\n')
   })
 })

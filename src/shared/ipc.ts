@@ -107,6 +107,86 @@ export interface CoberturaAnual {
   sinDatos: boolean
 }
 
+/** Estado de Contacto: always derived from its Cotizaciones and Proyectos, never set by hand. */
+export const ESTADOS_CONTACTO = ['lead_frio', 'lead_caliente', 'cliente_activo', 'cliente_inactivo'] as const
+export type EstadoContacto = (typeof ESTADOS_CONTACTO)[number]
+
+/** How the Estado de Contacto reads, in the app and in the CSV. */
+export const NOMBRES_ESTADO_CONTACTO: Record<EstadoContacto, string> = {
+  lead_frio: 'Lead frío',
+  lead_caliente: 'Lead caliente',
+  cliente_activo: 'Cliente activo',
+  cliente_inactivo: 'Cliente inactivo'
+}
+
+/** One row of the Contactos table. Money is integer centavos, before IVA. */
+export interface FilaContacto {
+  id: number
+  nombre: string
+  empresa: string | null
+  email: string | null
+  telefono: string | null
+  estado: EstadoContacto
+  /** What the Contacto has paid, net of Reembolsos. */
+  valor: number
+}
+
+export interface ListaContactos {
+  /** Ascending by name. */
+  contactos: FilaContacto[]
+  conteo: Record<EstadoContacto, number>
+  /** Top 10 by value, with each one's share (0–100) of all revenue from Contactos. */
+  top: { id: number; nombre: string; valor: number; porcentaje: number }[]
+}
+
+/** One line of a Contacto's history: a Cotización, a Proyecto or a payment (Ingreso). */
+export interface Movimiento {
+  tipo: 'cotizacion' | 'proyecto' | 'pago'
+  id: number
+  fecha: string
+  /** The Folio of a Cotización; nothing for the rest. */
+  referencia: string | null
+  detalle: string
+  /** Centavos before IVA; `null` for a Proyecto, whose money is in its payments. */
+  monto: number | null
+  estado: string
+}
+
+/** A file already in `Clientes/<name>/`, read from disk as it is. */
+export interface ArchivoCliente {
+  nombre: string
+  /** `Carpeta`, or the extension in capitals. */
+  tipo: string
+  modificado: string
+}
+
+export interface FichaContacto {
+  contacto: {
+    id: number
+    nombre: string
+    empresa: string | null
+    rfc: string | null
+    email: string | null
+    telefono: string | null
+    direccion: string | null
+    notas: string | null
+    creadoEn: string
+  }
+  estado: EstadoContacto
+  /** What the Contacto has paid, net of Reembolsos: the same value as in the list. */
+  valor: number
+  /** Pending Ingresos. */
+  porCobrar: number
+  proyectos: number
+  /** Drafts count; `aceptadas` is what the conversion rate is made of. */
+  cotizaciones: { total: number; aceptadas: number }
+  /** Newest first. */
+  historial: Movimiento[]
+  /** The Contacto's folder under `Clientes/`, relative to the DMM OS root; `null` when none matches. */
+  carpeta: string | null
+  archivos: ArchivoCliente[]
+}
+
 export interface AppInfo {
   version: string
   dbPath: string
@@ -159,6 +239,14 @@ export const contrato = {
     olvidarHdd: canal<[], Rutas>(),
     /** Reveals the folder in Finder. */
     abrir: canal<[carpeta: CarpetaAbrible], void>()
+  },
+  contactos: {
+    listar: canal<[], ListaContactos>(),
+    ficha: canal<[id: number], FichaContacto>(),
+    /** Borrar vs cancelar: refused when the Contacto has anything linked. */
+    borrar: canal<[id: number], void>(),
+    /** Every Contacto as CSV, for a newsletter service. */
+    csv: canal<[], string>()
   },
   finanzas: {
     /** Which years show Sin datos because their Costos were never imported. */

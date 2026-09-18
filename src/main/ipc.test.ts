@@ -40,6 +40,14 @@ function handlers() {
       olvidarHdd: vi.fn(() => rutas),
       abrir: vi.fn()
     },
+    contactos: {
+      listar: vi.fn(() => ({ contactos: [], conteo: { lead_frio: 0, lead_caliente: 0, cliente_activo: 0, cliente_inactivo: 0 }, top: [] })),
+      ficha: vi.fn(() => {
+        throw new Error('sin ficha')
+      }),
+      borrar: vi.fn(),
+      csv: vi.fn(() => '')
+    },
     finanzas: {
       coberturaCostos: vi.fn(() => [{ anio: 2025, sinDatos: true }])
     }
