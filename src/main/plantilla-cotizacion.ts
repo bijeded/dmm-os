@@ -24,7 +24,7 @@ const parrafos = (s: string | null) => (s ? s.split(/\n+/).map((p) => `<p>${esca
 export function plantillaCotizacion(c: FichaCotizacion): string {
   const $ = (n: number) => dinero(n, c.moneda)
   const facturacion =
-    c.facturacion === 'parcialidades' ? `${c.parcialidades} parcialidades` : c.facturacion === 'mensual' ? 'Mensual' : NOMBRES_FACTURACION.unica
+    c.facturacion === 'parcialidades' ? `${c.parcialidades} parcialidades` : NOMBRES_FACTURACION[c.facturacion]
   const filas = c.partidas
     .map(
       (p) =>

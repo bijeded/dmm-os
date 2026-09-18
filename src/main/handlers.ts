@@ -19,6 +19,7 @@ import {
 import { escanearCarpetas, importarFacturas, marcarHddNoDisponible } from './importacion'
 import { leerRutas } from './rutas'
 import { pendientes, responder } from './sugerencias'
+import { diaLocal } from '../shared/formato'
 import type { AppInfo, DmmHandlers, EstadoImportacion } from '../shared/ipc'
 
 export interface HandlersOptions {
@@ -46,10 +47,7 @@ export function crearHandlers({
   ahora = () => new Date().toISOString()
 }: HandlersOptions): DmmHandlers {
   // The local calendar day, which is what a quote is accepted on.
-  const hoy = () => {
-    const d = new Date(ahora())
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  }
+  const hoy = () => diaLocal(new Date(ahora()))
   // An expired quote turns its Contacto from hot lead back to cold, so Contactos expires too.
   const expirar = () => expirarCotizaciones(conexion.db, hoy())
 
