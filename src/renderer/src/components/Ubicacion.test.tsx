@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { DmmApi, Rutas } from '../../../shared/ipc'
+import type { Rutas } from '../../../shared/dominio'
+import type { DmmApi } from '../../../shared/contrato'
 import { Ubicacion } from './Ubicacion'
 
 const rutas: Rutas = { dmmOsRoot: '/Users/fv/Desktop/DMM OS', hddRoot: null, hddConectado: false, entrada: 12 }

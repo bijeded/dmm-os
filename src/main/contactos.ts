@@ -5,15 +5,7 @@ import type { Db } from './db'
 import { borrar } from './db/cancelacion'
 import { contactos, cotizaciones, ingresos, proyectos } from './db/schema'
 import { clave } from './nombres'
-import {
-  ESTADOS_CONTACTO,
-  NOMBRES_ESTADO_CONTACTO,
-  type ArchivoCliente,
-  type EstadoContacto,
-  type FichaContacto,
-  type ListaContactos,
-  type Movimiento
-} from '../shared/ipc'
+import { ESTADOS_CONTACTO, NOMBRES_ESTADO_CONTACTO, type ArchivoCliente, type EstadoContacto, type FichaContacto, type ListaContactos, type Movimiento } from '../shared/dominio'
 
 type EstadoProyecto = (typeof proyectos.$inferSelect)['estado']
 type EstadoCotizacion = (typeof cotizaciones.$inferSelect)['estado']

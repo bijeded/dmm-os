@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import type { Sugerencia, RespuestaSugerencia } from '../shared/ipc'
+import type { Sugerencia, RespuestaSugerencia } from '../shared/dominio'
 import { mejorEscrito } from './nombres'
 import { rutaDeProyecto } from './paths'
 import type { Db } from './db/index'

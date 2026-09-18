@@ -4,7 +4,7 @@ import { costos, definicionesCosto, ingresos } from './db/schema'
 import { contacto, db, reiniciarDb } from './db/test-db'
 import { rangos, resumenFinanzas } from './finanzas'
 import { borrarCosto, borrarIngreso, cancelarIngreso, detenerCosto, nuevoCosto, nuevoIngreso, pagarIngreso, reembolsar } from './movimientos'
-import type { CostoNuevo, IngresoNuevo } from '../shared/ipc'
+import type { CostoNuevo, IngresoNuevo } from '../shared/dominio'
 
 const hoy = '2026-09-18'
 let contactoId: number

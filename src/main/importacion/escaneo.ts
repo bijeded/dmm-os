@@ -1,6 +1,6 @@
 import { readdirSync, type Dirent } from 'node:fs'
 import { join, posix } from 'node:path'
-import type { LogCarpetas } from '../../shared/ipc'
+import type { LogCarpetas } from '../../shared/dominio'
 import { leerNombreArchivo } from '../cotizaciones'
 import type { Db } from '../db'
 import { hoy as hoyLocal } from '../../shared/fechas'

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { ESTADOS_CONTACTO, NOMBRES_ESTADO_CONTACTO, type EstadoContacto, type ListaContactos } from '../../../shared/ipc'
+import { ESTADOS_CONTACTO, NOMBRES_ESTADO_CONTACTO, type EstadoContacto, type ListaContactos } from '../../../shared/dominio'
 import { monto, normalizar } from '../../../shared/formato'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'

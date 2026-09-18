@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { NOMBRES_FACTURACION, type FichaCotizacion } from '../shared/ipc'
+import { NOMBRES_FACTURACION, type FichaCotizacion } from '../shared/dominio'
 import { sumarDias } from '../shared/fechas'
 import { fechaLarga } from '../shared/formato'
 

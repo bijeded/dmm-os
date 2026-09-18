@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { NOMBRES_CATEGORIA, NOMBRES_CATEGORIA_COSTO, NOMBRES_ESTADO_COTIZACION, NOMBRES_FACTURACION, type FichaCotizacion as Ficha } from '../../../shared/ipc'
+import { NOMBRES_CATEGORIA, NOMBRES_CATEGORIA_COSTO, NOMBRES_ESTADO_COTIZACION, NOMBRES_FACTURACION, type FichaCotizacion as Ficha } from '../../../shared/dominio'
 import { dia, folioDmm } from '../../../shared/formato'
 import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'

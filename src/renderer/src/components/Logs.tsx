@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Corrida, EstadoImportacion, LogCarpetas, LogImportacion, RespuestaSugerencia, Sugerencia } from '../../../shared/ipc'
+import type { Corrida, EstadoImportacion, LogCarpetas, LogImportacion, RespuestaSugerencia, Sugerencia } from '../../../shared/dominio'
 import { Aviso, Seccion, fecha, mensaje, useAccion } from './Seccion'
 import { Button } from './ui/button'
 

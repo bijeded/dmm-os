@@ -1,6 +1,6 @@
 import { copyFileSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { MOTIVOS_RESPALDO, type ConfigRespaldos, type EstadoRespaldos, type MotivoRespaldo, type Respaldo, type ResultadoRestaurar } from '../shared/ipc'
+import { MOTIVOS_RESPALDO, type ConfigRespaldos, type EstadoRespaldos, type MotivoRespaldo, type Respaldo, type ResultadoRestaurar } from '../shared/dominio'
 import type { Conexion, DatabaseModule } from './db'
 
 const DEFAULT_FRECUENCIA_DIAS = 7

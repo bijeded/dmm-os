@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { NOMBRES_CATEGORIA, NOMBRES_ESTADO_PROYECTO, type FichaProyecto as Ficha } from '../../../shared/ipc'
+import { NOMBRES_CATEGORIA, NOMBRES_ESTADO_PROYECTO, type FichaProyecto as Ficha } from '../../../shared/dominio'
 import { dia, folioDmm, monto } from '../../../shared/formato'
 import { pesos, tituloCls } from './Contactos'
 import { NOMBRES_CARPETA } from './Proyectos'

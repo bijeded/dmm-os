@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ConceptoCatalogo, DmmApi } from '../../../shared/ipc'
+import type { ConceptoCatalogo } from '../../../shared/dominio'
+import type { DmmApi } from '../../../shared/contrato'
 import { Catalogo } from './Catalogo'
 
 const sitio: ConceptoCatalogo = { id: 1, concepto: 'Sitio web · 6 secc.', categoria: 'website', precio: 2_400_000 }

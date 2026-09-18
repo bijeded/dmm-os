@@ -5,18 +5,7 @@ import type { Db } from './db'
 import { borrar, cancelar } from './db/cancelacion'
 import { contactos, costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, vigenciasPrecio } from './db/schema'
 import { plantillaCotizacion } from './plantilla-cotizacion'
-import {
-  CATEGORIAS,
-  CATEGORIAS_COSTO,
-  FACTURACIONES,
-  type AccionCotizacion,
-  type Categoria,
-  type CotizacionNueva,
-  type EstadoCotizacion,
-  type FichaCotizacion,
-  type ListaCotizaciones,
-  type PartidaCotizacion
-} from '../shared/ipc'
+import { CATEGORIAS, CATEGORIAS_COSTO, FACTURACIONES, type AccionCotizacion, type Categoria, type CotizacionNueva, type EstadoCotizacion, type FichaCotizacion, type ListaCotizaciones, type PartidaCotizacion } from '../shared/dominio'
 import { folioDmm, totalesCotizacion } from '../shared/formato'
 import { sumarDias } from '../shared/fechas'
 

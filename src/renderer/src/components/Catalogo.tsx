@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CATEGORIAS, NOMBRES_CATEGORIA, type Categoria, type ConceptoCatalogo } from '../../../shared/ipc'
+import { CATEGORIAS, NOMBRES_CATEGORIA, type Categoria, type ConceptoCatalogo } from '../../../shared/dominio'
 import { pesos } from './Contactos'
 import { Aviso, Seccion, inputCls, mensaje, useAccion } from './Seccion'
 import { Button } from './ui/button'

@@ -2,7 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
-import type { DmmApi, FilaCosto, FilaIngreso, ListaContactos, ListaProyectos, ResumenFinanzas } from '../../../shared/ipc'
+import type { FilaCosto, FilaIngreso, ListaContactos, ListaProyectos, ResumenFinanzas } from '../../../shared/dominio'
+import type { DmmApi } from '../../../shared/contrato'
 import { Finanzas } from './Finanzas'
 import { NuevoCosto, NuevoIngreso } from './NuevoMovimiento'
 

@@ -1,4 +1,4 @@
-import { contrato, recorrerContrato, type DmmHandlers } from '../shared/ipc'
+import { contrato, recorrerContrato, type DmmHandlers } from '../shared/contrato'
 
 interface IpcRegistrar {
   handle(channel: string, listener: (event: unknown, ...args: unknown[]) => unknown): void

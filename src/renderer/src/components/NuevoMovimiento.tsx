@@ -1,12 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
-import {
-  CATEGORIAS_COSTO,
-  NOMBRES_CATEGORIA_COSTO,
-  type CategoriaCosto,
-  type FilaContacto,
-  type FilaProyecto
-} from '../../../shared/ipc'
+import { CATEGORIAS_COSTO, NOMBRES_CATEGORIA_COSTO, type CategoriaCosto, type FilaContacto, type FilaProyecto } from '../../../shared/dominio'
 import { hoy } from '../../../shared/fechas'
 import { tituloCls } from './Contactos'
 import { Campo, campoCls } from './NuevaCotizacion'

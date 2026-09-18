@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { EstadoRespaldos, MotivoRespaldo } from '../../../shared/ipc'
+import type { EstadoRespaldos, MotivoRespaldo } from '../../../shared/dominio'
 import { Aviso, Datos, Fila, Seccion, fecha, inputCls, mensaje, monoCls, useAccion } from './Seccion'
 import { Button } from './ui/button'
 

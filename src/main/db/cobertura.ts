@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import type { CoberturaAnual } from '../../shared/ipc'
+import type { CoberturaAnual } from '../../shared/dominio'
 import type { Db } from './index'
 import { costos } from './schema'
 

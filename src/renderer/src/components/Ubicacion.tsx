@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Rutas } from '../../../shared/ipc'
+import type { Rutas } from '../../../shared/dominio'
 import { Aviso, Datos, Fila, Seccion, mensaje, monoCls, useAccion } from './Seccion'
 import { Button } from './ui/button'
 
