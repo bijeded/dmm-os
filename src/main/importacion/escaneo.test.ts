@@ -3,7 +3,17 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { escanearCarpetas } from '.'
-import { contactos, cotizaciones, proyectos, sugerenciasImportacion, ubicacionesArchivo } from '../db/schema'
+import {
+  contactos,
+  costos,
+  cotizaciones,
+  definicionesCosto,
+  definicionesIngreso,
+  ingresos,
+  proyectos,
+  sugerenciasImportacion,
+  ubicacionesArchivo
+} from '../db/schema'
 import { db, reiniciarDb } from '../db/test-db'
 
 let root: string
@@ -128,6 +138,27 @@ describe('el HDD externo como fuente secundaria', () => {
     escanearCarpetas(db, root)
     escanearCarpetas(db, root, hdd)
     expect(db.select().from(ubicacionesArchivo).get()!.disponible).toBe(true)
+  })
+})
+
+// ADR-0002: imported history is exempt from the lifecycle guards.
+describe('la historia importada no pasa por el ciclo de vida', () => {
+  it('completes an archived Proyecto with no Ingresos behind it', () => {
+    carpeta(root, 'Archivo', 'Proyectos', 'Versa')
+    escanearCarpetas(db, root)
+    expect(db.select().from(proyectos).get()!.estado).toBe('completado')
+    expect(db.select().from(ingresos).all()).toHaveLength(0)
+  })
+
+  it('accepts a quote tied to a folder without creating Ingresos or Costos', () => {
+    pdf(root, '2025', 'DMM - 475 - Clicme.pdf')
+    carpeta(root, 'Proyectos', 'Clicme')
+    escanearCarpetas(db, root)
+    expect(db.select().from(cotizaciones).get()!.estado).toBe('aceptada')
+    expect(db.select().from(ingresos).all()).toHaveLength(0)
+    expect(db.select().from(definicionesIngreso).all()).toHaveLength(0)
+    expect(db.select().from(costos).all()).toHaveLength(0)
+    expect(db.select().from(definicionesCosto).all()).toHaveLength(0)
   })
 })
 
