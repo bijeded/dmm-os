@@ -33,6 +33,7 @@ export function Proyectos() {
   const [anio, setAnio] = useState('')
   const [categoria, setCategoria] = useState<Categoria | ''>('')
   const [estado, setEstado] = useState<EstadoProyecto | ''>('')
+  const [soloSinIngresos, setSoloSinIngresos] = useState(false)
   const { error, correr } = useAccion()
 
   useEffect(() => {
@@ -57,9 +58,10 @@ export function Proyectos() {
         (!anio || p.fechaInicio?.startsWith(anio)) &&
         (!categoria || p.categoria === categoria) &&
         (!estado || p.estado === estado) &&
+        (!soloSinIngresos || p.sinIngresosRegistrados) &&
         (!q || [p.referencia, p.nombre, p.contacto, p.clienteFinal].some((v) => v && normalizar(v).includes(q)))
     )
-  }, [todos, busqueda, contacto, anio, categoria, estado])
+  }, [todos, busqueda, contacto, anio, categoria, estado, soloSinIngresos])
 
   const c = lista?.conteo
   const abrir = (id: number) => correr(() => window.dmm.proyectos.abrirCarpeta(id))
@@ -131,6 +133,10 @@ export function Proyectos() {
                 </option>
               ))}
             </select>
+            <label className="flex items-center gap-1.5 text-[13px] text-on-surface">
+              <input type="checkbox" checked={soloSinIngresos} onChange={(e) => setSoloSinIngresos(e.target.checked)} />
+              Sin ingresos registrados
+            </label>
           </div>
 
           <table className="tbl w-full border-collapse text-[13px]">
@@ -166,6 +172,14 @@ export function Proyectos() {
                   </td>
                   <td data-label="Estado" className={celdaCls}>
                     {NOMBRES_ESTADO_PROYECTO[p.estado]}
+                    {p.sinIngresosRegistrados && (
+                      <span
+                        title="Sus ingresos no llegan al total de la cotización: regístralos en Finanzas"
+                        className="ml-2 rounded-control border border-border-strong px-1.5 py-0.5 text-[11px] text-on-surface-muted"
+                      >
+                        Sin ingresos registrados
+                      </span>
+                    )}
                   </td>
                   <td data-label="Carpeta" className={celdaCls}>
                     {p.carpeta.abrible ? (

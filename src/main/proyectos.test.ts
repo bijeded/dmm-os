@@ -157,6 +157,38 @@ describe('estado', () => {
   })
 })
 
+describe('sin ingresos registrados', () => {
+  const cotizacion = (folio: number) =>
+    db.insert(cotizaciones).values({ contactoId, folio, categoria: 'website', estado: 'aceptada', fecha: hoy, subtotal: 2000, iva: 320, total: 2320 }).returning().get()
+  const completado = (cotizacionId: number | null) => {
+    const p = proyecto(contactoId, cotizacionId)
+    db.update(proyectos).set({ estado: 'completado' }).where(eq(proyectos.id, p.id)).run()
+    return p
+  }
+  const archivar = (proyectoId: number) =>
+    db.insert(ubicacionesArchivo).values({ proyectoId, tipo: 'hdd_externo', rutaRelativa: 'Proyectos/Versa', disponible: false, verificadoEn: hoy }).run()
+  const marcado = (id: number) => listarProyectos(db, root).proyectos.find((p) => p.id === id)!.sinIngresosRegistrados
+
+  it('flags a completed Proyecto with a folder whose Ingresos do not reach its Cotización', () => {
+    const p = completado(cotizacion(7).id)
+    archivar(p.id)
+    expect(marcado(p.id)).toBe(true)
+
+    // Entered by hand in Finanzas, uninvoiced and without IVA: the flag clears itself.
+    db.insert(ingresos).values({ fechaRegistro: hoy, subtotal: 2320, total: 2320, categoria: 'sin_factura', proyectoId: p.id, estado: 'pagado' }).run()
+    expect(marcado(p.id)).toBe(false)
+  })
+
+  it('leaves out a Proyecto still en curso, one with no Cotización, and one with no folder', () => {
+    const enCurso = proyecto(contactoId, cotizacion(1).id)
+    archivar(enCurso.id)
+    const sinCotizacion = completado(null)
+    archivar(sinCotizacion.id)
+    const sinCarpeta = completado(cotizacion(2).id)
+    expect([enCurso, sinCotizacion, sinCarpeta].map((p) => marcado(p.id))).toEqual([false, false, false])
+  })
+})
+
 describe('borrar', () => {
   it('deletes a Proyecto with nothing linked, leaving its folder on disk', () => {
     const { id } = guardarProyecto(db, root, nuevo(), hoy)

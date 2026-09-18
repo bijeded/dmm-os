@@ -19,13 +19,14 @@ const fila = (id: number, nombre: string, cambios: Partial<FilaProyecto> = {}): 
   fechaInicio: '2026-09-01',
   estado: 'en_curso',
   carpeta: { estado: 'disponible', ruta: `Proyectos/${nombre}`, abrible: true },
+  sinIngresosRegistrados: false,
   ...cambios
 })
 
 const lista: ListaProyectos = {
   proyectos: [
     fila(3, 'Portafolio', { etiqueta: 'personal', contactoId: null, contacto: null, categoria: 'ai' }),
-    fila(2, 'Tienda', { contacto: 'Hotel Aura', contactoId: 2, estado: 'completado', fechaInicio: '2025-03-01', carpeta: { estado: 'archivado', ruta: 'Archivo/Proyectos/Tienda', abrible: false } }),
+    fila(2, 'Tienda', { contacto: 'Hotel Aura', contactoId: 2, estado: 'completado', fechaInicio: '2025-03-01', carpeta: { estado: 'archivado', ruta: 'Archivo/Proyectos/Tienda', abrible: false }, sinIngresosRegistrados: true }),
     fila(1, 'Campaña', { estado: 'pausado', carpeta: { estado: 'no_disponible', ruta: 'Proyectos/Campaña', abrible: false } })
   ],
   conteo: { en_curso: 1, pausado: 1, completado: 1, cancelado: 0 },
@@ -107,6 +108,17 @@ describe('Proyectos', () => {
 
     fireEvent.click(within(filas[0]).getByRole('button', { name: 'Abrir' }))
     await waitFor(() => expect(api.abrirCarpeta).toHaveBeenCalledWith(3))
+  })
+
+  it('flags a completed Proyecto whose Ingresos were never registered, and filters by it', async () => {
+    montar('/proyectos')
+    await screen.findByText('PRY-003')
+    const filas = screen.getAllByRole('row').slice(1)
+    expect(within(filas[1]).getByText('Sin ingresos registrados')).toBeTruthy()
+    expect(within(filas[0]).queryByText('Sin ingresos registrados')).toBeNull()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Sin ingresos registrados' }))
+    expect(screen.getAllByRole('row').slice(1).map((f) => f.querySelector('td')!.textContent)).toEqual(['PRY-002'])
   })
 
   it('filters by estado and search', async () => {

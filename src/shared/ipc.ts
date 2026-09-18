@@ -395,6 +395,8 @@ export interface FilaProyecto {
   fechaInicio: string | null
   estado: EstadoProyecto
   carpeta: CarpetaProyecto
+  /** Completed, with a folder and a Cotización, but its Ingresos never reached the quote total. */
+  sinIngresosRegistrados: boolean
 }
 
 export interface ListaProyectos {
