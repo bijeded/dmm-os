@@ -51,6 +51,7 @@ const ficha: Ficha = {
   carpeta: { estado: 'disponible', ruta: 'Proyectos/Clínica Sol - Sitio web', abrible: true },
   porCobrar: 2_400_000,
   cobrado: 0,
+  falta: { pendientes: 1, faltante: 2_784_000, moneda: 'MXN' },
   acciones: ['editar', 'pausar', 'cancelar']
 }
 
@@ -123,8 +124,11 @@ describe('FichaProyecto', () => {
   it('shows what is still to be paid, and only the actions its estado allows', async () => {
     montar('/proyectos/1')
     expect(await screen.findByRole('heading', { name: 'Sitio web' })).toBeTruthy()
-    expect(screen.getByText(/se completa cuando esté pagado/i)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Completar' })).toBeNull()
+    const completar = screen.getByRole('button', { name: 'Completar' })
+    expect(completar).toHaveProperty('disabled', true)
+    expect(document.getElementById(completar.getAttribute('aria-describedby')!)!.textContent).toMatch(
+      /1 pago pendiente por cobrar · faltan \$27,840\.00 para el total de la cotización/
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Pausar' }))
     expect(await screen.findByRole('button', { name: 'Reanudar' })).toBeTruthy()
   })

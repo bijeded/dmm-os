@@ -119,11 +119,12 @@ describe('estado', () => {
     const c = db.insert(cotizaciones).values({ contactoId, folio: 7, categoria: 'website', estado: 'aceptada', fecha: hoy, subtotal: 2000, iva: 320, total: 2320 }).returning().get()
     const p = proyecto(contactoId, c.id)
     db.insert(ingresos).values({ ...ingresoBase, categoria: 'sin_factura', proyectoId: p.id, estado: 'pagado' }).run()
+    expect(fichaProyecto(db, root, p.id)).toMatchObject({ falta: { pendientes: 0, faltante: 1160, moneda: 'MXN' } })
     expect(fichaProyecto(db, root, p.id).acciones).not.toContain('completar')
     expect(() => completarProyecto(db, root, p.id, hoy)).toThrow(/pagado/i)
 
     db.insert(ingresos).values({ ...ingresoBase, categoria: 'sin_factura', proyectoId: p.id, estado: 'pagado' }).run()
-    expect(completarProyecto(db, root, p.id, hoy).estado).toBe('completado')
+    expect(completarProyecto(db, root, p.id, hoy)).toMatchObject({ estado: 'completado', falta: null })
   })
 
   it('compares a USD Cotización in USD', () => {

@@ -417,6 +417,12 @@ export interface FichaProyecto extends Required<Omit<ProyectoNuevo, 'id'>> {
   /** Pending Ingresos, centavos before IVA: while any remain it cannot be completed. */
   porCobrar: number
   cobrado: number
+  /**
+   * Why its estado allows completing it but its payments don't yet: how many Ingresos are
+   * pending, and what is missing to reach its Cotización's total (with IVA, in the quote's
+   * currency). `null` when it can be completed, or its estado doesn't allow it.
+   */
+  falta: { pendientes: number; faltante: number; moneda: 'MXN' | 'USD' } | null
   acciones: AccionProyecto[]
 }
 
