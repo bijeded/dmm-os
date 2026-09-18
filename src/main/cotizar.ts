@@ -15,7 +15,7 @@ import {
   type ListaCotizaciones,
   type PartidaCotizacion
 } from '../shared/ipc'
-import { folioDmm, TASA_IVA } from '../shared/formato'
+import { folioDmm, totalesCotizacion } from '../shared/formato'
 
 /** Prints a page of HTML to PDF bytes; in the app, Electron's `printToPDF`. */
 export type ImprimirPdf = (html: string) => Promise<Uint8Array>
@@ -76,8 +76,7 @@ export function guardarCotizacion(db: Db, c: CotizacionNueva): FichaCotizacion {
     throw new Error('Un costo a MSI necesita al menos 2 mensualidades')
   if (!/^\d{4}-\d{2}-\d{2}$/.test(c.fecha)) throw new Error('Fecha inválida')
 
-  const subtotal = Math.round(c.partidas.reduce((s, p) => s + p.cantidad * p.precio, 0))
-  const iva = c.conIva ? Math.round(subtotal * TASA_IVA) : 0
+  const { subtotal, iva } = totalesCotizacion(c.partidas, c.conIva)
   const valores = {
     contactoId: c.contactoId,
     nombre,

@@ -11,7 +11,7 @@ import {
   type CotizacionNueva,
   type FilaContacto
 } from '../../../shared/ipc'
-import { diaLocal, TASA_IVA } from '../../../shared/formato'
+import { diaLocal, totalesCotizacion } from '../../../shared/formato'
 import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
@@ -84,8 +84,7 @@ export function NuevaCotizacion() {
   const costo = (i: number, cambios: Partial<CotizacionNueva['costosEstimados'][number]>) =>
     cambiar({ costosEstimados: c.costosEstimados.map((e, j) => (j === i ? { ...e, ...cambios } : e)) })
 
-  const subtotal = Math.round(c.partidas.reduce((s, p) => s + p.cantidad * p.precio, 0))
-  const iva = c.conIva ? Math.round(subtotal * TASA_IVA) : 0
+  const { subtotal, iva, total } = totalesCotizacion(c.partidas, c.conIva)
   const visibles = catalogo.filter((k) => k.concepto.toLowerCase().includes(buscar.trim().toLowerCase()))
 
   const guardar = (enviar: boolean) =>
@@ -232,7 +231,7 @@ export function NuevaCotizacion() {
               </dt>
               <dd className="m-0 text-right font-mono">{pesos(iva)}</dd>
               <dt className="font-bold">Total</dt>
-              <dd className="m-0 text-right font-mono font-bold">{pesos(subtotal + iva)}</dd>
+              <dd className="m-0 text-right font-mono font-bold">{pesos(total)}</dd>
             </dl>
           </section>
 
