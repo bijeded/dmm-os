@@ -116,3 +116,12 @@ describe('contactos', () => {
     expect(await h.contactos.csv()).toBe('nombre,empresa,email,telefono,estado\r\n')
   })
 })
+
+describe('Catálogo', () => {
+  it('adds, edits and deletes concepts through the handlers', async () => {
+    const [c] = await h.catalogo.guardar({ concepto: 'Chatbot AI', categoria: 'ai', precio: 1_800_000 })
+    expect(await h.catalogo.guardar({ ...c, precio: 2_000_000 })).toEqual([{ ...c, precio: 2_000_000 }])
+    expect(await h.catalogo.listar()).toHaveLength(1)
+    expect(await h.catalogo.borrar(c.id)).toEqual([])
+  })
+})

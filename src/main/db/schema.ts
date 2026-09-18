@@ -8,11 +8,12 @@ import {
   uniqueIndex,
   type AnySQLiteColumn
 } from 'drizzle-orm/sqlite-core'
+import { CATEGORIAS } from '../../shared/ipc'
 
 // Money is stored as integer centavos (MXN). Periods are 'YYYY-MM'. Dates are 'YYYY-MM-DD'.
 // File locations are relative paths (docs/adr/0001).
 
-export const categorias = ['website', 'ecommerce', 'app', 'ai', 'marketing', 'other'] as const
+export const categorias = CATEGORIAS
 
 const creadoEn = () =>
   text('creado_en')
@@ -52,6 +53,17 @@ export const contactos = sqliteTable(
   },
   (t) => [uniqueIndex('contactos_rfc_unique').on(t.rfc)]
 )
+
+// Catálogo: default prices only. A Cotización copies them into its items at creation, so
+// nothing links back here and later edits don't touch past quotes.
+export const catalogo = sqliteTable('catalogo', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  concepto: text('concepto').notNull(),
+  categoria: text('categoria', { enum: categorias }).notNull(),
+  /** Default price before IVA. */
+  precio: integer('precio').notNull(),
+  creadoEn: creadoEn()
+})
 
 export const cotizaciones = sqliteTable(
   'cotizaciones',

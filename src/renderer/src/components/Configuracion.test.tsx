@@ -17,16 +17,18 @@ beforeEach(() => {
       estado: vi.fn(async () => ({ facturas: null, carpetas: null })),
       sugerencias: vi.fn(async () => []),
       responder: vi.fn()
-    }
+    },
+    catalogo: { listar: vi.fn(async () => []), guardar: vi.fn(), borrar: vi.fn() }
   } as unknown as DmmApi
 })
 afterEach(cleanup)
 
 describe('Configuración', () => {
-  it('shows Ubicación, Logs and Exportar', async () => {
+  it('shows Ubicación, Logs, Catálogo and Exportar', async () => {
     render(<Configuracion />)
     expect(await screen.findByText('Ubicación')).toBeTruthy()
     expect(screen.getByText('Logs')).toBeTruthy()
+    expect(screen.getByText('Catálogo')).toBeTruthy()
     expect(screen.getByText('Exportar')).toBeTruthy()
   })
 })

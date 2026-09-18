@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import type { Respaldos } from './backup'
+import { borrarConcepto, guardarConcepto, listarCatalogo } from './catalogo'
 import { borrarContacto, contactosCsv, fichaContacto, listarContactos } from './contactos'
 import type { Conexion } from './db'
 import { coberturaCostos } from './db/cobertura'
@@ -90,6 +91,11 @@ export function crearHandlers({
       ficha: (id) => fichaContacto(conexion.db, info.dmmOsRoot, id),
       borrar: (id) => borrarContacto(conexion.db, id),
       csv: () => contactosCsv(conexion.db)
+    },
+    catalogo: {
+      listar: () => listarCatalogo(conexion.db),
+      guardar: (concepto) => guardarConcepto(conexion.db, concepto),
+      borrar: (id) => borrarConcepto(conexion.db, id)
     },
     finanzas: {
       coberturaCostos: (desde, hasta) => coberturaCostos(conexion.db, desde, hasta)

@@ -48,6 +48,11 @@ function handlers() {
       borrar: vi.fn(),
       csv: vi.fn(() => '')
     },
+    catalogo: {
+      listar: vi.fn(() => []),
+      guardar: vi.fn(() => []),
+      borrar: vi.fn(() => [])
+    },
     finanzas: {
       coberturaCostos: vi.fn(() => [{ anio: 2025, sinDatos: true }])
     }

@@ -187,6 +187,38 @@ export interface FichaContacto {
   archivos: ArchivoCliente[]
 }
 
+export const CATEGORIAS = ['website', 'ecommerce', 'app', 'ai', 'marketing', 'other'] as const
+export type Categoria = (typeof CATEGORIAS)[number]
+
+export const NOMBRES_CATEGORIA: Record<Categoria, string> = {
+  website: 'Website',
+  ecommerce: 'Ecommerce',
+  app: 'App',
+  ai: 'AI',
+  marketing: 'Marketing',
+  other: 'Otro'
+}
+
+/** A product or service of the Catálogo. `precio` is its default, in centavos before IVA. */
+export interface ConceptoCatalogo {
+  id: number
+  concepto: string
+  categoria: Categoria
+  precio: number
+}
+
+/** Without `id` it adds a concept; with one it edits it. */
+export type ConceptoNuevo = Omit<ConceptoCatalogo, 'id'> & { id?: number }
+
+/** One line of a Cotización's items: a copy taken at creation, never a link to the Catálogo. */
+export interface PartidaCotizacion {
+  concepto: string
+  categoria: Categoria
+  cantidad: number
+  /** Unit price in centavos before IVA. */
+  precio: number
+}
+
 export interface AppInfo {
   version: string
   dbPath: string
@@ -247,6 +279,14 @@ export const contrato = {
     borrar: canal<[id: number], void>(),
     /** Every Contacto as CSV, for a newsletter service. */
     csv: canal<[], string>()
+  },
+  catalogo: {
+    /** By name. */
+    listar: canal<[], ConceptoCatalogo[]>(),
+    /** Adds or edits a concept and returns the Catálogo. Past Cotizaciones keep their prices. */
+    guardar: canal<[concepto: ConceptoNuevo], ConceptoCatalogo[]>(),
+    /** Nothing links to a concept (Cotizaciones copy it), so it can always be deleted. */
+    borrar: canal<[id: number], ConceptoCatalogo[]>()
   },
   finanzas: {
     /** Which years show Sin datos because their Costos were never imported. */
