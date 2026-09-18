@@ -38,6 +38,13 @@ const pdf = (base: string, anio: string, nombre: string) => {
   writeFileSync(join(carpeta(base, 'Cotizaciones', anio), nombre), '%PDF-1.4')
 }
 
+/** A known Proyecto, Hospital Jardín, for the agency Grupo Ángeles; returns the agency. */
+const hospitalJardin = () => {
+  const [cliente] = db.insert(contactos).values({ nombre: 'Grupo Ángeles' }).returning().all()
+  db.insert(proyectos).values({ nombre: 'Hospital Jardín', contactoId: cliente.id, categoria: 'other', estado: 'en_curso' }).run()
+  return cliente
+}
+
 describe('escanear Cotizaciones/', () => {
   it('imports every quote PDF, year by year', () => {
     pdf(root, '2017', 'DMM - 134 - Versa.pdf')
@@ -68,8 +75,7 @@ describe('escanear Cotizaciones/', () => {
   })
 
   it('files a new-format quote under the Contacto of the Proyecto it names', () => {
-    const [cliente] = db.insert(contactos).values({ nombre: 'Grupo Ángeles' }).returning().all()
-    db.insert(proyectos).values({ nombre: 'Hospital Jardín', contactoId: cliente.id, categoria: 'other', estado: 'en_curso' }).run()
+    const cliente = hospitalJardin()
     pdf(root, '2026', '260114-DMM520-Hospital Jardin.pdf')
 
     const log = escanearCarpetas(db, root)
@@ -256,8 +262,7 @@ describe('una Cotización desde su PDF', () => {
   })
 
   it('dates it from the filename when the new format carries a date', () => {
-    const [cliente] = db.insert(contactos).values({ nombre: 'Grupo Ángeles' }).returning().all()
-    db.insert(proyectos).values({ nombre: 'Hospital Jardín', contactoId: cliente.id, categoria: 'other', estado: 'en_curso' }).run()
+    hospitalJardin()
     pdf(root, '2026', '260114-DMM520-Hospital Jardín.pdf')
     escanearCarpetas(db, root)
     expect(db.select().from(cotizaciones).get()!.fecha).toBe('2026-01-14')
