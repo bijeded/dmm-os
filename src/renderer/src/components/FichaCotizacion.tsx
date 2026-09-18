@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { NOMBRES_CATEGORIA, NOMBRES_ESTADO_COTIZACION, NOMBRES_FACTURACION, type FichaCotizacion as Ficha } from '../../../shared/ipc'
+import { NOMBRES_CATEGORIA, NOMBRES_CATEGORIA_COSTO, NOMBRES_ESTADO_COTIZACION, NOMBRES_FACTURACION, type FichaCotizacion as Ficha } from '../../../shared/ipc'
 import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
 import { dia } from './Cotizaciones'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
@@ -11,6 +11,7 @@ export function FichaCotizacion() {
   const id = Number(useParams().id)
   const navigate = useNavigate()
   const [ficha, setFicha] = useState<Ficha | null>(null)
+  const [tipoCambio, setTipoCambio] = useState('')
   const { error, ocupado, correr } = useAccion()
 
   useEffect(() => {
@@ -57,7 +58,19 @@ export function FichaCotizacion() {
                 <Button variant="ghost" disabled={ocupado} onClick={accion(api.rechazar)}>
                   Rechazada
                 </Button>
-                <Button disabled={ocupado} onClick={accion(api.aceptar)}>
+                {f.moneda === 'USD' && (
+                  <input
+                    aria-label="Tipo de cambio"
+                    type="number"
+                    min={0}
+                    step="0.0001"
+                    placeholder="MXN por USD"
+                    value={tipoCambio}
+                    onChange={(e) => setTipoCambio(e.target.value)}
+                    className="h-9 w-32 rounded-control border border-border-strong bg-surface-sunken px-2 font-mono text-[12px] text-on-surface"
+                  />
+                )}
+                <Button disabled={ocupado} onClick={accion((id) => (f.moneda === 'USD' ? api.aceptar(id, Number(tipoCambio)) : api.aceptar(id)))}>
                   Aceptada
                 </Button>
               </>
@@ -106,7 +119,7 @@ export function FichaCotizacion() {
                 <Datos>
                   {f.costosEstimados.map((e, i) => (
                     <Fila key={i} label={e.concepto}>
-                      {pesos(e.monto)}
+                      {pesos(e.monto)} · {e.categoria === 'msi' ? `${e.parcialidades} MSI` : NOMBRES_CATEGORIA_COSTO[e.categoria ?? 'unico']}
                     </Fila>
                   ))}
                 </Datos>

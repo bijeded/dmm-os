@@ -219,10 +219,26 @@ export interface PartidaCotizacion {
   precio: number
 }
 
-/** A cost DMM expects to pay for a quote, in centavos before IVA. Never shown to the Contacto. */
+export const CATEGORIAS_COSTO = ['unico', 'mensual', 'msi', 'anual'] as const
+export type CategoriaCosto = (typeof CATEGORIAS_COSTO)[number]
+
+export const NOMBRES_CATEGORIA_COSTO: Record<CategoriaCosto, string> = {
+  unico: 'Único',
+  mensual: 'Mensual',
+  msi: 'MSI',
+  anual: 'Anual'
+}
+
+/**
+ * A cost DMM expects to pay for a quote, in the quote's currency, centavos before IVA. Never
+ * shown to the Contacto. `monto` is per period for recurring costs, per installment for MSI.
+ */
 export interface CostoEstimado {
   concepto: string
   monto: number
+  categoria: CategoriaCosto
+  /** How many installments, only for `msi`. */
+  parcialidades: number | null
 }
 
 export const ESTADOS_COTIZACION = ['borrador', 'enviada', 'aceptada', 'rechazada', 'cancelada', 'expirada'] as const
@@ -391,8 +407,11 @@ export const contrato = {
     guardar: canal<[cotizacion: CotizacionNueva], FichaCotizacion>(),
     /** Assigns the Folio, prints the PDF into `Cotizaciones/<year>/` and marks it sent. */
     enviar: canal<[id: number], FichaCotizacion>(),
-    /** Creates the Proyecto, its pending Ingresos and the estimated Costos. */
-    aceptar: canal<[id: number], FichaCotizacion>(),
+    /**
+     * Creates the Proyecto, its pending Ingresos and the estimated Costos. A USD quote needs the
+     * exchange rate: money is recorded in MXN, the USD amount kept as original.
+     */
+    aceptar: canal<[id: number, tipoCambio?: number], FichaCotizacion>(),
     rechazar: canal<[id: number], FichaCotizacion>(),
     /** Cancels the quote and its Proyecto (Cancelación con pagos). */
     cancelar: canal<[id: number], FichaCotizacion>(),

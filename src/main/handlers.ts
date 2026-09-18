@@ -9,6 +9,7 @@ import {
   borrarCotizacion,
   cancelarCotizacion,
   enviarCotizacion,
+  expirarCotizaciones,
   fichaCotizacion,
   guardarCotizacion,
   listarCotizaciones,
@@ -49,6 +50,8 @@ export function crearHandlers({
     const d = new Date(ahora())
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
+  // An expired quote turns its Contacto from hot lead back to cold, so Contactos expires too.
+  const expirar = () => expirarCotizaciones(conexion.db, hoy())
 
   // The external HDD is organised like the main root, and is usually disconnected. Its path is
   // read per call, so plugging the drive in needs no restart; when it is absent its Proyectos
@@ -106,8 +109,8 @@ export function crearHandlers({
       }
     },
     contactos: {
-      listar: () => listarContactos(conexion.db),
-      ficha: (id) => fichaContacto(conexion.db, info.dmmOsRoot, id),
+      listar: () => (expirar(), listarContactos(conexion.db)),
+      ficha: (id) => (expirar(), fichaContacto(conexion.db, info.dmmOsRoot, id)),
       borrar: (id) => borrarContacto(conexion.db, id),
       csv: () => contactosCsv(conexion.db)
     },
@@ -117,11 +120,12 @@ export function crearHandlers({
       borrar: (id) => borrarConcepto(conexion.db, id)
     },
     cotizaciones: {
-      listar: () => listarCotizaciones(conexion.db),
-      ficha: (id) => fichaCotizacion(conexion.db, id),
+      // Expiring is derived from the calendar, so it is brought up to date whenever quotes are read.
+      listar: () => (expirar(), listarCotizaciones(conexion.db)),
+      ficha: (id) => (expirar(), fichaCotizacion(conexion.db, id)),
       guardar: (cotizacion) => guardarCotizacion(conexion.db, cotizacion),
       enviar: (id) => enviarCotizacion(conexion.db, info.dmmOsRoot, id, imprimirPdf),
-      aceptar: (id) => aceptarCotizacion(conexion.db, id, hoy()),
+      aceptar: (id, tipoCambio) => (expirar(), aceptarCotizacion(conexion.db, id, hoy(), tipoCambio)),
       rechazar: (id) => rechazarCotizacion(conexion.db, id),
       cancelar: (id) => cancelarCotizacion(conexion.db, id),
       borrar: (id) => borrarCotizacion(conexion.db, id),

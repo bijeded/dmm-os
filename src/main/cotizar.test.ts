@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { costos, cotizaciones, definicionesIngreso, ingresos, proyectos } from './db/schema'
+import { costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, vigenciasPrecio } from './db/schema'
 import { contacto, db, reiniciarDb } from './db/test-db'
 import {
   aceptarCotizacion,
@@ -11,6 +11,7 @@ import {
   borrarCotizacion,
   cancelarCotizacion,
   enviarCotizacion,
+  expirarCotizaciones,
   fichaCotizacion,
   guardarCotizacion,
   listarCotizaciones,
@@ -46,7 +47,7 @@ const nueva = (cambios: Partial<CotizacionNueva> = {}): CotizacionNueva => ({
   stack: null,
   terminos: null,
   notas: null,
-  costosEstimados: [{ concepto: 'Hosting', monto: 200_000 }],
+  costosEstimados: [{ concepto: 'Hosting', monto: 200_000, categoria: 'unico', parcialidades: null }],
   ...cambios
 })
 
@@ -59,7 +60,7 @@ describe('guardar', () => {
   it('saves a draft without Folio, with totals from its items', () => {
     const f = guardarCotizacion(db, nueva())
     expect(f).toMatchObject({ folio: null, estado: 'borrador', subtotal: 3_000_000, iva: 480_000, total: 3_480_000, contacto: 'Clínica Sol' })
-    expect(f.costosEstimados).toEqual([{ concepto: 'Hosting', monto: 200_000 }])
+    expect(f.costosEstimados).toEqual([{ concepto: 'Hosting', monto: 200_000, categoria: 'unico', parcialidades: null }])
   })
 
   it('edits a draft in place', () => {
@@ -137,9 +138,71 @@ describe('aceptar', () => {
     expect(db.select().from(ingresos).all()).toEqual([])
   })
 
+  it('converts a USD quote to MXN at the given exchange rate, keeping the USD amount', async () => {
+    const { id } = await enviada({
+      moneda: 'USD',
+      partidas: [{ concepto: 'App', categoria: 'app', cantidad: 1, precio: 100_000 }],
+      costosEstimados: [{ concepto: 'Servidor', monto: 10_000, categoria: 'unico', parcialidades: null }]
+    })
+    expect(() => aceptarCotizacion(db, id, '2026-09-20')).toThrow('tipo de cambio')
+    aceptarCotizacion(db, id, '2026-09-20', 18.5)
+    expect(db.select().from(ingresos).all()).toMatchObject([{ subtotal: 1_850_000, iva: 296_000, total: 2_146_000, montoOriginal: 116_000, monedaOriginal: 'USD' }])
+    expect(db.select().from(costos).all()).toMatchObject([{ subtotal: 185_000, total: 185_000, montoOriginal: 10_000, monedaOriginal: 'USD' }])
+  })
+
+  it('turns recurring estimated costs into Costo definitions from the month it was accepted', async () => {
+    const f = aceptarCotizacion(
+      db,
+      (
+        await enviada({
+          costosEstimados: [
+            { concepto: 'Hosting', monto: 50_000, categoria: 'mensual', parcialidades: null },
+            { concepto: 'Laptop', monto: 250_000, categoria: 'msi', parcialidades: 12 },
+            { concepto: 'Dominio', monto: 30_000, categoria: 'anual', parcialidades: null }
+          ]
+        })
+      ).id,
+      '2026-09-20'
+    )
+    expect(db.select().from(costos).all()).toEqual([])
+    expect(db.select().from(definicionesCosto).all()).toMatchObject([
+      { nombre: 'Hosting', tipo: 'mensual', periodoInicio: '2026-09', diaDelMes: 20, numeroParcialidades: null, proyectoId: f.proyectoId },
+      { nombre: 'Laptop', tipo: 'msi', periodoInicio: '2026-09', numeroParcialidades: 12, proyectoId: f.proyectoId },
+      { nombre: 'Dominio', tipo: 'anual', periodoInicio: '2026-09', proyectoId: f.proyectoId }
+    ])
+    expect(db.select().from(vigenciasPrecio).all().map((v) => [v.desde, v.subtotal])).toEqual([
+      ['2026-09', 50_000],
+      ['2026-09', 250_000],
+      ['2026-09', 30_000]
+    ])
+  })
+
+  it('refuses MSI estimated costs without an installment count', () => {
+    expect(() => guardarCotizacion(db, nueva({ costosEstimados: [{ concepto: 'Laptop', monto: 1, categoria: 'msi', parcialidades: null }] }))).toThrow('MSI')
+  })
+
   it('only accepts sent quotes', () => {
     const { id } = guardarCotizacion(db, nueva())
     expect(() => aceptarCotizacion(db, id, '2026-09-20')).toThrow('enviada')
+  })
+})
+
+describe('expirar', () => {
+  it('moves a sent quote to expirada once its validity has run out', async () => {
+    const { id } = await enviada({ fecha: '2026-09-01', validezDias: 30 })
+    expirarCotizaciones(db, '2026-10-01')
+    expect(fichaCotizacion(db, id).estado).toBe('enviada')
+    expirarCotizaciones(db, '2026-10-02')
+    expect(fichaCotizacion(db, id).estado).toBe('expirada')
+    expect(() => aceptarCotizacion(db, id, '2026-10-02')).toThrow('enviada')
+  })
+
+  it('leaves drafts and answered quotes alone', async () => {
+    const borrador = guardarCotizacion(db, nueva({ fecha: '2020-01-01' }))
+    const aceptada = aceptarCotizacion(db, (await enviada({ fecha: '2020-01-01' })).id, '2020-01-02')
+    expirarCotizaciones(db, '2026-10-02')
+    expect(fichaCotizacion(db, borrador.id).estado).toBe('borrador')
+    expect(fichaCotizacion(db, aceptada.id).estado).toBe('aceptada')
   })
 })
 

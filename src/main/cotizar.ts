@@ -1,12 +1,13 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { eq, max } from 'drizzle-orm'
+import { and, eq, max } from 'drizzle-orm'
 import type { Db } from './db'
 import { borrar, cancelar } from './db/cancelacion'
-import { contactos, costos, cotizaciones, definicionesIngreso, ingresos, proyectos } from './db/schema'
+import { contactos, costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, vigenciasPrecio } from './db/schema'
 import { plantillaCotizacion } from './plantilla-cotizacion'
 import {
   CATEGORIAS,
+  CATEGORIAS_COSTO,
   FACTURACIONES,
   type Categoria,
   type CotizacionNueva,
@@ -70,7 +71,10 @@ export function guardarCotizacion(db: Db, c: CotizacionNueva): FichaCotizacion {
   if (!CATEGORIAS.includes(c.categoria)) throw new Error('Categoría desconocida')
   if (!FACTURACIONES.includes(c.facturacion)) throw new Error('Facturación desconocida')
   if (c.facturacion === 'parcialidades' && !(Number.isInteger(c.parcialidades) && c.parcialidades! >= 2)) throw new Error('Indica al menos 2 parcialidades')
-  if (c.costosEstimados.some((e) => !e.concepto.trim() || !esMonto(e.monto))) throw new Error('Cada costo estimado necesita concepto y monto')
+  if (c.costosEstimados.some((e) => !e.concepto.trim() || !esMonto(e.monto) || !CATEGORIAS_COSTO.includes(e.categoria)))
+    throw new Error('Cada costo estimado necesita concepto, monto y tipo')
+  if (c.costosEstimados.some((e) => e.categoria === 'msi' && !(Number.isInteger(e.parcialidades) && e.parcialidades! >= 2)))
+    throw new Error('Un costo a MSI necesita al menos 2 mensualidades')
   if (!/^\d{4}-\d{2}-\d{2}$/.test(c.fecha)) throw new Error('Fecha inválida')
 
   const subtotal = Math.round(c.partidas.reduce((s, p) => s + p.cantidad * p.precio, 0))
@@ -91,7 +95,7 @@ export function guardarCotizacion(db: Db, c: CotizacionNueva): FichaCotizacion {
     stack: c.stack?.trim() || null,
     terminos: c.terminos?.trim() || null,
     notas: c.notas?.trim() || null,
-    costosEstimados: c.costosEstimados.map((e) => ({ ...e, concepto: e.concepto.trim() }))
+    costosEstimados: c.costosEstimados.map((e) => ({ ...e, concepto: e.concepto.trim(), parcialidades: e.categoria === 'msi' ? e.parcialidades : null }))
   }
 
   if (c.id === undefined) return fichaCotizacion(db, db.insert(cotizaciones).values(valores).returning({ id: cotizaciones.id }).get().id)
@@ -133,13 +137,43 @@ const repartir = (total: number, n: number) => {
   return Array.from({ length: n }, (_, i) => (i === 0 ? total - parte * (n - 1) : parte))
 }
 
+/** The last day a quote can be accepted: its date plus its validity. */
+export function venceEl(fecha: string, validezDias: number): string {
+  const d = new Date(`${fecha}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + validezDias)
+  return d.toISOString().slice(0, 10)
+}
+
+/** A sent quote nobody answered within its validity becomes expirada. Safe to run at any time. */
+export function expirarCotizaciones(db: Db, hoy: string): void {
+  for (const c of db.select().from(cotizaciones).where(eq(cotizaciones.estado, 'enviada')).all()) {
+    if (venceEl(c.fecha, c.validezDias) < hoy) {
+      db.update(cotizaciones).set({ estado: 'expirada' }).where(and(eq(cotizaciones.id, c.id), eq(cotizaciones.estado, 'enviada'))).run()
+    }
+  }
+}
+
 /**
  * Accepting a sent quote creates its Proyecto, the pending Ingresos (por facturar, dates blank
- * until invoiced) or the monthly definition, and the estimated Costos.
+ * until invoiced) or the monthly definition, and the estimated Costos: one-time ones as a Costo,
+ * recurring ones as a definition that generates its periods. Money is always recorded in MXN;
+ * a USD quote is converted at `tipoCambio` and keeps its USD amount as the original.
  */
-export function aceptarCotizacion(db: Db, id: number, hoy: string): FichaCotizacion {
+export function aceptarCotizacion(db: Db, id: number, hoy: string, tipoCambio?: number): FichaCotizacion {
   const c = leer(db, id)
   if (c.estado !== 'enviada') throw new Error('Solo una cotización enviada se puede aceptar')
+  const usd = c.moneda === 'USD'
+  if (usd && !(tipoCambio !== undefined && tipoCambio > 0)) throw new Error('Indica el tipo de cambio de la cotización en USD')
+  const mxn = (n: number) => (usd ? Math.round(n * tipoCambio!) : n)
+  /** Subtotal and IVA converted to MXN, their total, and the original amount when it was USD. */
+  const montos = (subtotal: number, iva: number) => ({
+    subtotal: mxn(subtotal),
+    iva: mxn(iva),
+    total: mxn(subtotal) + mxn(iva),
+    montoOriginal: usd ? subtotal + iva : null,
+    monedaOriginal: usd ? ('USD' as const) : null
+  })
+  const periodo = hoy.slice(0, 7)
 
   db.transaction((tx) => {
     tx.update(cotizaciones).set({ estado: 'aceptada' }).where(eq(cotizaciones.id, id)).run()
@@ -152,7 +186,7 @@ export function aceptarCotizacion(db: Db, id: number, hoy: string): FichaCotizac
 
     if (c.facturacion === 'mensual') {
       tx.insert(definicionesIngreso)
-        .values({ ...vinculos, tipo: 'mensual', categoria: 'factura', subtotal: c.subtotal, iva: c.iva, total: c.total, periodoInicio: hoy.slice(0, 7) })
+        .values({ ...vinculos, ...montos(c.subtotal, c.iva), tipo: 'mensual', categoria: 'factura', periodoInicio: periodo })
         .run()
     } else {
       const n = c.facturacion === 'parcialidades' ? (c.parcialidades ?? 1) : 1
@@ -165,9 +199,7 @@ export function aceptarCotizacion(db: Db, id: number, hoy: string): FichaCotizac
             ...vinculos,
             categoria: 'factura',
             estadoFacturacion: 'por_facturar',
-            subtotal,
-            iva: ivas[i],
-            total: subtotal + ivas[i],
+            ...montos(subtotal, ivas[i]),
             notas: n > 1 ? `Parcialidad ${i + 1} de ${n}` : null
           })
           .run()
@@ -175,9 +207,27 @@ export function aceptarCotizacion(db: Db, id: number, hoy: string): FichaCotizac
     }
 
     for (const e of c.costosEstimados) {
-      tx.insert(costos)
-        .values({ nombre: e.concepto, categoria: 'unico', estimado: true, subtotal: e.monto, total: e.monto, fecha: hoy, proyectoId, cotizacionId: id })
-        .run()
+      // Quotes saved before costs had a type were all one-time.
+      const categoria = e.categoria ?? 'unico'
+      if (categoria === 'unico') {
+        tx.insert(costos)
+          .values({ ...montos(e.monto, 0), nombre: e.concepto, categoria, estimado: true, fecha: hoy, proyectoId, cotizacionId: id })
+          .run()
+        continue
+      }
+      const definicionCostoId = tx
+        .insert(definicionesCosto)
+        .values({
+          nombre: e.concepto,
+          tipo: categoria,
+          proyectoId,
+          diaDelMes: Number(hoy.slice(8, 10)),
+          periodoInicio: periodo,
+          numeroParcialidades: categoria === 'msi' ? e.parcialidades : null
+        })
+        .returning({ id: definicionesCosto.id })
+        .get().id
+      tx.insert(vigenciasPrecio).values({ ...montos(e.monto, 0), definicionCostoId, desde: periodo }).run()
     }
   })
   return fichaCotizacion(db, id)

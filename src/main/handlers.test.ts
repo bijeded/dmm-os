@@ -152,4 +152,25 @@ describe('cotizaciones', () => {
     await h.cotizaciones.abrirPdf(id)
     expect(opciones.abrirCarpeta).toHaveBeenCalledWith(join(root, pdf!))
   })
+  it('expires sent quotes past their validity whenever quotes are read', async () => {
+    const { id: contactoId } = conexion.db.insert(contactos).values({ nombre: 'Hotel Aura' }).returning().get()
+    const { id } = await h.cotizaciones.guardar({
+      contactoId,
+      nombre: 'Tienda',
+      categoria: 'ecommerce',
+      fecha: '2026-08-01',
+      validezDias: 30,
+      moneda: 'MXN',
+      partidas: [{ concepto: 'Tienda', categoria: 'ecommerce', cantidad: 1, precio: 100 }],
+      conIva: false,
+      facturacion: 'unica',
+      parcialidades: null,
+      stack: null,
+      terminos: null,
+      notas: null,
+      costosEstimados: []
+    })
+    await h.cotizaciones.enviar(id)
+    expect((await h.cotizaciones.listar()).cotizaciones[0].estado).toBe('expirada')
+  })
 })

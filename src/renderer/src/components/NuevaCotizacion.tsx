@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import {
   CATEGORIAS,
+  CATEGORIAS_COSTO,
   FACTURACIONES,
   NOMBRES_CATEGORIA,
+  NOMBRES_CATEGORIA_COSTO,
   NOMBRES_FACTURACION,
   type ConceptoCatalogo,
   type CotizacionNueva,
@@ -238,17 +240,45 @@ export function NuevaCotizacion() {
 
           <section className="card flex flex-col gap-4 rounded-control border border-border p-6" aria-label="Costos estimados">
             <h2 className={`m-0 ${etiquetaCls}`}>Costos estimados</h2>
-            <p className="m-0 text-[12px] text-on-surface-muted">Internos: no aparecen en el PDF. Al aceptarse, se registran en Finanzas.</p>
+            <p className="m-0 text-[12px] text-on-surface-muted">
+              Internos: no aparecen en el PDF. Al aceptarse, se registran en Finanzas; los recurrentes generan un costo por periodo. El monto es por
+              periodo (por mensualidad a MSI).
+            </p>
             {c.costosEstimados.map((e, i) => (
               <div key={i} className="flex gap-2">
                 <input aria-label="Concepto del costo" value={e.concepto} onChange={(ev) => costo(i, { concepto: ev.target.value })} className={`${campoCls} flex-1`} />
                 <input aria-label="Monto del costo" type="number" min={0} value={aPesos(e.monto)} onChange={(ev) => costo(i, { monto: aCentavos(ev.target.value) })} className={numCls} />
+                <select
+                  aria-label="Tipo del costo"
+                  value={e.categoria}
+                  onChange={(ev) => {
+                    const categoria = ev.target.value as (typeof CATEGORIAS_COSTO)[number]
+                    costo(i, { categoria, parcialidades: categoria === 'msi' ? (e.parcialidades ?? 12) : null })
+                  }}
+                  className={campoCls}
+                >
+                  {CATEGORIAS_COSTO.map((k) => (
+                    <option key={k} value={k}>
+                      {NOMBRES_CATEGORIA_COSTO[k]}
+                    </option>
+                  ))}
+                </select>
+                {e.categoria === 'msi' && (
+                  <input
+                    aria-label="Mensualidades"
+                    type="number"
+                    min={2}
+                    value={e.parcialidades ?? 12}
+                    onChange={(ev) => costo(i, { parcialidades: Number(ev.target.value) })}
+                    className={`${numCls} w-20`}
+                  />
+                )}
                 <Button variant="ghost" aria-label="Quitar costo" onClick={() => cambiar({ costosEstimados: c.costosEstimados.filter((_, j) => j !== i) })}>
                   ×
                 </Button>
               </div>
             ))}
-            <Button variant="secondary" className="self-start" onClick={() => cambiar({ costosEstimados: [...c.costosEstimados, { concepto: '', monto: 0 }] })}>
+            <Button variant="secondary" className="self-start" onClick={() => cambiar({ costosEstimados: [...c.costosEstimados, { concepto: '', monto: 0, categoria: 'unico', parcialidades: null }] })}>
               Agregar costo
             </Button>
           </section>

@@ -154,6 +154,14 @@ describe('Nueva cotización', () => {
 })
 
 describe('Ficha de cotización', () => {
+  it('asks for the exchange rate when accepting a USD quote', async () => {
+    vi.mocked(api.ficha).mockResolvedValue({ ...ficha, moneda: 'USD' })
+    montar('/cotizaciones/2')
+    fireEvent.change(await screen.findByRole('spinbutton', { name: 'Tipo de cambio' }), { target: { value: '18.5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Aceptada' }))
+    await waitFor(() => expect(api.aceptar).toHaveBeenCalledWith(2, 18.5))
+  })
+
   it('accepts a sent quote', async () => {
     montar('/cotizaciones/2')
     fireEvent.click(await screen.findByRole('button', { name: 'Aceptada' }))
