@@ -66,6 +66,38 @@ describe('escanear Cotizaciones/', () => {
   it('reports the folder as No disponible when it cannot be read', () => {
     expect(escanearCarpetas(db, root).noDisponibles).toContain('Cotizaciones')
   })
+
+  it('files a new-format quote under the Contacto of the Proyecto it names', () => {
+    const [cliente] = db.insert(contactos).values({ nombre: 'Grupo Ángeles' }).returning().all()
+    db.insert(proyectos).values({ nombre: 'Hospital Jardín', contactoId: cliente.id, categoria: 'other', estado: 'en_curso' }).run()
+    pdf(root, '2026', '260114-DMM520-Hospital Jardin.pdf')
+
+    const log = escanearCarpetas(db, root)
+    expect(log.cotizaciones.importadas).toBe(1)
+    expect(db.select().from(cotizaciones).get()?.contactoId).toBe(cliente.id)
+    expect(db.select().from(contactos).all().map((c) => c.nombre)).toEqual(['Grupo Ángeles'])
+  })
+
+  it('files a new-format quote under a Proyecto folder found in the same scan', () => {
+    pdf(root, '2026', '260114-DMM520-Clicme.pdf')
+    carpeta(root, 'Proyectos', 'Clicme')
+
+    const log = escanearCarpetas(db, root)
+    expect(log.errores).toEqual([])
+    expect(db.select().from(cotizaciones).get()?.contactoId).toBe(db.select().from(proyectos).get()?.contactoId)
+  })
+
+  it('refuses a new-format quote whose Proyecto it does not know, rather than invent a Contacto', () => {
+    pdf(root, '2026', '260114-DMM520-Hospital Jardín.pdf')
+
+    const log = escanearCarpetas(db, root)
+    expect(log.cotizaciones.importadas).toBe(0)
+    expect(log.errores).toEqual([
+      { archivo: 'Cotizaciones/2026/260114-DMM520-Hospital Jardín.pdf', error: expect.stringContaining('Hospital Jardín') }
+    ])
+    expect(db.select().from(cotizaciones).all()).toHaveLength(0)
+    expect(db.select().from(contactos).all()).toHaveLength(0)
+  })
 })
 
 describe('escanear Clientes/ y Proyectos/', () => {
@@ -224,6 +256,8 @@ describe('una Cotización desde su PDF', () => {
   })
 
   it('dates it from the filename when the new format carries a date', () => {
+    const [cliente] = db.insert(contactos).values({ nombre: 'Grupo Ángeles' }).returning().all()
+    db.insert(proyectos).values({ nombre: 'Hospital Jardín', contactoId: cliente.id, categoria: 'other', estado: 'en_curso' }).run()
     pdf(root, '2026', '260114-DMM520-Hospital Jardín.pdf')
     escanearCarpetas(db, root)
     expect(db.select().from(cotizaciones).get()!.fecha).toBe('2026-01-14')
