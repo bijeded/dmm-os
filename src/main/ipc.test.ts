@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { contrato, crearApi, recorrerContrato, type DmmHandlers } from '../shared/ipc'
+import { contrato, crearApi, recorrerContrato, type DmmHandlers, type ResumenFinanzas } from '../shared/ipc'
 import { registerIpc } from './ipc'
 
 const info = { version: '0.1.0', dbPath: '/db', dmmOsRoot: '/root' }
@@ -100,7 +100,19 @@ function handlers() {
       abrirCarpeta: vi.fn(async () => {})
     },
     finanzas: {
-      coberturaCostos: vi.fn(() => [{ anio: 2025, sinDatos: true }])
+      coberturaCostos: vi.fn(() => [{ anio: 2025, sinDatos: true }]),
+      resumen: vi.fn(() => ({}) as ResumenFinanzas),
+      configurarVencida: vi.fn(),
+      nuevoIngreso: vi.fn(),
+      nuevoCosto: vi.fn(),
+      pagarIngreso: vi.fn(),
+      cancelarIngreso: vi.fn(),
+      borrarIngreso: vi.fn(),
+      reembolsar: vi.fn(),
+      pagarCosto: vi.fn(),
+      cancelarCosto: vi.fn(),
+      borrarCosto: vi.fn(),
+      detenerCosto: vi.fn()
     }
   } satisfies DmmHandlers
 }
