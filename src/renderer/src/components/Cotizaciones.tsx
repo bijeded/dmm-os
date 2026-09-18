@@ -9,6 +9,7 @@ import {
   type EstadoCotizacion,
   type ListaCotizaciones
 } from '../../../shared/ipc'
+import { folioDmm, normalizar } from '../../../shared/formato'
 import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
@@ -24,11 +25,6 @@ const COLORES: Record<Categoria, string> = {
   other: '#ADADAD'
 }
 
-const normalizar = (s: string) =>
-  s
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase()
 export const dia = (d: string) =>
   new Date(`${d.slice(0, 10)}T12:00:00`).toLocaleDateString('es-MX', {
     day: '2-digit',
@@ -106,8 +102,8 @@ export function Cotizaciones() {
               onChange={(e) => setBusqueda(e.target.value)}
               className="srch h-9 w-56 rounded-control border border-border-strong bg-surface-sunken px-3 text-[13px] text-on-surface"
             />
-            <select aria-label="Cliente" value={cliente} onChange={(e) => setCliente(e.target.value)} className={selectCls}>
-              <option value="">Cliente: Todos</option>
+            <select aria-label="Contacto" value={cliente} onChange={(e) => setCliente(e.target.value)} className={selectCls}>
+              <option value="">Contacto: Todos</option>
               {clientes.map(([id, nombre]) => (
                 <option key={id} value={id}>
                   {nombre}
@@ -143,7 +139,7 @@ export function Cotizaciones() {
               <tr className={etiquetaCls}>
                 <th className={celdaCls}>Ref.</th>
                 <th className={celdaCls}>Fecha</th>
-                <th className={celdaCls}>Cliente</th>
+                <th className={celdaCls}>Contacto</th>
                 <th className={celdaCls}>Categoría</th>
                 <th className={celdaCls}>Monto</th>
                 <th className={celdaCls}>Estado</th>
@@ -154,12 +150,12 @@ export function Cotizaciones() {
               {filtradas.map((c) => (
                 <tr key={c.id} className="cursor-pointer" onClick={() => navigate(`/cotizaciones/${c.id}`)}>
                   <td data-label="Ref." className={`${celdaCls} font-mono text-[12px]`}>
-                    {c.folio ? `DMM${c.folio}` : '—'}
+                    {c.folio ? folioDmm(c.folio) : '—'}
                   </td>
                   <td data-label="Fecha" className={celdaCls}>
                     {dia(c.fecha)}
                   </td>
-                  <td data-label="Cliente" className={celdaCls}>
+                  <td data-label="Contacto" className={celdaCls}>
                     {c.contacto}
                   </td>
                   <td data-label="Categoría" className={celdaCls}>

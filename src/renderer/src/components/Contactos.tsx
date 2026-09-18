@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ESTADOS_CONTACTO, NOMBRES_ESTADO_CONTACTO, type EstadoContacto, type ListaContactos } from '../../../shared/ipc'
+import { normalizar } from '../../../shared/formato'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
 
@@ -21,8 +22,6 @@ export const tituloCls = 'm-0 font-display text-[29px] leading-[1.22] font-bold 
 export const etiquetaCls = 'font-mono text-[10px] font-semibold tracking-[.12em] text-on-surface-muted uppercase'
 export const celdaCls = 'border-b border-border px-3 py-2.5 text-left'
 
-// Search ignores accents and case: "clinica" finds "Clínica Sol".
-const normalizar = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
 
 /** Contactos: who DMM deals with, how each one stands, and who the revenue comes from. */
 export function Contactos() {

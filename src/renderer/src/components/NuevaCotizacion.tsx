@@ -11,6 +11,7 @@ import {
   type CotizacionNueva,
   type FilaContacto
 } from '../../../shared/ipc'
+import { diaLocal, TASA_IVA } from '../../../shared/formato'
 import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
@@ -18,10 +19,7 @@ import { Button } from './ui/button'
 const campoCls = 'h-9 rounded-control border border-border-strong bg-surface-sunken px-2 text-[13px] text-on-surface'
 const numCls = `${campoCls} w-28 font-mono text-[12px]`
 
-const hoy = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
+const hoy = () => diaLocal(new Date())
 
 // Money is typed in pesos and kept in centavos.
 const aCentavos = (pesos: string) => Math.round(Number(pesos || 0) * 100)
@@ -87,7 +85,7 @@ export function NuevaCotizacion() {
     cambiar({ costosEstimados: c.costosEstimados.map((e, j) => (j === i ? { ...e, ...cambios } : e)) })
 
   const subtotal = Math.round(c.partidas.reduce((s, p) => s + p.cantidad * p.precio, 0))
-  const iva = c.conIva ? Math.round(subtotal * 0.16) : 0
+  const iva = c.conIva ? Math.round(subtotal * TASA_IVA) : 0
   const visibles = catalogo.filter((k) => k.concepto.toLowerCase().includes(buscar.trim().toLowerCase()))
 
   const guardar = (enviar: boolean) =>
@@ -125,7 +123,7 @@ export function NuevaCotizacion() {
       <div className="g-split grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] items-start gap-[18px]">
         <div className="flex flex-col gap-[18px]">
           <section className="card grid grid-cols-2 gap-4 rounded-control border border-border p-6" aria-label="Datos">
-            <Campo label="Cliente">
+            <Campo label="Contacto">
               <select value={c.contactoId || ''} onChange={(e) => cambiar({ contactoId: Number(e.target.value) })} className={campoCls}>
                 <option value="">Elige un cliente</option>
                 {contactos.map((k) => (

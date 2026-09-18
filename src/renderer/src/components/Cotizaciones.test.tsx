@@ -114,7 +114,7 @@ describe('Cotizaciones', () => {
     expect(filas().map((r) => r.cells[2].textContent)).toEqual(['Grupo Terra'])
     fireEvent.change(screen.getByRole('combobox', { name: 'Estado' }), { target: { value: '' } })
     fireEvent.change(screen.getByRole('combobox', { name: 'Categoría' }), { target: { value: 'ecommerce' } })
-    fireEvent.change(screen.getByRole('combobox', { name: 'Cliente' }), { target: { value: '1' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Contacto' }), { target: { value: '1' } })
     expect(filas().map((r) => r.cells[0].textContent)).toEqual(['DMM519'])
   })
 
@@ -134,7 +134,7 @@ describe('Nueva cotización', () => {
     expect((screen.getByRole('spinbutton', { name: 'Precio' }) as HTMLInputElement).value).toBe('9500')
     expect(screen.getByLabelText('Totales').textContent).toContain('$11,020.00')
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Cliente' }), { target: { value: '7' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Contacto' }), { target: { value: '7' } })
     fireEvent.change(screen.getByRole('textbox', { name: 'Título' }), { target: { value: 'Landing' } })
     fireEvent.click(screen.getByRole('button', { name: 'Generar PDF y archivar' }))
 

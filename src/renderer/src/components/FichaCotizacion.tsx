@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { NOMBRES_CATEGORIA, NOMBRES_CATEGORIA_COSTO, NOMBRES_ESTADO_COTIZACION, NOMBRES_FACTURACION, type FichaCotizacion as Ficha } from '../../../shared/ipc'
+import { folioDmm } from '../../../shared/formato'
 import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
 import { dia } from './Cotizaciones'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
@@ -29,7 +30,7 @@ export function FichaCotizacion() {
         <Link to="/cotizaciones" className="text-primary-text">
           Cotizaciones
         </Link>{' '}
-        / {f?.folio ? `DMM${f.folio}` : 'Borrador'}
+        / {f?.folio ? folioDmm(f.folio) : 'Borrador'}
       </nav>
       <div className="acts flex flex-wrap items-center justify-between gap-3">
         <h1 className={tituloCls}>{f?.nombre || 'Cotización'}</h1>
@@ -130,7 +131,7 @@ export function FichaCotizacion() {
           <Seccion id="datos" titulo="Datos">
             <Datos>
               <Fila label="Estado">{NOMBRES_ESTADO_COTIZACION[f.estado]}</Fila>
-              <Fila label="Cliente">
+              <Fila label="Contacto">
                 <Link to={`/contactos/${f.contactoId}`} className="text-primary-text">
                   {f.contacto}
                 </Link>

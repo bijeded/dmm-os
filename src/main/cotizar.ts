@@ -15,11 +15,10 @@ import {
   type ListaCotizaciones,
   type PartidaCotizacion
 } from '../shared/ipc'
+import { folioDmm, TASA_IVA } from '../shared/formato'
 
 /** Prints a page of HTML to PDF bytes; in the app, Electron's `printToPDF`. */
 export type ImprimirPdf = (html: string) => Promise<Uint8Array>
-
-const TASA_IVA = 0.16
 
 const folioDe = (c: { folio: number | null; folioSufijo: string }) => (c.folio === null ? null : `${c.folio}${c.folioSufijo}`)
 
@@ -108,7 +107,7 @@ export function guardarCotizacion(db: Db, c: CotizacionNueva): FichaCotizacion {
 export function archivoPdf({ folio, fecha, nombre }: { folio: number; fecha: string; nombre: string }): string {
   const [y, m, d] = fecha.split('-')
   const seguro = nombre.replace(/[/\\:*?"<>|]/g, '-').trim()
-  return `Cotizaciones/${y}/${y.slice(2)}${m}${d}-DMM${folio}-${seguro}.pdf`
+  return `Cotizaciones/${y}/${y.slice(2)}${m}${d}-${folioDmm(folio)}-${seguro}.pdf`
 }
 
 /**
