@@ -244,6 +244,9 @@ export interface CostoEstimado {
 export const ESTADOS_COTIZACION = ['borrador', 'enviada', 'aceptada', 'rechazada', 'cancelada', 'expirada'] as const
 export type EstadoCotizacion = (typeof ESTADOS_COTIZACION)[number]
 
+/** What can be done to a quote; which ones apply depends on its estado and is decided in main. */
+export type AccionCotizacion = 'editar' | 'borrar' | 'enviar' | 'aceptar' | 'rechazar' | 'cancelar'
+
 export const NOMBRES_ESTADO_COTIZACION: Record<EstadoCotizacion, string> = {
   borrador: 'Borrador',
   enviada: 'Enviada',
@@ -329,6 +332,8 @@ export interface FichaCotizacion extends Required<Omit<CotizacionNueva, 'id'>> {
   /** The archived PDF, relative to the DMM OS root. */
   pdf: string | null
   proyectoId: number | null
+  /** The actions its estado allows now. */
+  acciones: AccionCotizacion[]
 }
 
 export interface AppInfo {

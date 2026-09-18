@@ -54,7 +54,8 @@ const ficha: Ficha = {
   iva: 384_000,
   total: 2_784_000,
   pdf: 'Cotizaciones/2026/260910-DMM520-Rediseño.pdf',
-  proyectoId: null
+  proyectoId: null,
+  acciones: ['aceptar', 'rechazar', 'cancelar']
 }
 
 let api: DmmApi['cotizaciones']
@@ -76,9 +77,9 @@ beforeEach(() => {
   api = {
     listar: vi.fn(async () => lista),
     ficha: vi.fn(async () => ficha),
-    guardar: vi.fn(async () => ({ ...ficha, id: 9, estado: 'borrador' as const })),
+    guardar: vi.fn(async () => ({ ...ficha, id: 9, estado: 'borrador' as const, acciones: ['editar' as const, 'borrar' as const, 'enviar' as const] })),
     enviar: vi.fn(async () => ficha),
-    aceptar: vi.fn(async () => ({ ...ficha, estado: 'aceptada' as const, proyectoId: 4 })),
+    aceptar: vi.fn(async () => ({ ...ficha, estado: 'aceptada' as const, proyectoId: 4, acciones: ['cancelar' as const] })),
     rechazar: vi.fn(async () => ficha),
     cancelar: vi.fn(async () => ficha),
     borrar: vi.fn(async () => {}),

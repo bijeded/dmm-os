@@ -41,24 +41,28 @@ export function FichaCotizacion() {
                 Abrir PDF
               </Button>
             )}
-            {f.estado === 'borrador' && (
-              <>
-                <Button variant="ghost" disabled={ocupado} onClick={() => correr(async () => (await api.borrar(id), navigate('/cotizaciones')))}>
-                  Eliminar
-                </Button>
-                <Button variant="secondary" disabled={ocupado} onClick={() => navigate(`/cotizaciones/${id}/editar`)}>
-                  Editar
-                </Button>
-                <Button disabled={ocupado} onClick={accion(api.enviar)}>
-                  Generar PDF y archivar
-                </Button>
-              </>
+            {f.acciones.includes('borrar') && (
+              <Button variant="ghost" disabled={ocupado} onClick={() => correr(async () => (await api.borrar(id), navigate('/cotizaciones')))}>
+                Eliminar
+              </Button>
             )}
-            {f.estado === 'enviada' && (
+            {f.acciones.includes('editar') && (
+              <Button variant="secondary" disabled={ocupado} onClick={() => navigate(`/cotizaciones/${id}/editar`)}>
+                Editar
+              </Button>
+            )}
+            {f.acciones.includes('enviar') && (
+              <Button disabled={ocupado} onClick={accion(api.enviar)}>
+                Generar PDF y archivar
+              </Button>
+            )}
+            {f.acciones.includes('rechazar') && (
+              <Button variant="ghost" disabled={ocupado} onClick={accion(api.rechazar)}>
+                Rechazada
+              </Button>
+            )}
+            {f.acciones.includes('aceptar') && (
               <>
-                <Button variant="ghost" disabled={ocupado} onClick={accion(api.rechazar)}>
-                  Rechazada
-                </Button>
                 {f.moneda === 'USD' && (
                   <input
                     aria-label="Tipo de cambio"
@@ -76,7 +80,7 @@ export function FichaCotizacion() {
                 </Button>
               </>
             )}
-            {(f.estado === 'enviada' || f.estado === 'aceptada') && (
+            {f.acciones.includes('cancelar') && (
               <Button variant="ghost" disabled={ocupado} onClick={accion(api.cancelar)}>
                 Cancelar cotización
               </Button>
