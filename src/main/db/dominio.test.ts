@@ -60,7 +60,18 @@ describe('registrarReembolso', () => {
       .returning()
       .get()
     const r = registrarReembolso(db, o.id, { subtotal: 500, iva: 80, fecha: '2026-03-05' })
-    expect(r).toMatchObject({ reembolsoDeId: o.id, total: -580, fechaPago: '2026-03-05' })
+    expect(r).toMatchObject({ reembolsoDeId: o.id, total: -580, fechaPago: '2026-03-05', montoOriginal: null, monedaOriginal: null })
+  })
+
+  it('refunds a USD Ingreso in USD too, as a negative original amount', () => {
+    const o = db
+      .insert(ingresos)
+      .values({ fechaRegistro: '2026-02-01', subtotal: 1800, total: 1800, montoOriginal: 100, monedaOriginal: 'USD', categoria: 'sin_factura', estado: 'pagado' })
+      .returning()
+      .get()
+    const r = registrarReembolso(db, o.id, { subtotal: 900, iva: 0, fecha: '2026-03-05', montoOriginal: 50 })
+    expect(r).toMatchObject({ total: -900, montoOriginal: -50, monedaOriginal: 'USD' })
+    expect(() => registrarReembolso(db, o.id, { subtotal: 900, iva: 0, fecha: '2026-03-05' })).toThrow(/USD/)
   })
 })
 
