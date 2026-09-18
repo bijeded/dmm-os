@@ -70,3 +70,29 @@ it('migrates a database that already holds data from before 0004', () => {
     nombre: null
   })
 })
+
+it('0009 marks imported CFDIs paid on their date, and leaves the rest alone', () => {
+  const file = join(dir, 'cfdi.db')
+  createDatabase(drizzleDir).abrir(file).close()
+  const sqlite = new Database(file)
+  sqlite.exec(`
+    insert into ingresos (categoria, estado, estado_facturacion, subtotal, iva, total, fecha_registro, cfdi_uuid) values
+      ('factura', 'pendiente', 'facturado', 100, 16, 116, '2024-05-02', 'A'),
+      ('factura', 'cancelado', 'facturado', 100, 16, 116, '2024-05-03', 'B'),
+      ('sin_factura', 'pendiente', null, 100, 0, 100, '2024-05-04', null);
+    insert into costos (nombre, categoria, estado, subtotal, iva, total, fecha, cfdi_uuid) values
+      ('Hosting', 'unico', 'pendiente', 100, 16, 116, '2024-06-01', 'C'),
+      ('Manual', 'unico', 'pendiente', 100, 0, 100, '2024-06-02', null);
+  `)
+  for (const stmt of readFileSync(join(drizzleDir, '0009_cfdi_pagados.sql'), 'utf8').split('--> statement-breakpoint')) sqlite.exec(stmt)
+  expect(sqlite.prepare('select cfdi_uuid, estado, fecha_pago from ingresos order by id').all()).toEqual([
+    { cfdi_uuid: 'A', estado: 'pagado', fecha_pago: '2024-05-02' },
+    { cfdi_uuid: 'B', estado: 'cancelado', fecha_pago: null },
+    { cfdi_uuid: null, estado: 'pendiente', fecha_pago: null }
+  ])
+  expect(sqlite.prepare('select nombre, estado, fecha_pago from costos order by id').all()).toEqual([
+    { nombre: 'Hosting', estado: 'pagado', fecha_pago: '2024-06-01' },
+    { nombre: 'Manual', estado: 'pendiente', fecha_pago: null }
+  ])
+  sqlite.close()
+})

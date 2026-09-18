@@ -87,17 +87,18 @@ export function importarCfdi(db: Db, xml: string, direccion: Direccion): Resulta
   })
 }
 
-/** An emitida is an invoice Ingreso: already facturado, not yet paid. */
+/** An emitida is an invoice Ingreso: facturado and, as every CFDI that isn't cancelled, paid on its date. */
 function registrarIngreso(tx: Tx, cfdi: Cfdi, contactoId: number | undefined): number {
   return tx
     .insert(ingresos)
     .values({
       categoria: 'factura',
-      estado: 'pendiente',
+      estado: 'pagado',
       estadoFacturacion: 'facturado',
       ...montos(cfdi),
       contactoId: contactoId ?? null,
       fechaRegistro: cfdi.fecha,
+      fechaPago: cfdi.fecha,
       cfdiUuid: cfdi.uuid,
       notas: cfdi.descripcion
     })
@@ -105,17 +106,18 @@ function registrarIngreso(tx: Tx, cfdi: Cfdi, contactoId: number | undefined): n
     .get().id
 }
 
-/** A recibida is a single Costo; a recurring one is recognised from its definición, not the CFDI. */
+/** A recibida is a single paid Costo; a recurring one is recognised from its definición, not the CFDI. */
 function registrarCosto(tx: Tx, cfdi: Cfdi): number {
   return tx
     .insert(costos)
     .values({
       nombre: cfdi.descripcion,
       categoria: 'unico',
-      estado: 'pendiente',
+      estado: 'pagado',
       ...montos(cfdi),
       proveedor: cfdi.emisor.nombre,
       fecha: cfdi.fecha,
+      fechaPago: cfdi.fecha,
       cfdiUuid: cfdi.uuid
     })
     .returning({ id: costos.id })

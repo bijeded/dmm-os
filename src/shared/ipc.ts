@@ -539,6 +539,8 @@ export interface ResumenFinanzas {
   serie: PuntoFinanzas[]
   /** Years within either span whose Costos were never imported. */
   sinDatos: number[]
+  /** Money already collected: the period's paid Ingresos (Reembolsos negative), newest first. */
+  cobrado: FilaIngreso[]
   /** Every pending Ingreso, oldest first, whatever the period. */
   cobranza: FilaIngreso[]
   /** Every pending Costo, soonest first, whatever the period. */

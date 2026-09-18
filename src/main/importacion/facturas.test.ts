@@ -75,17 +75,18 @@ const contactoConRfc = (rfc = RFC_CLIENTE) =>
   db.insert(contactos).values({ nombre: 'Estudio Ocho', rfc }).returning().get()
 
 describe('una factura emitida', () => {
-  it('records it as an invoice Ingreso, already facturado but not yet paid', () => {
+  it('records it as an invoice Ingreso, facturado and paid on its date', () => {
     emitida(cfdiXml())
     importar()
     expect(db.select().from(ingresos).get()).toMatchObject({
       categoria: 'factura',
-      estado: 'pendiente',
+      estado: 'pagado',
       estadoFacturacion: 'facturado',
       subtotal: 100_000,
       iva: 16_000,
       total: 116_000,
       fechaRegistro: '2026-02-03',
+      fechaPago: '2026-02-03',
       cfdiUuid: UUID
     })
   })
@@ -119,13 +120,13 @@ describe('una factura emitida', () => {
 })
 
 describe('una factura recibida', () => {
-  it('records it as a single Costo with its supplier', () => {
+  it('records it as a single paid Costo with its supplier', () => {
     recibida(cfdiXml({ emisor: 'PRV900101QQ1', nombreEmisor: 'HOSTING MX', receptor: RFC_DMM, descripcion: 'Hosting anual' }))
     importar()
     expect(db.select().from(costos).get()).toMatchObject({
       nombre: 'Hosting anual',
       categoria: 'unico',
-      estado: 'pendiente',
+      estado: 'pagado',
       estimado: false,
       proveedor: 'HOSTING MX',
       subtotal: 100_000,

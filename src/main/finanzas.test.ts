@@ -52,11 +52,19 @@ const costo = (cambios: Partial<CostoNuevo> = {}): CostoNuevo => ({
   ...cambios
 })
 
-/** An invoice as the Facturas run leaves it: facturado, pending, dated by the CFDI. */
-const cfdi = (fechaRegistro: string, subtotal = 5000, uuid = fechaRegistro) =>
+/** An invoice as the Facturas run leaves it: facturado and paid on its date. */
+const cfdi = (fechaRegistro: string, subtotal = 5000) =>
   db
     .insert(ingresos)
-    .values({ categoria: 'factura', estadoFacturacion: 'facturado', subtotal, iva: subtotal * 0.16, total: subtotal * 1.16, contactoId, fechaRegistro, cfdiUuid: uuid })
+    .values({ categoria: 'factura', estadoFacturacion: 'facturado', estado: 'pagado', subtotal, iva: subtotal * 0.16, total: subtotal * 1.16, contactoId, fechaRegistro, fechaPago: fechaRegistro, cfdiUuid: fechaRegistro })
+    .returning()
+    .get()
+
+/** An invoice issued by hand and still unpaid: what can become Cobranza vencida. */
+const facturaPendiente = (fechaRegistro: string, subtotal = 5000) =>
+  db
+    .insert(ingresos)
+    .values({ categoria: 'factura', estadoFacturacion: 'facturado', subtotal, iva: 0, total: subtotal, contactoId, fechaRegistro })
     .returning()
     .get()
 
@@ -100,7 +108,7 @@ describe('resumen', () => {
   })
 
   it('leaves out cancelled Ingresos and Costos, and invoices not yet dated', () => {
-    const i = cfdi('2026-04-01')
+    const i = facturaPendiente('2026-04-01')
     cancelarIngreso(db, i.id)
     db.insert(ingresos).values({ categoria: 'factura', estadoFacturacion: 'por_facturar', subtotal: 9000, iva: 0, total: 9000, contactoId }).run()
     nuevoCosto(db, costo({ pagado: false }), hoy)
@@ -127,8 +135,9 @@ describe('resumen', () => {
 
 describe('Cobranza vencida', () => {
   it('is an invoiced, unpaid Ingreso older than the configured days', () => {
-    cfdi('2026-08-01')
-    cfdi('2026-09-10')
+    facturaPendiente('2026-08-01')
+    facturaPendiente('2026-09-10')
+    cfdi('2026-07-01')
     nuevoIngreso(db, ingreso({ fecha: '2026-01-01', pagado: false }), hoy)
     const { cobranza } = resumenFinanzas(db, 'mes', hoy, 30)
     expect(cobranza.map((i) => [i.fecha, i.vencida])).toEqual([
@@ -139,12 +148,24 @@ describe('Cobranza vencida', () => {
     expect(resumenFinanzas(db, 'mes', hoy, 60).cobranza.some((i) => i.vencida)).toBe(false)
   })
 
-  it('leaves Cobranza once paid, counted on the day it was paid', () => {
-    const i = cfdi('2026-08-01')
+  it('leaves Cobranza once paid, and is Cobrado on the day it was paid', () => {
+    const i = facturaPendiente('2026-08-01')
     pagarIngreso(db, i.id, hoy)
     const r = resumenFinanzas(db, 'mes', hoy, 30)
     expect(r.cobranza).toEqual([])
-    expect(r.ingresos.map((f) => [f.fecha, f.estado])).toEqual([[hoy, 'pagado']])
+    expect(r.cobrado.map((f) => [f.id, f.fecha, f.estado])).toEqual([[i.id, hoy, 'pagado']])
+  })
+})
+
+describe('Cobrado', () => {
+  it('lists the money collected in the period, never what is pending', () => {
+    const pagada = cfdi('2026-09-03')
+    cfdi('2026-08-03')
+    facturaPendiente('2026-09-04')
+    nuevoIngreso(db, ingreso({ fecha: '2026-09-05' }), hoy)
+    const { cobrado } = resumenFinanzas(db, 'mes', hoy, 30)
+    expect(cobrado.map((f) => f.fecha)).toEqual(['2026-09-05', '2026-09-03'])
+    expect(cobrado.find((f) => f.id === pagada.id)?.origen).toBe('cfdi')
   })
 })
 
@@ -204,7 +225,7 @@ describe('Reembolso', () => {
     const i = db.select().from(ingresos).get()!
     reembolsar(db, i.id, 8000, 0, hoy)
     expect(() => reembolsar(db, i.id, 3000, 0, hoy)).toThrow(/más de lo pagado/)
-    const pendiente = cfdi('2026-09-01')
+    const pendiente = facturaPendiente('2026-09-01')
     expect(() => reembolsar(db, pendiente.id, 100, 0, hoy)).toThrow(/pagado/)
   })
 })
@@ -236,7 +257,7 @@ describe('Borrar vs cancelar', () => {
     nuevoIngreso(db, ingreso(), hoy)
     const r = resumenFinanzas(db, 'mes', hoy, 30)
     const porOrigen = Object.fromEntries(r.ingresos.map((i) => [i.origen, i.acciones]))
-    expect(porOrigen.cfdi).toEqual(['pagar', 'cancelar'])
+    expect(porOrigen.cfdi).toEqual(['reembolsar'])
     expect(porOrigen.manual).toEqual(['borrar', 'reembolsar'])
   })
 })
