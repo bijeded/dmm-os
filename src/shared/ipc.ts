@@ -219,6 +219,102 @@ export interface PartidaCotizacion {
   precio: number
 }
 
+/** A cost DMM expects to pay for a quote, in centavos before IVA. Never shown to the Contacto. */
+export interface CostoEstimado {
+  concepto: string
+  monto: number
+}
+
+export const ESTADOS_COTIZACION = ['borrador', 'enviada', 'aceptada', 'rechazada', 'cancelada', 'expirada'] as const
+export type EstadoCotizacion = (typeof ESTADOS_COTIZACION)[number]
+
+export const NOMBRES_ESTADO_COTIZACION: Record<EstadoCotizacion, string> = {
+  borrador: 'Borrador',
+  enviada: 'Enviada',
+  aceptada: 'Aceptada',
+  rechazada: 'Rechazada',
+  cancelada: 'Cancelada',
+  expirada: 'Expirada'
+}
+
+export const FACTURACIONES = ['unica', 'mensual', 'parcialidades'] as const
+export type Facturacion = (typeof FACTURACIONES)[number]
+
+export const NOMBRES_FACTURACION: Record<Facturacion, string> = {
+  unica: 'Pago único',
+  mensual: 'Mensual',
+  parcialidades: 'Parcialidades'
+}
+
+/** What the quote form edits. Without `id` it creates a draft; with one it edits that draft. */
+export interface CotizacionNueva {
+  id?: number
+  contactoId: number
+  /** What the quote is for; it becomes the Proyecto's name when accepted. */
+  nombre: string
+  categoria: Categoria
+  /** `YYYY-MM-DD` */
+  fecha: string
+  validezDias: number
+  moneda: 'MXN' | 'USD'
+  partidas: PartidaCotizacion[]
+  /** Adds 16% IVA on top of the subtotal. */
+  conIva: boolean
+  facturacion: Facturacion
+  /** Number of payments, only for `parcialidades`. */
+  parcialidades: number | null
+  stack: string | null
+  terminos: string | null
+  notas: string | null
+  costosEstimados: CostoEstimado[]
+}
+
+/** One row of the Cotizaciones table. Money in centavos before IVA. */
+export interface FilaCotizacion {
+  id: number
+  /** `475b`; `null` for a draft. */
+  folio: string | null
+  fecha: string
+  contactoId: number
+  contacto: string
+  nombre: string | null
+  categoria: Categoria
+  subtotal: number
+  estado: EstadoCotizacion
+  /** Whether it has an archived PDF. */
+  pdf: boolean
+}
+
+export interface ListaCotizaciones {
+  /** Drafts first, then by Folio descending. */
+  cotizaciones: FilaCotizacion[]
+  resumen: {
+    /** Every quote but drafts. */
+    total: number
+    enviadas: number
+    /** Accepted over every quote but drafts, 0–100. */
+    conversion: number
+    /** Subtotal of sent quotes still waiting for an answer. */
+    montoAbiertas: number
+    /** Average subtotal of every quote but drafts. */
+    promedio: number
+  }
+  porCategoria: Record<Categoria, number>
+}
+
+export interface FichaCotizacion extends Required<Omit<CotizacionNueva, 'id'>> {
+  id: number
+  folio: string | null
+  estado: EstadoCotizacion
+  contacto: string
+  subtotal: number
+  iva: number
+  total: number
+  /** The archived PDF, relative to the DMM OS root. */
+  pdf: string | null
+  proyectoId: number | null
+}
+
 export interface AppInfo {
   version: string
   dbPath: string
@@ -287,6 +383,22 @@ export const contrato = {
     guardar: canal<[concepto: ConceptoNuevo], ConceptoCatalogo[]>(),
     /** Nothing links to a concept (Cotizaciones copy it), so it can always be deleted. */
     borrar: canal<[id: number], ConceptoCatalogo[]>()
+  },
+  cotizaciones: {
+    listar: canal<[], ListaCotizaciones>(),
+    ficha: canal<[id: number], FichaCotizacion>(),
+    /** Saves a draft (new or edited) and returns its record. Only drafts can be edited. */
+    guardar: canal<[cotizacion: CotizacionNueva], FichaCotizacion>(),
+    /** Assigns the Folio, prints the PDF into `Cotizaciones/<year>/` and marks it sent. */
+    enviar: canal<[id: number], FichaCotizacion>(),
+    /** Creates the Proyecto, its pending Ingresos and the estimated Costos. */
+    aceptar: canal<[id: number], FichaCotizacion>(),
+    rechazar: canal<[id: number], FichaCotizacion>(),
+    /** Cancels the quote and its Proyecto (Cancelación con pagos). */
+    cancelar: canal<[id: number], FichaCotizacion>(),
+    /** Only drafts can be deleted; anything else is cancelled. */
+    borrar: canal<[id: number], void>(),
+    abrirPdf: canal<[id: number], void>()
   },
   finanzas: {
     /** Which years show Sin datos because their Costos were never imported. */

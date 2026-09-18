@@ -4,6 +4,17 @@ import { borrarConcepto, guardarConcepto, listarCatalogo } from './catalogo'
 import { borrarContacto, contactosCsv, fichaContacto, listarContactos } from './contactos'
 import type { Conexion } from './db'
 import { coberturaCostos } from './db/cobertura'
+import {
+  aceptarCotizacion,
+  borrarCotizacion,
+  cancelarCotizacion,
+  enviarCotizacion,
+  fichaCotizacion,
+  guardarCotizacion,
+  listarCotizaciones,
+  rechazarCotizacion,
+  type ImprimirPdf
+} from './cotizar'
 import { escanearCarpetas, importarFacturas, marcarHddNoDisponible } from './importacion'
 import { leerRutas } from './rutas'
 import { pendientes, responder } from './sugerencias'
@@ -18,6 +29,7 @@ export interface HandlersOptions {
   elegirHdd: () => Promise<string | undefined>
   /** Answers with why the folder could not be opened, or '' when it was. */
   abrirCarpeta: (path: string) => Promise<string>
+  imprimirPdf: ImprimirPdf
   ahora?: () => string
 }
 
@@ -29,8 +41,15 @@ export function crearHandlers({
   elegirRespaldo,
   elegirHdd,
   abrirCarpeta,
+  imprimirPdf,
   ahora = () => new Date().toISOString()
 }: HandlersOptions): DmmHandlers {
+  // The local calendar day, which is what a quote is accepted on.
+  const hoy = () => {
+    const d = new Date(ahora())
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
   // The external HDD is organised like the main root, and is usually disconnected. Its path is
   // read per call, so plugging the drive in needs no restart; when it is absent its Proyectos
   // become No disponible, never lost.
@@ -96,6 +115,22 @@ export function crearHandlers({
       listar: () => listarCatalogo(conexion.db),
       guardar: (concepto) => guardarConcepto(conexion.db, concepto),
       borrar: (id) => borrarConcepto(conexion.db, id)
+    },
+    cotizaciones: {
+      listar: () => listarCotizaciones(conexion.db),
+      ficha: (id) => fichaCotizacion(conexion.db, id),
+      guardar: (cotizacion) => guardarCotizacion(conexion.db, cotizacion),
+      enviar: (id) => enviarCotizacion(conexion.db, info.dmmOsRoot, id, imprimirPdf),
+      aceptar: (id) => aceptarCotizacion(conexion.db, id, hoy()),
+      rechazar: (id) => rechazarCotizacion(conexion.db, id),
+      cancelar: (id) => cancelarCotizacion(conexion.db, id),
+      borrar: (id) => borrarCotizacion(conexion.db, id),
+      abrirPdf: async (id) => {
+        const { pdf } = fichaCotizacion(conexion.db, id)
+        if (!pdf) throw new Error('La cotización no tiene PDF')
+        const error = await abrirCarpeta(join(info.dmmOsRoot, pdf))
+        if (error) throw new Error(error)
+      }
     },
     finanzas: {
       coberturaCostos: (desde, hasta) => coberturaCostos(conexion.db, desde, hasta)
