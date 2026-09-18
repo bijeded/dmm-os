@@ -1,5 +1,12 @@
 // Calendar arithmetic on the app's strings: periods are 'YYYY-MM', days are 'YYYY-MM-DD'.
 
+/** The local calendar day of `d` as `YYYY-MM-DD`. */
+export const diaLocal = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+/** Today on this machine's calendar. Main passes its own injectable `hoy` into the domain instead. */
+export const hoy = () => diaLocal(new Date())
+
 /** The period `n` months after `periodo` (before it when `n` is negative). */
 export function sumarMeses(periodo: string, n: number): string {
   const [anio, mes] = periodo.split('-').map(Number)

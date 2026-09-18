@@ -7,7 +7,7 @@ import {
   type FilaContacto,
   type FilaProyecto
 } from '../../../shared/ipc'
-import { diaLocal } from '../../../shared/formato'
+import { hoy } from '../../../shared/fechas'
 import { tituloCls } from './Contactos'
 import { Campo, campoCls } from './NuevaCotizacion'
 import { Aviso, useAccion } from './Seccion'
@@ -90,7 +90,7 @@ export function NuevoIngreso() {
   const [facturado, setFacturado] = useState(false)
   const [proyectoId, setProyectoId] = useState<number | null>(null)
   const [contactoId, setContactoId] = useState<number | null>(null)
-  const [fecha, setFecha] = useState(diaLocal(new Date()))
+  const [fecha, setFecha] = useState(hoy)
   const [monto, setMonto] = useState('')
   const [conIva, setConIva] = useState(false)
   const [pagado, setPagado] = useState(true)
@@ -171,7 +171,7 @@ export function NuevoCosto() {
   const [referencia, setReferencia] = useState('')
   const [categoria, setCategoria] = useState<CategoriaCosto>('unico')
   const [proyectoId, setProyectoId] = useState<number | null>(null)
-  const [fecha, setFecha] = useState(diaLocal(new Date()))
+  const [fecha, setFecha] = useState(hoy)
   const [monto, setMonto] = useState('')
   const [conIva, setConIva] = useState(false)
   const [parcialidades, setParcialidades] = useState('12')

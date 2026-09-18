@@ -18,6 +18,7 @@ import {
   type PartidaCotizacion
 } from '../shared/ipc'
 import { folioDmm, totalesCotizacion } from '../shared/formato'
+import { sumarDias } from '../shared/fechas'
 
 /** Prints a page of HTML to PDF bytes; in the app, Electron's `printToPDF`. */
 export type ImprimirPdf = (html: string) => Promise<Uint8Array>
@@ -157,9 +158,7 @@ const repartir = (total: number, n: number) => {
 
 /** The last day a quote can be accepted: its date plus its validity. */
 export function venceEl(fecha: string, validezDias: number): string {
-  const d = new Date(`${fecha}T12:00:00Z`)
-  d.setUTCDate(d.getUTCDate() + validezDias)
-  return d.toISOString().slice(0, 10)
+  return sumarDias(fecha, validezDias)
 }
 
 /** A sent quote nobody answered within its validity becomes expirada. Safe to run at any time. */

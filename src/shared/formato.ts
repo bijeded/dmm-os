@@ -1,9 +1,13 @@
 /** IVA charged on top of a quote's subtotal. */
 export const TASA_IVA = 0.16
 
-/** The local calendar day of `d` as `YYYY-MM-DD`. */
-export const diaLocal = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+/** A day (or timestamp) as a short date: `18 sept 2026`. */
+export const dia = (d: string) =>
+  new Date(`${d.slice(0, 10)}T12:00:00`).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+
+/** A day as a long date: `18 de septiembre de 2026`. */
+export const fechaLarga = (d: string) =>
+  new Date(`${d.slice(0, 10)}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
 
 /** Centavos (or USD cents) as money in `moneda`: `$1,250.50` in pesos, `USD 30.00` in dollars. */
 export const monto = (centavos: number, moneda: 'MXN' | 'USD' = 'MXN') =>

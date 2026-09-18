@@ -225,10 +225,9 @@ describe('ubicación', () => {
 
   it('records an archive location when answered Archivado', () => {
     const proyectoId = sinCarpeta()
-    responder(db, unaSugerencia().id, 'aceptada')
+    responder(db, unaSugerencia().id, 'aceptada', '2026-09-18')
     const u = db.select().from(ubicacionesArchivo).where(eq(ubicacionesArchivo.proyectoId, proyectoId)).get()!
-    expect(u.tipo).toBe('archivo')
-    expect(u.disponible).toBe(false)
+    expect(u).toMatchObject({ tipo: 'archivo', disponible: false, verificadoEn: '2026-09-18' })
   })
 
   it('keeps the answer even when the Proyecto already had that location', () => {

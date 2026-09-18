@@ -11,7 +11,8 @@ import {
   type CotizacionNueva,
   type FilaContacto
 } from '../../../shared/ipc'
-import { diaLocal, totalesCotizacion } from '../../../shared/formato'
+import { totalesCotizacion } from '../../../shared/formato'
+import { hoy } from '../../../shared/fechas'
 import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
@@ -19,7 +20,6 @@ import { Button } from './ui/button'
 export const campoCls = 'h-9 rounded-control border border-border-strong bg-surface-sunken px-2 text-[13px] text-on-surface'
 const numCls = `${campoCls} w-28 font-mono text-[12px]`
 
-const hoy = () => diaLocal(new Date())
 
 // Money is typed in pesos and kept in centavos.
 const aCentavos = (pesos: string) => Math.round(Number(pesos || 0) * 100)
