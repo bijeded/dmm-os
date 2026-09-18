@@ -23,7 +23,7 @@ describe('Configuración → Catálogo', () => {
     render(<Catalogo />)
     expect(await screen.findByText('Sitio web · 6 secc.')).toBeTruthy()
     expect(screen.getByText('Website')).toBeTruthy()
-    expect(screen.getByText('$24,000')).toBeTruthy()
+    expect(screen.getByText('$24,000.00')).toBeTruthy()
   })
 
   it('adds a concept, price in pesos stored as centavos', async () => {
@@ -47,10 +47,16 @@ describe('Configuración → Catálogo', () => {
     await waitFor(() => expect(api.guardar).toHaveBeenCalledWith({ ...sitio, precio: 2_600_000 }))
   })
 
-  it('deletes a concept', async () => {
+  it('deletes a concept only after confirming', async () => {
     render(<Catalogo />)
     await screen.findByText(sitio.concepto)
     fireEvent.click(screen.getByRole('button', { name: `Borrar ${sitio.concepto}` }))
+    expect(api.borrar).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'No borrar' }))
+    expect(screen.queryByRole('button', { name: 'Sí, borrar' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: `Borrar ${sitio.concepto}` }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, borrar' }))
     await waitFor(() => expect(api.borrar).toHaveBeenCalledWith(1))
     await waitFor(() => expect(screen.queryByText(sitio.concepto)).toBeNull())
   })

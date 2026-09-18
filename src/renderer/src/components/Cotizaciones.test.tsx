@@ -100,7 +100,7 @@ describe('Cotizaciones', () => {
   it('shows the stat cards and the categories doughnut', async () => {
     const stats = await screen.findByRole('list', { name: 'Resumen' })
     expect(within(stats).getByText('Tasa de conversión').nextSibling?.textContent).toBe('50%')
-    expect(within(stats).getByText('Monto en abiertas').nextSibling?.textContent).toBe('$32,000')
+    expect(within(stats).getByText('Monto en abiertas').nextSibling?.textContent).toBe('$32,000.00')
     expect(screen.getByRole('img', { name: '2 cotizaciones por categoría' })).toBeTruthy()
   })
 
@@ -132,7 +132,7 @@ describe('Nueva cotización', () => {
   it('adds items from the Catálogo with their price, then saves and archives the PDF', async () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Agregar Landing page' }))
     expect((screen.getByRole('spinbutton', { name: 'Precio' }) as HTMLInputElement).value).toBe('9500')
-    expect(screen.getByLabelText('Totales').textContent).toContain('$11,020')
+    expect(screen.getByLabelText('Totales').textContent).toContain('$11,020.00')
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Cliente' }), { target: { value: '7' } })
     fireEvent.change(screen.getByRole('textbox', { name: 'Título' }), { target: { value: 'Landing' } })
