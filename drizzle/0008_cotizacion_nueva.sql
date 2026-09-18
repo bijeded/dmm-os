@@ -39,4 +39,5 @@ CREATE UNIQUE INDEX `ingresos_definicion_periodo_unique` ON `ingresos` (`definic
 CREATE INDEX `ingresos_proyecto_idx` ON `ingresos` (`proyecto_id`);--> statement-breakpoint
 CREATE INDEX `ingresos_contacto_idx` ON `ingresos` (`contacto_id`);--> statement-breakpoint
 ALTER TABLE `cotizaciones` ADD `parcialidades` integer;--> statement-breakpoint
-ALTER TABLE `cotizaciones` ADD `costos_estimados` text DEFAULT '[]' NOT NULL;
+ALTER TABLE `cotizaciones` ADD `costos_estimados` text DEFAULT '[]' NOT NULL;--> statement-breakpoint
+ALTER TABLE `definiciones_costo` ADD `cotizacion_id` integer REFERENCES cotizaciones(id);

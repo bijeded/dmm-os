@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e0d424cf-19fc-4aae-bcf9-19dfee4d529e",
+  "id": "c9f2a32e-9648-40d1-8efd-50bbc625771f",
   "prevId": "b1dddf38-a24f-4a4b-8f18-2126190f6158",
   "tables": {
     "asignaciones_costo": {
@@ -690,6 +690,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "cotizacion_id": {
+          "name": "cotizacion_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "suscripcion_ia": {
           "name": "suscripcion_ia",
           "type": "integer",
@@ -744,6 +751,19 @@
           "tableTo": "proyectos",
           "columnsFrom": [
             "proyecto_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "definiciones_costo_cotizacion_id_cotizaciones_id_fk": {
+          "name": "definiciones_costo_cotizacion_id_cotizaciones_id_fk",
+          "tableFrom": "definiciones_costo",
+          "tableTo": "cotizaciones",
+          "columnsFrom": [
+            "cotizacion_id"
           ],
           "columnsTo": [
             "id"

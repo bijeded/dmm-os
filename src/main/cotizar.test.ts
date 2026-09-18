@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, vigenciasPrecio } from './db/schema'
+import { generarPeriodos } from './db/periodos'
 import { contacto, db, reiniciarDb } from './db/test-db'
 import {
   aceptarCotizacion,
@@ -175,6 +176,18 @@ describe('aceptar', () => {
       ['2026-09', 250_000],
       ['2026-09', 30_000]
     ])
+  })
+
+  it('keeps a monthly estimated cost running after the quote is cancelled, until stopped in Finanzas', async () => {
+    const f = aceptarCotizacion(
+      db,
+      (await enviada({ costosEstimados: [{ concepto: 'Hosting', monto: 50_000, categoria: 'mensual', parcialidades: null }] })).id,
+      '2026-09-20'
+    )
+    expect(db.select().from(definicionesCosto).get()).toMatchObject({ cotizacionId: f.id })
+    cancelarCotizacion(db, f.id)
+    generarPeriodos(db, '2026-11')
+    expect(db.select().from(costos).all().map((c) => c.periodo)).toEqual(['2026-09', '2026-10', '2026-11'])
   })
 
   it('refuses MSI estimated costs without an installment count', () => {

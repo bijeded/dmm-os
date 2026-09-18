@@ -8,7 +8,7 @@ const POR_PAGINA = 10
 
 /** Centavos as whole pesos, e.g. `$296,000`. */
 export const pesos = (centavos: number) =>
-  new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(centavos / 100)
+  new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(centavos / 100)
 
 const plurales: Record<EstadoContacto, string> = {
   lead_frio: 'Leads fríos',

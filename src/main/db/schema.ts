@@ -197,6 +197,9 @@ export const definicionesCosto = sqliteTable(
     proveedor: text('proveedor'),
     tipo: text('tipo', { enum: ['mensual', 'msi', 'anual'] }).notNull(),
     proyectoId: integer('proyecto_id').references(() => proyectos.id, { onDelete: 'restrict' }),
+    // Set when the definition came from a Cotización's estimated costs. Such a monthly series
+    // doesn't stop with its Proyecto; it runs until it is stopped in Finanzas.
+    cotizacionId: integer('cotizacion_id').references(() => cotizaciones.id, { onDelete: 'restrict' }),
     suscripcionIa: integer('suscripcion_ia', { mode: 'boolean' }).notNull().default(false),
     diaDelMes: integer('dia_del_mes').notNull().default(1),
     periodoInicio: text('periodo_inicio').notNull(),

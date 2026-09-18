@@ -221,6 +221,7 @@ export function aceptarCotizacion(db: Db, id: number, hoy: string, tipoCambio?: 
           nombre: e.concepto,
           tipo: categoria,
           proyectoId,
+          cotizacionId: id,
           diaDelMes: Number(hoy.slice(8, 10)),
           periodoInicio: periodo,
           numeroParcialidades: categoria === 'msi' ? e.parcialidades : null
