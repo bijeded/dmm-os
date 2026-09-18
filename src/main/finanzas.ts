@@ -6,6 +6,7 @@ import { generarPeriodos } from './db/periodos'
 import { RegistroVinculadoError } from './db/cancelacion'
 import { registrarReembolso } from './db/dominio'
 import { ivaDe } from '../shared/formato'
+import { monedaDe, montoEn, tasaDe } from './dinero'
 import {
   asignacionesCosto,
   contactos,
@@ -163,10 +164,9 @@ const reembolsableIngreso = (i: Ingreso) => i.estado === 'pagado' && i.total > 0
  * currency (`original`, USD cents for a USD Ingreso, else the same as `total`).
  */
 function restante(i: Ingreso, reembolsos: Ingreso[]) {
-  const usd = i.monedaOriginal === 'USD'
-  const suma = (f: (r: Ingreso) => number) => reembolsos.reduce((s, r) => s + f(r), 0)
-  const total = i.total + suma((r) => r.total)
-  return { usd, total, iva: i.iva + suma((r) => r.iva), original: usd ? (i.montoOriginal ?? 0) + suma((r) => r.montoOriginal ?? 0) : total }
+  const moneda = monedaDe(i)
+  const suma = (f: (r: Ingreso) => number) => [i, ...reembolsos].reduce((s, r) => s + f(r), 0)
+  return { moneda, total: suma((r) => r.total), iva: suma((r) => r.iva), original: suma((r) => montoEn(r, moneda)) }
 }
 
 function accionesIngreso(i: Ingreso, reembolsos: Ingreso[] | undefined): AccionIngreso[] {
@@ -271,7 +271,7 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     total: i.total,
     origen: origenIngreso(i),
     vencida: i.estado === 'pendiente' && i.estadoFacturacion === 'facturado' && i.fechaRegistro !== null && i.fechaRegistro < limiteVencida,
-    moneda: i.monedaOriginal === 'USD' ? 'USD' : 'MXN',
+    moneda: monedaDe(i),
     reembolsable: reembolsableIngreso(i) ? restante(i, reembolsosDe.get(i.id) ?? []).original : 0,
     reembolsoDeId: i.reembolsoDeId,
     notas: i.notas,
@@ -449,13 +449,14 @@ export function reembolsar(db: Db, id: number, monto: number, hoy: string) {
   if (!Number.isInteger(monto) || monto <= 0) throw new Error('El monto debe ser mayor a cero')
   const i = leerIngreso(db, id)
   if (!reembolsableIngreso(i)) throw new Error('Solo se reembolsa un ingreso pagado')
-  if (i.monedaOriginal === 'USD' && !i.montoOriginal) throw new Error('El ingreso en USD no tiene su monto en USD')
+  const tasa = monedaDe(i) === 'USD' ? tasaDe(i) : 1
+  if (tasa === null) throw new Error('El ingreso en USD no tiene su monto en USD')
   const queda = restante(i, db.select().from(ingresos).where(eq(ingresos.reembolsoDeId, id)).all())
   if (monto > queda.original) throw new Error('No se puede reembolsar más de lo pagado')
   const todo = monto === queda.original
-  const total = todo ? queda.total : Math.min(queda.total, queda.usd ? Math.round((monto * i.total) / i.montoOriginal!) : monto)
+  const total = todo ? queda.total : Math.min(queda.total, Math.round(monto * tasa))
   const iva = todo ? queda.iva : Math.min(queda.iva, Math.round((total * i.iva) / i.total))
-  registrarReembolso(db, id, { subtotal: total - iva, iva, fecha: hoy, montoOriginal: queda.usd ? monto : undefined })
+  registrarReembolso(db, id, { subtotal: total - iva, iva, fecha: hoy, montoOriginal: queda.moneda === 'USD' ? monto : undefined })
 }
 
 export function pagarCosto(db: Db, id: number, hoy: string) {

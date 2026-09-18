@@ -43,6 +43,13 @@ describe('estadoCobro', () => {
     expect(estadoCobro(db, p.id)).toMatchObject({ cobrado: 2000, pagadoCompleto: true, falta: null })
   })
 
+  it('counts an Ingreso paid in pesos against a USD Cotización at its tipo de cambio', () => {
+    const p = proyecto(contactoId, cotizacion({ moneda: 'USD', subtotal: 100, iva: 0, total: 100, tipoCambio: 18 }).id)
+    ingreso(p.id, { subtotal: 900, iva: 0, total: 900, montoOriginal: 50, monedaOriginal: 'USD' })
+    ingreso(p.id, { subtotal: 900, iva: 0, total: 900 })
+    expect(estadoCobro(db, p.id)).toMatchObject({ pagadoCompleto: true, falta: null })
+  })
+
   it('compares a USD Cotización by each Ingreso’s original USD amount', () => {
     const p = proyecto(contactoId, cotizacion({ moneda: 'USD', subtotal: 100, iva: 0, total: 100 }).id)
     ingreso(p.id, { subtotal: 900, iva: 0, total: 900, montoOriginal: 50, monedaOriginal: 'USD' })

@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ESTADOS_CONTACTO, NOMBRES_ESTADO_CONTACTO, type EstadoContacto, type ListaContactos } from '../../../shared/ipc'
-import { normalizar } from '../../../shared/formato'
+import { monto, normalizar } from '../../../shared/formato'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
 
 const POR_PAGINA = 10
 
 /** Centavos as pesos with two-digit cents, e.g. `$296,000.00`. */
-export const pesos = (centavos: number) =>
-  new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(centavos / 100)
+export const pesos = (centavos: number) => monto(centavos)
 
 const plurales: Record<EstadoContacto, string> = {
   lead_frio: 'Leads fríos',

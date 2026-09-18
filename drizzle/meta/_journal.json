@@ -71,6 +71,13 @@
       "when": 1789769296395,
       "tag": "0009_cfdi_pagados",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1789771696136,
+      "tag": "0010_cotizacion_tipo_cambio",
+      "breakpoints": true
     }
   ]
 }

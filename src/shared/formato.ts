@@ -5,6 +5,10 @@ export const TASA_IVA = 0.16
 export const diaLocal = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
+/** Centavos (or USD cents) as money in `moneda`: `$1,250.50` in pesos, `USD 30.00` in dollars. */
+export const monto = (centavos: number, moneda: 'MXN' | 'USD' = 'MXN') =>
+  new Intl.NumberFormat('es-MX', { style: 'currency', currency: moneda, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(centavos / 100)
+
 /** A Folio as shown everywhere, e.g. `DMM475a`. */
 export const folioDmm = (folio: string | number) => `DMM${folio}`
 
