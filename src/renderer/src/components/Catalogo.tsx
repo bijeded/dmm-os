@@ -19,6 +19,7 @@ export function Catalogo() {
   const api = window.dmm.catalogo
   const [conceptos, setConceptos] = useState<ConceptoCatalogo[] | null>(null)
   const [borrador, setBorrador] = useState<Borrador | null>(null)
+  const [aBorrar, setABorrar] = useState<ConceptoCatalogo | null>(null)
   const { error, setError, ocupado, correr } = useAccion()
 
   useEffect(() => {
@@ -61,7 +62,7 @@ export function Catalogo() {
                     variant="ghost"
                     aria-label={`Borrar ${c.concepto}`}
                     disabled={ocupado}
-                    onClick={() => correr(async () => setConceptos(await api.borrar(c.id)))}
+                    onClick={() => setABorrar(c)}
                   >
                     Borrar
                   </Button>
@@ -70,6 +71,25 @@ export function Catalogo() {
             ))}
           </tbody>
         </table>
+      )}
+
+      {aBorrar && (
+        <div className="flex flex-wrap items-center gap-3 rounded-control border border-border-strong p-3 text-[13px]">
+          <span>¿Borrar «{aBorrar.concepto}» del catálogo? Las cotizaciones existentes conservan su precio.</span>
+          <Button
+            disabled={ocupado}
+            onClick={() => {
+              const id = aBorrar.id
+              setABorrar(null)
+              correr(async () => setConceptos(await api.borrar(id)))
+            }}
+          >
+            Sí, borrar
+          </Button>
+          <Button variant="ghost" onClick={() => setABorrar(null)}>
+            No borrar
+          </Button>
+        </div>
       )}
 
       {borrador ? (
