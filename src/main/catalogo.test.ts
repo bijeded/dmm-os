@@ -25,6 +25,8 @@ describe('Catálogo', () => {
     expect(() => guardarConcepto(db, { ...sitio, concepto: '  ' })).toThrow('El concepto necesita nombre')
     expect(() => guardarConcepto(db, { ...sitio, precio: -1 })).toThrow('El precio')
     expect(() => guardarConcepto(db, { ...sitio, precio: 1.5 })).toThrow('El precio')
+    expect(() => guardarConcepto(db, { ...sitio, categoria: 'x' as never })).toThrow('Categoría desconocida')
+    expect(() => guardarConcepto(db, { ...sitio, id: 999 })).toThrow('No existe el concepto')
     expect(listarCatalogo(db)).toEqual([])
   })
 

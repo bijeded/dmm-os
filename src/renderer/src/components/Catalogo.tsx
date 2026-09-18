@@ -28,6 +28,7 @@ export function Catalogo() {
   const guardar = (b: Borrador) =>
     correr(async () => {
       const { id, concepto, categoria, precio } = b
+      if (precio.trim() === '') throw new Error('El concepto necesita precio')
       setConceptos(await api.guardar({ ...(id === undefined ? {} : { id }), concepto, categoria, precio: Math.round(Number(precio) * 100) }))
       setBorrador(null)
     })

@@ -62,6 +62,7 @@ describe('Configuración → Catálogo', () => {
     render(<Catalogo />)
     await screen.findByText(sitio.concepto)
     fireEvent.click(screen.getByRole('button', { name: 'Agregar concepto' }))
+    fireEvent.change(screen.getByLabelText('Precio'), { target: { value: '100' } })
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'El concepto necesita nombre')
   })

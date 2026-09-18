@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import type { Db } from './db'
 import { catalogo } from './db/schema'
-import type { ConceptoCatalogo, ConceptoNuevo, PartidaCotizacion } from '../shared/ipc'
+import { CATEGORIAS, type ConceptoCatalogo, ConceptoNuevo, PartidaCotizacion } from '../shared/ipc'
 
 const campos = { id: catalogo.id, concepto: catalogo.concepto, categoria: catalogo.categoria, precio: catalogo.precio }
 
@@ -16,10 +16,11 @@ export function listarCatalogo(db: Db): ConceptoCatalogo[] {
 export function guardarConcepto(db: Db, { id, concepto, categoria, precio }: ConceptoNuevo): ConceptoCatalogo[] {
   const nombre = concepto.trim()
   if (!nombre) throw new Error('El concepto necesita nombre')
-  if (!Number.isInteger(precio) || precio < 0) throw new Error('El precio debe ser un monto positivo')
+  if (!CATEGORIAS.includes(categoria)) throw new Error('Categoría desconocida')
+  if (!Number.isInteger(precio) || precio < 0) throw new Error('El precio debe ser un monto no negativo')
   const valores = { concepto: nombre, categoria, precio }
   if (id === undefined) db.insert(catalogo).values(valores).run()
-  else db.update(catalogo).set(valores).where(eq(catalogo.id, id)).run()
+  else if (db.update(catalogo).set(valores).where(eq(catalogo.id, id)).run().changes === 0) throw new Error('No existe el concepto')
   return listarCatalogo(db)
 }
 
