@@ -167,7 +167,7 @@ describe('Ficha de cotización', () => {
     montar('/cotizaciones/2')
     fireEvent.click(await screen.findByRole('button', { name: 'Aceptada' }))
     await waitFor(() => expect(api.aceptar).toHaveBeenCalledWith(2))
-    expect(await screen.findByText('Creado al aceptarse')).toBeTruthy()
+    expect((await screen.findByRole('link', { name: 'Ver proyecto' })).getAttribute('href')).toBe('/proyectos/4')
     expect(screen.queryByRole('button', { name: 'Aceptada' })).toBeNull()
   })
 })

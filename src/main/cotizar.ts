@@ -39,7 +39,7 @@ function exigir(accion: AccionCotizacion, estado: EstadoCotizacion, mensaje: str
   if (!PERMITIDA_EN[accion].includes(estado)) throw new Error(mensaje)
 }
 
-const folioDe = (c: { folio: number | null; folioSufijo: string }) => (c.folio === null ? null : `${c.folio}${c.folioSufijo}`)
+export const folioDe = (c: { folio: number | null; folioSufijo: string }) => (c.folio === null ? null : `${c.folio}${c.folioSufijo}`)
 
 function leer(db: Db, id: number) {
   const c = db.select().from(cotizaciones).where(eq(cotizaciones.id, id)).get()

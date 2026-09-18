@@ -18,6 +18,10 @@ const logCarpetas = {
 
 const rutas = { dmmOsRoot: '/root', hddRoot: null, hddConectado: false, entrada: 0 }
 
+const sinFicha = vi.fn((): never => {
+  throw new Error('sin ficha')
+})
+
 function handlers() {
   return {
     getAppInfo: vi.fn(() => info),
@@ -79,6 +83,21 @@ function handlers() {
       }),
       borrar: vi.fn(),
       abrirPdf: vi.fn(async () => {})
+    },
+    proyectos: {
+      listar: vi.fn(() => ({
+        proyectos: [],
+        conteo: { en_curso: 0, pausado: 0, completado: 0, cancelado: 0 },
+        porCategoria: { website: 0, ecommerce: 0, app: 0, ai: 0, marketing: 0, other: 0 }
+      })),
+      ficha: sinFicha,
+      guardar: sinFicha,
+      pausar: sinFicha,
+      reanudar: sinFicha,
+      completar: sinFicha,
+      cancelar: sinFicha,
+      borrar: vi.fn(),
+      abrirCarpeta: vi.fn(async () => {})
     },
     finanzas: {
       coberturaCostos: vi.fn(() => [{ anio: 2025, sinDatos: true }])

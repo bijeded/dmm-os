@@ -16,7 +16,7 @@ import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
 
-const campoCls = 'h-9 rounded-control border border-border-strong bg-surface-sunken px-2 text-[13px] text-on-surface'
+export const campoCls = 'h-9 rounded-control border border-border-strong bg-surface-sunken px-2 text-[13px] text-on-surface'
 const numCls = `${campoCls} w-28 font-mono text-[12px]`
 
 const hoy = () => diaLocal(new Date())
@@ -42,7 +42,7 @@ const vacia = (): CotizacionNueva => ({
   costosEstimados: []
 })
 
-function Campo({ label, children }: { label: string; children: React.ReactNode }) {
+export function Campo({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1.5">
       <span className={etiquetaCls}>{label}</span>

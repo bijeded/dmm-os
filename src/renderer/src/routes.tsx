@@ -6,7 +6,10 @@ import { Contactos } from './components/Contactos'
 import { Cotizaciones } from './components/Cotizaciones'
 import { FichaCotizacion } from './components/FichaCotizacion'
 import { FichaContacto } from './components/FichaContacto'
+import { FichaProyecto } from './components/FichaProyecto'
 import { NuevaCotizacion } from './components/NuevaCotizacion'
+import { NuevoProyecto } from './components/NuevoProyecto'
+import { Proyectos } from './components/Proyectos'
 import { SectionPage } from './components/SectionPage'
 import { sections } from './sections'
 
@@ -14,7 +17,8 @@ import { sections } from './sections'
 const pantallas: Record<string, ReactElement> = {
   '/configuracion': <Configuracion />,
   '/contactos': <Contactos />,
-  '/cotizaciones': <Cotizaciones />
+  '/cotizaciones': <Cotizaciones />,
+  '/proyectos': <Proyectos />
 }
 
 export const routes: RouteObject[] = [
@@ -29,7 +33,10 @@ export const routes: RouteObject[] = [
       { path: 'contactos/:id', element: <FichaContacto /> },
       { path: 'cotizaciones/nueva', element: <NuevaCotizacion /> },
       { path: 'cotizaciones/:id', element: <FichaCotizacion /> },
-      { path: 'cotizaciones/:id/editar', element: <NuevaCotizacion /> }
+      { path: 'cotizaciones/:id/editar', element: <NuevaCotizacion /> },
+      { path: 'proyectos/nuevo', element: <NuevoProyecto /> },
+      { path: 'proyectos/:id', element: <FichaProyecto /> },
+      { path: 'proyectos/:id/editar', element: <NuevoProyecto /> }
     ]
   }
 ]

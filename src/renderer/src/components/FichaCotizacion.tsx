@@ -152,7 +152,13 @@ export function FichaCotizacion() {
                   <span className="font-mono text-[12px] break-all">{f.pdf}</span>
                 </Fila>
               )}
-              {f.proyectoId !== null && <Fila label="Proyecto">Creado al aceptarse</Fila>}
+              {f.proyectoId !== null && (
+                <Fila label="Proyecto">
+                  <Link to={`/proyectos/${f.proyectoId}`} className="text-primary-text">
+                    Ver proyecto
+                  </Link>
+                </Fila>
+              )}
               {f.stack && <Fila label="Stack">{f.stack}</Fila>}
               {f.terminos && <Fila label="Términos">{f.terminos}</Fila>}
               {f.notas && <Fila label="Notas">{f.notas}</Fila>}

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -151,6 +151,7 @@ describe('cotizaciones', () => {
     expect((await h.cotizaciones.aceptar(id)).estado).toBe('aceptada')
     await h.cotizaciones.abrirPdf(id)
     expect(opciones.abrirCarpeta).toHaveBeenCalledWith(join(root, pdf!))
+    expect(existsSync(join(root, 'Proyectos/Clínica Sol - Landing'))).toBe(true)
   })
   it('expires sent quotes past their validity whenever quotes are read', async () => {
     const { id: contactoId } = conexion.db.insert(contactos).values({ nombre: 'Hotel Aura' }).returning().get()
@@ -172,5 +173,25 @@ describe('cotizaciones', () => {
     })
     await h.cotizaciones.enviar(id)
     expect((await h.cotizaciones.listar()).cotizaciones[0].estado).toBe('expirada')
+  })
+})
+
+describe('proyectos', () => {
+  it('creates a personal Proyecto with its folder in the DMM OS root, and opens it', async () => {
+    const f = await h.proyectos.guardar({
+      nombre: 'Portafolio',
+      etiqueta: 'personal',
+      contactoId: null,
+      clienteFinal: null,
+      categoria: 'website',
+      fechaInicio: '',
+      fechaEntrega: null,
+      notas: null
+    })
+    expect(f).toMatchObject({ fechaInicio: '2026-09-16', carpeta: { estado: 'disponible', ruta: 'Proyectos/Portafolio' } })
+    await h.proyectos.abrirCarpeta(f.id)
+    expect(opciones.abrirCarpeta).toHaveBeenCalledWith(join(root, 'Proyectos/Portafolio'))
+    expect((await h.proyectos.completar(f.id)).estado).toBe('completado')
+    expect((await h.proyectos.listar()).conteo.completado).toBe(1)
   })
 })
