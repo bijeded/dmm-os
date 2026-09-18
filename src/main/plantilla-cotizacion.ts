@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { NOMBRES_FACTURACION, type FichaCotizacion } from '../shared/ipc'
 
 /**
@@ -5,6 +7,28 @@ import { NOMBRES_FACTURACION, type FichaCotizacion } from '../shared/ipc'
  * paper and ink, amber accent, Antonio for display, Asap for text. Estimated costs are
  * internal and never printed.
  */
+
+// The faces the template uses, from the same @fontsource packages as the app. They are
+// inlined so the PDF looks the same whether or not the machine has them installed.
+const CARAS: [familia: string, peso: number, archivo: string][] = [
+  ['Antonio', 700, '@fontsource/antonio/files/antonio-latin-700-normal.woff2'],
+  ['Asap', 400, '@fontsource/asap/files/asap-latin-400-normal.woff2'],
+  ['Asap', 600, '@fontsource/asap/files/asap-latin-600-normal.woff2'],
+  ['JetBrains Mono', 400, '@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2'],
+  ['JetBrains Mono', 600, '@fontsource/jetbrains-mono/files/jetbrains-mono-latin-600-normal.woff2']
+]
+
+let fuentes: string | undefined
+
+/** `@font-face` rules with the brand fonts as data URLs, read once. */
+export function fuentesMarca(): string {
+  const resolver = createRequire(import.meta.url).resolve
+  fuentes ??= CARAS.map(
+    ([familia, peso, archivo]) =>
+      `@font-face { font-family: '${familia}'; font-weight: ${peso}; src: url(data:font/woff2;base64,${readFileSync(resolver(archivo)).toString('base64')}) format('woff2') }`
+  ).join('\n')
+  return fuentes
+}
 
 const escapar = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
 
@@ -35,6 +59,7 @@ export function plantillaCotizacion(c: FichaCotizacion): string {
   return `<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><title>DMM${escapar(c.folio ?? '')} · ${escapar(c.nombre)}</title>
 <style>
+${fuentesMarca()}
   @page { size: Letter; margin: 0 }
   * { box-sizing: border-box }
   body { margin: 0; background: #F7F5F2; color: #1A1A1A; font: 11pt/1.5 Asap, 'Helvetica Neue', Arial, sans-serif }
