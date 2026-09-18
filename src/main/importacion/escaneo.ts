@@ -64,7 +64,7 @@ function sumar(log: LogCarpetas, aportes: Aportes): void {
 export function escanearCarpetas(db: Db, root: string, hddRoot?: string, hoy = hoyLocal()): LogCarpetas {
   const log = logVacio()
 
-  cotizacionesDeDisco(db, root, log)
+  cotizacionesDeDisco(db, root, log, 'antiguo')
   contactosDeDisco(db, root, log)
   proyectosDeDisco(db, root, 'proyectos', log, hoy)
   proyectosDeDisco(db, root, 'archivo', log, hoy)
@@ -75,6 +75,8 @@ export function escanearCarpetas(db: Db, root: string, hddRoot?: string, hoy = h
     if (!log.hddConectado) marcarHddNoDisponible(db)
   }
 
+  // A new-format quote names its Proyecto, so it waits until every folder is known.
+  cotizacionesDeDisco(db, root, log, 'nuevo')
   const sinCarpeta = proyectosDeCotizacionesAceptadas(db)
   log.proyectosSinCarpeta = sinCarpeta.proyectos
   log.sugerencias += sinCarpeta.sugerencias
@@ -82,17 +84,18 @@ export function escanearCarpetas(db: Db, root: string, hddRoot?: string, hoy = h
 }
 
 /** `Cotizaciones/<year>/DMM - <folio> - <Nombre>.pdf`, every year the folder holds. */
-function cotizacionesDeDisco(db: Db, root: string, log: LogCarpetas): void {
+function cotizacionesDeDisco(db: Db, root: string, log: LogCarpetas, formato: 'antiguo' | 'nuevo'): void {
   const anios = subcarpetas(root, 'Cotizaciones')
   if (anios === null) {
-    log.noDisponibles.push('Cotizaciones')
+    if (formato === 'antiguo') log.noDisponibles.push('Cotizaciones')
     return
   }
   for (const anio of anios) {
     const carpeta = posix.join('Cotizaciones', anio)
     for (const archivo of archivos(root, carpeta) ?? []) {
       const nombre = leerNombreArchivo(archivo)
-      if (!nombre) continue
+      // Only the new format carries a date.
+      if (!nombre || (nombre.fecha === null) !== (formato === 'antiguo')) continue
       try {
         const r = importarCotizacion(db, {
           ...nombre,

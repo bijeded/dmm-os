@@ -78,6 +78,15 @@ describe('escanear Cotizaciones/', () => {
     expect(db.select().from(contactos).all().map((c) => c.nombre)).toEqual(['Grupo Ángeles'])
   })
 
+  it('files a new-format quote under a Proyecto folder found in the same scan', () => {
+    pdf(root, '2026', '260114-DMM520-Clicme.pdf')
+    carpeta(root, 'Proyectos', 'Clicme')
+
+    const log = escanearCarpetas(db, root)
+    expect(log.errores).toEqual([])
+    expect(db.select().from(cotizaciones).get()?.contactoId).toBe(db.select().from(proyectos).get()?.contactoId)
+  })
+
   it('refuses a new-format quote whose Proyecto it does not know, rather than invent a Contacto', () => {
     pdf(root, '2026', '260114-DMM520-Hospital Jardín.pdf')
 
