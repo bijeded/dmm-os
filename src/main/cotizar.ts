@@ -27,7 +27,7 @@ const PERMITIDA_EN: Record<AccionCotizacion, readonly EstadoCotizacion[]> = {
 /** An open Cotización still waits on the studio or the client: a draft, or sent and unanswered. */
 export const cotizacionAbierta = (estado: EstadoCotizacion) => estado === 'borrador' || estado === 'enviada'
 
-const accionesEn =(estado: EstadoCotizacion) =>
+const accionesEn = (estado: EstadoCotizacion) =>
   (Object.keys(PERMITIDA_EN) as AccionCotizacion[]).filter((a) => PERMITIDA_EN[a].includes(estado))
 
 function exigir(accion: AccionCotizacion, estado: EstadoCotizacion, mensaje: string) {
