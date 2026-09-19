@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { estadoCobro, estadosCobro } from './cobranza'
 import { cotizaciones, ingresos } from './db/schema'
 import { reembolsar } from './movimientos'
+import { planCobro } from './plan-cobro'
 import { contacto, db, ingresoBase, proyecto, reiniciarDb } from './db/test-db'
 
 const hoy = '2026-09-18'
@@ -77,6 +78,14 @@ describe('estadoCobro', () => {
       .get()
     reembolsar(db, o.id, 30, hoy)
     expect(estadoCobro(db, p.id)).toMatchObject({ pagadoCompleto: false, falta: { pendientes: 0, faltante: 30, moneda: 'USD' } })
+  })
+
+  it('a USD quote paid one parcialidad short misses exactly what accepting planned for the rest', () => {
+    const c = cotizacion({ moneda: 'USD', facturacion: 'parcialidades', parcialidades: 3, subtotal: 1000, iva: 161, total: 1161, tipoCambio: 18.37 })
+    const p = proyecto(contactoId, c.id)
+    const [primera, segunda, tercera] = planCobro(c, hoy, 18.37).ingresos
+    for (const i of [primera, segunda]) ingreso(p.id, i)
+    expect(estadoCobro(db, p.id).falta).toEqual({ pendientes: 0, faltante: tercera.montoOriginal, moneda: 'USD' })
   })
 
   it('compares an MXN Cotización by pesos, even when paid in USD', () => {
