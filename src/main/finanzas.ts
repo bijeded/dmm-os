@@ -78,8 +78,10 @@ function cifras(todosIngresos: Ingreso[], todosCostos: Costo[], rango: Rango, si
     ingresosFactura: suma(delPeriodo.filter((i) => i.categoria === 'factura'), (i) => i.subtotal),
     ingresosSinFactura: suma(delPeriodo.filter((i) => i.categoria === 'sin_factura'), (i) => i.subtotal),
     ivaIngresos: suma(delPeriodo, (i) => i.iva),
+    retencionesIngresos: suma(delPeriodo, (i) => i.retenciones),
     costos: costosTotal,
     ivaCostos: suma(costosDelPeriodo, (c) => c.iva),
+    retencionesCostos: suma(costosDelPeriodo, (c) => c.retenciones),
     utilidad: sinCostos ? null : ingresosTotal - costosTotal
   }
 }
@@ -203,6 +205,7 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     estado: i.estado,
     subtotal: i.subtotal,
     iva: i.iva,
+    retenciones: i.retenciones,
     total: i.total,
     origen: origenIngreso(i),
     vencida: i.estado === 'pendiente' && i.estadoFacturacion === 'facturado' && i.fechaRegistro !== null && i.fechaRegistro < limiteVencida,
@@ -223,6 +226,7 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     estimado: c.estimado,
     subtotal: c.subtotal,
     iva: c.iva,
+    retenciones: c.retenciones,
     total: c.total,
     origen: origenCosto(c),
     acciones: accionesCosto(c, {

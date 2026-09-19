@@ -65,7 +65,15 @@ export function createDatabase(migrationsFolder: string) {
         if (antesDeMigrar && last !== null && journalTimes(migrationsFolder).some((when) => when > last)) {
           antesDeMigrar(conexion)
         }
-        migrate(conexion.db, { migrationsFolder })
+        // Migrations run in one transaction, where PRAGMA foreign_keys is ignored: a table rebuilt
+        // by a migration would otherwise cascade-delete or refuse to drop under its references.
+        sqlite.pragma('foreign_keys = OFF')
+        try {
+          migrate(conexion.db, { migrationsFolder })
+          if ((sqlite.pragma('foreign_key_check') as unknown[]).length > 0) throw new Error('La migración dejó referencias rotas')
+        } finally {
+          sqlite.pragma('foreign_keys = ON')
+        }
       } catch (e) {
         conexion.close()
         throw e

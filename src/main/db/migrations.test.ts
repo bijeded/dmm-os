@@ -96,3 +96,55 @@ it('0009 marks imported CFDIs paid on their date, and leaves the rest alone', ()
   ])
   sqlite.close()
 })
+
+it('0012 gives existing amounts zero retenciones and keeps rows linked to rebuilt tables', () => {
+  const file = join(dir, 'retenciones.db')
+  const sqlite = new Database(file)
+  sqlite.pragma('foreign_keys = ON')
+  const anteriores = journalTimes(drizzleDir).slice(0, 12)
+  const archivos = JSON.parse(readFileSync(join(drizzleDir, 'meta', '_journal.json'), 'utf8')).entries
+    .slice(0, 12)
+    .map((e: { tag: string }) => `${e.tag}.sql`)
+  for (const m of archivos) {
+    for (const stmt of readFileSync(join(drizzleDir, m), 'utf8').split('--> statement-breakpoint')) {
+      if (stmt.trim()) sqlite.exec(stmt)
+    }
+  }
+  sqlite.exec(
+    'create table __drizzle_migrations (id integer primary key autoincrement, hash text not null, created_at numeric)'
+  )
+  const aplicar = sqlite.prepare('insert into __drizzle_migrations (hash, created_at) values (?, ?)')
+  for (const when of anteriores) aplicar.run(String(when), when)
+  sqlite.exec(`
+    insert into definiciones_ingreso (id, tipo, categoria, subtotal, iva, total, dia_del_mes, periodo_inicio)
+      values (1, 'mensual', 'sin_factura', 1000, 0, 1000, 1, '2026-01');
+    insert into ingresos (categoria, estado, subtotal, iva, total, fecha_registro, periodo, definicion_id)
+      values ('sin_factura', 'pendiente', 1000, 0, 1000, '2026-01-01', '2026-01', 1);
+    insert into definiciones_costo (id, nombre, tipo, dia_del_mes, periodo_inicio)
+      values (1, 'Hosting', 'mensual', 1, '2026-01');
+    insert into vigencias_precio (definicion_costo_id, desde, subtotal, iva, total) values (1, '2026-01', 100, 16, 116);
+    insert into costos (id, nombre, categoria, estado, subtotal, iva, total, fecha, periodo, definicion_id)
+      values (1, 'Hosting', 'mensual', 'pagado', 100, 16, 116, '2026-01-01', '2026-01', 1);
+    insert into contactos (id, nombre) values (1, 'Estudio Ocho');
+    insert into proyectos (id, nombre, contacto_id, categoria) values (1, 'Clicme', 1, 'website');
+    insert into asignaciones_costo (costo_id, proyecto_id, tokens, monto) values (1, 1, 1, 100);
+  `)
+  sqlite.close()
+
+  createDatabase(drizzleDir).abrir(file).close()
+
+  const migrada = new Database(file)
+  for (const tabla of ['definiciones_ingreso', 'ingresos', 'vigencias_precio', 'costos']) {
+    expect(migrada.prepare(`select retenciones from ${tabla}`).all()).toEqual([{ retenciones: 0 }])
+  }
+  expect(migrada.prepare('select definicion_id from ingresos').get()).toEqual({ definicion_id: 1 })
+  // Rebuilding costos must not cascade into its asignaciones.
+  expect(migrada.prepare('select costo_id from asignaciones_costo').all()).toEqual([{ costo_id: 1 }])
+  expect(migrada.pragma('foreign_key_check')).toEqual([])
+  expect(() =>
+    migrada.exec(
+      `insert into costos (nombre, categoria, estado, subtotal, iva, retenciones, total, fecha) values ('x', 'unico', 'pagado', 100, 16, 10, 116, '2026-01-01')`
+    )
+  ).toThrow(/CHECK/)
+  migrada.close()
+})

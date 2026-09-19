@@ -85,6 +85,13 @@
       "when": 1789783735821,
       "tag": "0011_tareas",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1789803409846,
+      "tag": "0012_retenciones",
+      "breakpoints": true
     }
   ]
 }

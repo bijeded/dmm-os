@@ -16,8 +16,11 @@ export interface Cfdi {
   descripcion: string
   /** SubTotal less any Descuento, in MXN centavos. */
   subtotal: number
-  /** Traslados less retenciones, in MXN centavos. */
+  /** IVA charged (TotalImpuestosTrasladados), in MXN centavos. */
   iva: number
+  /** Taxes withheld by the payer (TotalImpuestosRetenidos), in MXN centavos. */
+  retenciones: number
+  /** Subtotal + IVA − retenciones: what the bank sees. */
   total: number
   /** The currency the CFDI was issued in; 'MXN' unless it was a foreign invoice. */
   moneda: string
@@ -65,7 +68,8 @@ export function leerCfdi(xml: string): Cfdi {
   // Descuentos and retenciones are part of what the bank actually sees, so they belong in the amounts.
   const enPesos = (valor: unknown) => centavos(valor, tipoCambio)
   const subtotal = enPesos(comprobante.SubTotal) - enPesos(comprobante.Descuento)
-  const iva = enPesos(impuestos?.TotalImpuestosTrasladados) - enPesos(impuestos?.TotalImpuestosRetenidos)
+  const iva = enPesos(impuestos?.TotalImpuestosTrasladados)
+  const retenciones = enPesos(impuestos?.TotalImpuestosRetenidos)
   const original = () =>
     centavos(comprobante.SubTotal, 1) -
     centavos(comprobante.Descuento, 1) +
@@ -81,7 +85,8 @@ export function leerCfdi(xml: string): Cfdi {
     descripcion: String(concepto?.Descripcion ?? ''),
     subtotal,
     iva,
-    total: subtotal + iva,
+    retenciones,
+    total: subtotal + iva - retenciones,
     moneda,
     montoOriginal: moneda === 'MXN' ? null : original()
   }

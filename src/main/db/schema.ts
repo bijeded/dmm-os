@@ -36,12 +36,18 @@ const creadoEn = () =>
     .notNull()
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`)
 
-const cuadraTotal = (t: { subtotal: AnySQLiteColumn; iva: AnySQLiteColumn; total: AnySQLiteColumn }) =>
-  sql`${t.total} = ${t.subtotal} + ${t.iva}`
+const cuadraTotal = (t: {
+  subtotal: AnySQLiteColumn
+  iva: AnySQLiteColumn
+  retenciones: AnySQLiteColumn
+  total: AnySQLiteColumn
+}) => sql`${t.total} = ${t.subtotal} + ${t.iva} - ${t.retenciones}`
 
 const montos = () => ({
   subtotal: integer('subtotal').notNull(),
   iva: integer('iva').notNull().default(0),
+  /** Taxes withheld by the payer; only an imported CFDI carries them. */
+  retenciones: integer('retenciones').notNull().default(0),
   total: integer('total').notNull(),
   montoOriginal: integer('monto_original'),
   monedaOriginal: text('moneda_original', { enum: MONEDAS })

@@ -84,7 +84,7 @@ describe('resumen', () => {
     nuevoCosto(db, costo({ fecha: '2025-06-01', subtotal: 1000, conIva: false }), hoy)
 
     const r = resumenFinanzas(db, 'anio', hoy, 30)
-    expect(r.actual).toEqual({ ingresos: 15000, ingresosFactura: 5000, ingresosSinFactura: 10000, ivaIngresos: 800, costos: 2000, ivaCostos: 320, utilidad: 13000 })
+    expect(r.actual).toEqual({ ingresos: 15000, ingresosFactura: 5000, ingresosSinFactura: 10000, ivaIngresos: 800, retencionesIngresos: 0, costos: 2000, ivaCostos: 320, retencionesCostos: 0, utilidad: 13000 })
     expect(r.anterior).toMatchObject({ ingresos: 4000, costos: 1000, utilidad: 3000 })
   })
 
