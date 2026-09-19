@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { CATEGORIAS, ESTADOS_PROYECTO, NOMBRES_CATEGORIA, NOMBRES_ESTADO_PROYECTO, type CarpetaProyecto, type Categoria, type EstadoProyecto, type ListaProyectos } from '../../../shared/dominio'
 import { dia, normalizar } from '../../../shared/formato'
-import { celdaCls, etiquetaCls, tituloCls } from './Contactos'
-import { PorCategoria, selectCls } from './Cotizaciones'
+import { PorCategoria } from './Cotizaciones'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
+import { celdaCls, etiquetaCls, selectCls, tituloCls } from './estilos'
 
 /** How a folder that cannot be opened reads: Archivado is not a broken link. */
 export const NOMBRES_CARPETA: Record<CarpetaProyecto['estado'], string> = {

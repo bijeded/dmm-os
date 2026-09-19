@@ -3,9 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { CATEGORIAS, CATEGORIAS_COSTO, FACTURACIONES, NOMBRES_CATEGORIA, NOMBRES_CATEGORIA_COSTO, NOMBRES_FACTURACION, type ConceptoCatalogo, type CotizacionNueva, type FilaContacto } from '../../../shared/dominio'
 import { totalesCotizacion } from '../../../shared/formato'
 import { hoy } from '../../../shared/fechas'
-import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
+import { pesos } from './Contactos'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
+import { celdaCls, etiquetaCls, tituloCls } from './estilos'
 
 export const campoCls = 'h-9 rounded-control border border-border-strong bg-surface-sunken px-2 text-[13px] text-on-surface'
 const numCls = `${campoCls} w-28 font-mono text-[12px]`

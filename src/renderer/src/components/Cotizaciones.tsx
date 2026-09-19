@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { CATEGORIAS, ESTADOS_COTIZACION, NOMBRES_CATEGORIA, NOMBRES_ESTADO_COTIZACION, type Categoria, type EstadoCotizacion, type ListaCotizaciones } from '../../../shared/dominio'
 import { dia, folioDmm, normalizar } from '../../../shared/formato'
-import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
+import { pesos } from './Contactos'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
+import { celdaCls, etiquetaCls, selectCls, tituloCls } from './estilos'
 
-export const selectCls = 'h-9 rounded-control border border-border-strong bg-surface-sunken px-2 text-[13px] text-on-surface'
 // The brand's chart palette, one per category.
 const COLORES: Record<Categoria, string> = {
   website: '#EBA51C',

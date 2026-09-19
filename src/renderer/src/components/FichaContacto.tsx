@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { NOMBRES_ESTADO_CONTACTO, type FichaContacto as Ficha, type Movimiento } from '../../../shared/dominio'
 import { dia } from '../../../shared/formato'
-import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
+import { pesos } from './Contactos'
 import { FormContacto } from './FormContacto'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
+import { celdaCls, etiquetaCls, tituloCls } from './estilos'
 
 const tipos: Record<Movimiento['tipo'], string> = { cotizacion: 'Cotización', proyecto: 'Proyecto', pago: 'Pago' }
 const filtros = [

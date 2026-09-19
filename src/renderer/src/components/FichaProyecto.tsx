@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { NOMBRES_CATEGORIA, NOMBRES_ESTADO_PROYECTO, type FichaProyecto as Ficha } from '../../../shared/dominio'
 import { dia, folioDmm, monto } from '../../../shared/formato'
-import { pesos, tituloCls } from './Contactos'
+import { pesos } from './Contactos'
 import { NOMBRES_CARPETA } from './Proyectos'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
+import { tituloCls } from './estilos'
 
 /** The Proyecto's record: its data, its folder, what is still owed and what can happen to it next. */
 export function FichaProyecto() {
