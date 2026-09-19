@@ -43,6 +43,7 @@ import {
 } from './proyectos'
 import { agregarTarea, borrarTarea, completarTarea, listarTareas } from './tareas'
 import { escanearCarpetas, importarFacturas, marcarHddNoDisponible } from './importacion'
+import { alDia } from './ledger'
 import { leerRutas } from './rutas'
 import { pendientes, responder } from './sugerencias'
 import { diaLocal } from '../shared/fechas'
@@ -77,6 +78,8 @@ export function crearHandlers({
   const hoy = () => diaLocal(new Date(ahora()))
   // An expired quote turns its Contacto from hot lead back to cold, so Contactos expires too.
   const expirar = () => expirarCotizaciones(conexion.db, hoy())
+  // The Proyectos list, Ficha and Completar read Ingresos and Cotizaciones Al día, as Finanzas does.
+  const ponerAlDia = () => alDia(conexion.db, hoy())
 
   // The external HDD is organised like the main root, and is usually disconnected. Its path is
   // read per call, so plugging the drive in needs no restart; when it is absent its Proyectos
@@ -165,12 +168,12 @@ export function crearHandlers({
       }
     },
     proyectos: {
-      listar: () => listarProyectos(conexion.db, info.dmmOsRoot),
-      ficha: (id) => fichaProyecto(conexion.db, info.dmmOsRoot, id),
+      listar: () => (ponerAlDia(), listarProyectos(conexion.db, info.dmmOsRoot)),
+      ficha: (id) => (ponerAlDia(), fichaProyecto(conexion.db, info.dmmOsRoot, id)),
       guardar: (proyecto) => guardarProyecto(conexion.db, info.dmmOsRoot, proyecto, hoy()),
       pausar: (id) => pausarProyecto(conexion.db, info.dmmOsRoot, id),
       reanudar: (id) => reanudarProyecto(conexion.db, info.dmmOsRoot, id),
-      completar: (id) => completarProyecto(conexion.db, info.dmmOsRoot, id, hoy()),
+      completar: (id) => (ponerAlDia(), completarProyecto(conexion.db, info.dmmOsRoot, id, hoy())),
       cancelar: (id) => cancelarProyecto(conexion.db, info.dmmOsRoot, id, hoy()),
       borrar: (id) => borrarProyecto(conexion.db, id),
       abrirCarpeta: async (id) => {

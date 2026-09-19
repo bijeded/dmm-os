@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDatabase, type Conexion } from './db'
-import { contactos, ingresos } from './db/schema'
+import { contactos, cotizaciones, ingresos } from './db/schema'
 import { MENSAJE_SIN_PAGAR } from './ciclo-proyecto'
 import { crearHandlers, type HandlersOptions } from './handlers'
 import type { DmmHandlers } from '../shared/contrato'
@@ -295,29 +295,34 @@ describe('finanzas', () => {
   })
 })
 
+/** A monthly Cotización for Café Luna, sent on `fecha` and valid 30 days. */
+async function mensualEnviada(fecha: string) {
+  const { id: contactoId } = conexion.db.insert(contactos).values({ nombre: 'Café Luna' }).returning().get()
+  h = crearHandlers({ ...opciones, ahora: () => `${fecha}T10:00:00.000Z` })
+  const { id } = await h.cotizaciones.guardar({
+    contactoId,
+    nombre: 'Mantenimiento',
+    categoria: 'website',
+    fecha,
+    validezDias: 30,
+    moneda: 'MXN',
+    partidas: [{ concepto: 'Mantenimiento', categoria: 'website', cantidad: 1, precio: 100_000 }],
+    conIva: false,
+    facturacion: 'mensual',
+    parcialidades: null,
+    stack: null,
+    terminos: null,
+    notas: null,
+    costosEstimados: []
+  })
+  await h.cotizaciones.enviar(id)
+  return id
+}
+
 describe('Completar sobre Periodos al día', () => {
-  // Reproduces #76: proyectos.ficha and proyectos.completar don't read through the ledger (alDia, #78),
-  // so Periodos after the accept month are missing until Finanzas is opened. Flip to `it` once they do.
-  it.fails('reads a monthly Proyecto’s Ingresos up to hoy in the Ficha and Completar, with Finanzas never opened', async () => {
-    const { id: contactoId } = conexion.db.insert(contactos).values({ nombre: 'Café Luna' }).returning().get()
-    h = crearHandlers({ ...opciones, ahora: () => '2026-07-16T10:00:00.000Z' })
-    const { id } = await h.cotizaciones.guardar({
-      contactoId,
-      nombre: 'Mantenimiento',
-      categoria: 'website',
-      fecha: '2026-07-16',
-      validezDias: 30,
-      moneda: 'MXN',
-      partidas: [{ concepto: 'Mantenimiento', categoria: 'website', cantidad: 1, precio: 100_000 }],
-      conIva: false,
-      facturacion: 'mensual',
-      parcialidades: null,
-      stack: null,
-      terminos: null,
-      notas: null,
-      costosEstimados: []
-    })
-    await h.cotizaciones.enviar(id)
+  // #76: Periodos after the accept month must be there without Finanzas being opened first.
+  it('reads a monthly Proyecto’s Ingresos up to hoy in the Ficha and Completar, with Finanzas never opened', async () => {
+    const id = await mensualEnviada('2026-07-16')
     const { proyectoId } = await h.cotizaciones.aceptar(id)
     conexion.db.update(ingresos).set({ estado: 'pagado' }).run()
 
@@ -326,5 +331,34 @@ describe('Completar sobre Periodos al día', () => {
     expect(f.falta).toMatchObject({ pendientes: 2 })
     expect(f.acciones).not.toContain('completar')
     await expect(async () => h.proyectos.completar(f.id)).rejects.toThrow(MENSAJE_SIN_PAGAR)
+  })
+})
+
+describe('Proyectos y Cobros al día', () => {
+  it('Cobros includes the current month’s Periodo', async () => {
+    const id = await mensualEnviada('2026-07-16')
+    await h.cotizaciones.aceptar(id)
+    h = crearHandlers(opciones)
+    const { cobros } = await h.finanzas.resumen('mes')
+    // July (accepted), August and September (hoy).
+    expect([...cobros.mes, ...cobros.vencidos, ...cobros.porFacturar].filter((i) => i.origen === 'periodo')).toHaveLength(3)
+  })
+
+  it('the Proyectos list expires Cotizaciones past their validity, as Cotizaciones does', async () => {
+    const id = await mensualEnviada('2026-07-16')
+    h = crearHandlers(opciones)
+    await h.proyectos.listar()
+    expect(conexion.db.select().from(cotizaciones).all().find((c) => c.id === id)?.estado).toBe('expirada')
+  })
+
+  it('reading twice creates no duplicate Periodos', async () => {
+    const id = await mensualEnviada('2026-07-16')
+    const { proyectoId } = await h.cotizaciones.aceptar(id)
+    h = crearHandlers(opciones)
+    await h.proyectos.listar()
+    await h.proyectos.ficha(proyectoId!)
+    await h.proyectos.ficha(proyectoId!)
+    // July (accepted), August and September (hoy), once each.
+    expect(conexion.db.select().from(ingresos).all()).toHaveLength(3)
   })
 })
