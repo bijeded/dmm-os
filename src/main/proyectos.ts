@@ -11,7 +11,7 @@ import { accionesProyecto, completarEsperaPago, exigirProyecto } from './ciclo-p
 import { CATEGORIAS, ESTADOS_PROYECTO, type AccionProyecto, type CarpetaProyecto, type Categoria, type EstadoProyecto, type FichaProyecto, type ListaProyectos, type ProyectoNuevo } from '../shared/dominio'
 
 /** Reads the Proyecto and refuses the action unless its lifecycle allows it. */
-function exigir(db: Db, accion: AccionProyecto, id: number) {
+function leerPara(db: Db, accion: AccionProyecto, id: number) {
   const p = leer(db, id)
   exigirProyecto(accion, p.estado, estadoCobro(db, id))
   return p
@@ -165,7 +165,7 @@ export function guardarProyecto(db: Db, root: string, p: ProyectoNuevo, hoy: str
     crearCarpeta(db, root, id, hoy)
     return fichaProyecto(db, root, id)
   }
-  const actual = exigir(db, 'editar', p.id)
+  const actual = leerPara(db, 'editar', p.id)
   if (actual.cotizacionId !== null) {
     if (personal) throw new Error('Un proyecto de una cotización no puede ser personal')
     valores.contactoId = actual.contactoId
@@ -180,25 +180,25 @@ function cambiarEstado(db: Db, root: string, id: number, estado: EstadoProyecto)
 }
 
 export function pausarProyecto(db: Db, root: string, id: number): FichaProyecto {
-  exigir(db, 'pausar', id)
+  leerPara(db, 'pausar', id)
   return cambiarEstado(db, root, id, 'pausado')
 }
 
 export function reanudarProyecto(db: Db, root: string, id: number): FichaProyecto {
-  exigir(db, 'reanudar', id)
+  leerPara(db, 'reanudar', id)
   return cambiarEstado(db, root, id, 'en_curso')
 }
 
 /** A Proyecto is only completed once fully paid; delivered but unpaid it stays En curso. */
 export function completarProyecto(db: Db, root: string, id: number, hoy: string): FichaProyecto {
-  exigir(db, 'completar', id)
+  leerPara(db, 'completar', id)
   db.update(proyectos).set({ estado: 'completado', fechaFin: hoy }).where(eq(proyectos.id, id)).run()
   return fichaProyecto(db, root, id)
 }
 
 /** Cancels the Proyecto and the Cotización it came from (Cancelación con pagos). */
 export function cancelarProyecto(db: Db, root: string, id: number, hoy: string): FichaProyecto {
-  exigir(db, 'cancelar', id)
+  leerPara(db, 'cancelar', id)
   cancelar(db, 'proyecto', id)
   db.update(proyectos).set({ fechaFin: hoy }).where(eq(proyectos.id, id)).run()
   return fichaProyecto(db, root, id)
@@ -209,7 +209,7 @@ export function cancelarProyecto(db: Db, root: string, id: number, hoy: string):
  * its folder stays on disk. Anything linked refuses it, and nothing is removed.
  */
 export function borrarProyecto(db: Db, id: number): void {
-  exigir(db, 'borrar', id)
+  leerPara(db, 'borrar', id)
   try {
     db.transaction((tx) => {
       tx.delete(ubicacionesArchivo).where(eq(ubicacionesArchivo.proyectoId, id)).run()

@@ -17,10 +17,14 @@ const REGLAS: Record<AccionProyecto, { en: readonly EstadoProyecto[]; mensaje: s
   cancelar: { en: ['en_curso', 'pausado'], mensaje: 'Solo un proyecto en curso o pausado se puede cancelar' }
 }
 
+/** Whether only being unpaid stands between the Proyecto and Completar, so the Ficha shows what is unpaid. */
+export const completarEsperaPago = (estado: EstadoProyecto, ctx: ContextoProyecto): boolean =>
+  REGLAS.completar.en.includes(estado) && !ctx.pagadoCompleto
+
 /** Why the action is refused, or `null` when it is allowed. A Proyecto is only completed once fully paid. */
 function rechazo(accion: AccionProyecto, estado: EstadoProyecto, ctx: ContextoProyecto): string | null {
   if (!REGLAS[accion].en.includes(estado)) return REGLAS[accion].mensaje
-  if (accion === 'completar' && !ctx.pagadoCompleto) return MENSAJE_SIN_PAGAR
+  if (accion === 'completar' && completarEsperaPago(estado, ctx)) return MENSAJE_SIN_PAGAR
   return null
 }
 
@@ -32,7 +36,3 @@ export function exigirProyecto(accion: AccionProyecto, estado: EstadoProyecto, c
   const mensaje = rechazo(accion, estado, ctx)
   if (mensaje) throw new Error(mensaje)
 }
-
-/** Whether only being unpaid stands between the Proyecto and Completar, so the Ficha shows what is unpaid. */
-export const completarEsperaPago = (estado: EstadoProyecto, ctx: ContextoProyecto): boolean =>
-  rechazo('completar', estado, ctx) === MENSAJE_SIN_PAGAR
