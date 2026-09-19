@@ -92,6 +92,13 @@
       "when": 1789803409846,
       "tag": "0012_retenciones",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1789804274007,
+      "tag": "0013_corregir_iva",
+      "breakpoints": true
     }
   ]
 }

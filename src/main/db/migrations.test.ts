@@ -97,6 +97,30 @@ it('0009 marks imported CFDIs paid on their date, and leaves the rest alone', ()
   sqlite.close()
 })
 
+it('0013 moves negative IVA on imported CFDIs into retenciones, keeping the total, and leaves the rest alone', () => {
+  const file = join(dir, 'iva.db')
+  createDatabase(drizzleDir).abrir(file).close()
+  const sqlite = new Database(file)
+  sqlite.exec(`
+    insert into ingresos (categoria, estado, estado_facturacion, subtotal, iva, total, fecha_registro, cfdi_uuid) values
+      ('factura', 'pagado', 'facturado', 100000, -4667, 95333, '2024-05-02', 'A'),
+      ('factura', 'pagado', 'facturado', 100000, 16000, 116000, '2024-05-03', 'B'),
+      ('sin_factura', 'pendiente', null, 100000, -500, 99500, '2024-05-04', null);
+    insert into costos (nombre, categoria, estado, subtotal, iva, total, fecha, cfdi_uuid) values
+      ('Honorarios', 'unico', 'pagado', 100000, -1000, 99000, '2024-06-01', 'C');
+  `)
+  for (const stmt of readFileSync(join(drizzleDir, '0013_corregir_iva.sql'), 'utf8').split('--> statement-breakpoint')) sqlite.exec(stmt)
+  expect(sqlite.prepare('select iva, retenciones, total from ingresos order by id').all()).toEqual([
+    { iva: 0, retenciones: 4667, total: 95333 },
+    { iva: 16000, retenciones: 0, total: 116000 },
+    { iva: -500, retenciones: 0, total: 99500 }
+  ])
+  expect(sqlite.prepare('select iva, retenciones, total from costos').all()).toEqual([
+    { iva: 0, retenciones: 1000, total: 99000 }
+  ])
+  sqlite.close()
+})
+
 it('0012 gives existing amounts zero retenciones and keeps rows linked to rebuilt tables', () => {
   const file = join(dir, 'retenciones.db')
   const sqlite = new Database(file)

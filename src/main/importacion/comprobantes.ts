@@ -40,11 +40,22 @@ function montos(cfdi: Cfdi) {
   }
 }
 
-/** A CFDI is imported once, whichever folder it turns up in. */
-function yaImportado(db: Tx, uuid: string): boolean {
-  const existe = (tabla: typeof ingresos | typeof costos) =>
-    db.select({ id: tabla.id }).from(tabla).where(eq(tabla.cfdiUuid, uuid)).get() !== undefined
-  return existe(ingresos) || existe(costos)
+/**
+ * A CFDI is imported once, whichever folder it turns up in. Seeing it again re-reads its IVA and
+ * retenciones, so a row imported when IVA was stored net of retenciones ends as a fresh import
+ * would store it. A row whose total no longer matches the CFDI was edited, and is left alone.
+ */
+function releerSiImportado(db: Tx, cfdi: Cfdi): boolean {
+  const corregir = (tabla: typeof ingresos | typeof costos) => {
+    const fila = db.select({ id: tabla.id }).from(tabla).where(eq(tabla.cfdiUuid, cfdi.uuid)).get()
+    if (fila === undefined) return false
+    db.update(tabla)
+      .set({ iva: cfdi.iva, retenciones: cfdi.retenciones })
+      .where(and(eq(tabla.id, fila.id), eq(tabla.subtotal, cfdi.subtotal), eq(tabla.total, cfdi.total)))
+      .run()
+    return true
+  }
+  return corregir(ingresos) || corregir(costos)
 }
 
 /**
@@ -61,7 +72,7 @@ export function importarCfdi(db: Db, xml: string, direccion: Direccion): Resulta
   if (cfdi.tipo !== 'I') return { ...vacio, resultado: 'ignorado' }
 
   return db.transaction((tx) => {
-    if (yaImportado(tx, cfdi.uuid)) return { ...vacio, resultado: 'duplicado' as const }
+    if (releerSiImportado(tx, cfdi)) return { ...vacio, resultado: 'duplicado' as const }
 
     const rfc = direccion === 'emitida' ? cfdi.receptor.rfc : cfdi.emisor.rfc
     const contacto = tx.select().from(contactos).where(eq(contactos.rfc, rfc)).get()
