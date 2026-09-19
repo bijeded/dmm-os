@@ -79,17 +79,26 @@ describe('importarFacturas', () => {
   it('corrects an earlier import that stored IVA net of retenciones, when its XML is still there', () => {
     escribir('Facturas/Emitidas/2026/a.xml', cfdiXml({ retenciones: '206.67' }))
     importarFacturas(db, root)
-    db.update(ingresos).set({ iva: -4_667, retenciones: 0 }).run()
+    // As migration 0013 left it: net IVA moved whole into retenciones.
+    db.update(ingresos).set({ iva: 0, retenciones: 4_667 }).run()
     expect(importarFacturas(db, root).duplicados).toBe(1)
     expect(db.select().from(ingresos).get()).toMatchObject({ subtotal: 100_000, iva: 16_000, retenciones: 20_667, total: 95_333 })
   })
 
-  it('leaves an earlier Costo without negative IVA as it is', () => {
+  it('keeps edits to other fields of an earlier Costo when re-reading it', () => {
     escribir('Facturas/Recibidas/2026/b.xml', cfdiXml())
     importarFacturas(db, root)
     db.update(costos).set({ nombre: 'Renombrado' }).run()
     importarFacturas(db, root)
     expect(db.select().from(costos).get()).toMatchObject({ nombre: 'Renombrado', iva: 16_000, retenciones: 0, total: 116_000 })
+  })
+
+  it('leaves a row whose amounts were edited after import alone', () => {
+    escribir('Facturas/Emitidas/2026/a.xml', cfdiXml({ retenciones: '206.67' }))
+    importarFacturas(db, root)
+    db.update(ingresos).set({ iva: -5_000, retenciones: 0, total: 95_000 }).run()
+    importarFacturas(db, root)
+    expect(db.select().from(ingresos).get()).toMatchObject({ iva: -5_000, retenciones: 0, total: 95_000 })
   })
 
   it('reports a missing Facturas folder as No disponible rather than failing', () => {

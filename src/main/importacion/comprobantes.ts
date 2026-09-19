@@ -43,7 +43,7 @@ function montos(cfdi: Cfdi) {
 /**
  * A CFDI is imported once, whichever folder it turns up in. Seeing it again re-reads its IVA and
  * retenciones, so a row imported when IVA was stored net of retenciones ends as a fresh import
- * would store it. A row whose total no longer matches the CFDI was edited, and is left alone.
+ * would store it. A row whose subtotal or total no longer matches the CFDI was edited, and is left alone.
  */
 function releerSiImportado(db: Tx, cfdi: Cfdi): boolean {
   const corregir = (tabla: typeof ingresos | typeof costos) => {
