@@ -110,4 +110,23 @@ describe('Contactos', () => {
     expect((await within(dialogo).findByRole('alert')).textContent).toMatch(/Ya existe el contacto Café Nómada/)
     expect(router.state.location.pathname).toBe('/contactos')
   })
+
+  it('opens without the form', async () => {
+    await screen.findByText('Café Nómada')
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('opens the form from ?nuevo, then drops the flag from the address without a new entry', async () => {
+    cleanup()
+    router = createMemoryRouter(
+      [{ path: '/contactos', element: <Contactos /> }],
+      { initialEntries: ['/contactos?nuevo'] }
+    )
+    render(<RouterProvider router={router} />)
+    const dialogo = await screen.findByRole('dialog', { name: 'Nuevo contacto' })
+    await waitFor(() => expect(router.state.location.search).toBe(''))
+    expect(router.state.historyAction).toBe('REPLACE')
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
 })

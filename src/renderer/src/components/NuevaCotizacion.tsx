@@ -5,9 +5,8 @@ import { totalesCotizacion, pesos } from '../../../shared/formato'
 import { hoy } from '../../../shared/fechas'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
-import { celdaCls, etiquetaCls, tituloCls } from './estilos'
+import { campoCls, celdaCls, etiquetaCls, tituloCls } from './estilos'
 
-export const campoCls = 'h-9 rounded-control border border-border-strong bg-surface-sunken px-2 text-[13px] text-on-surface'
 const numCls = `${campoCls} w-28 font-mono text-[12px]`
 
 

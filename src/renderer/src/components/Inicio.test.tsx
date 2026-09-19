@@ -31,14 +31,15 @@ const resumen = {
   periodo: 'mes',
   rango: { desde: '2026-09-01', hasta: '2026-09-18' },
   actual: { ingresos: 5_000_000, ingresosFactura: 0, ingresosSinFactura: 0, ivaIngresos: 0, costos: 1_200_000, ivaCostos: 0, utilidad: 3_800_000 },
-  cobrado: [ingreso(10, { estado: 'pagado', subtotal: 3_000_000 }), ingreso(11, { estado: 'pagado', subtotal: -500_000, reembolsoDeId: 10 })],
-  cobranza: [
-    ingreso(1, { contacto: 'Hotel Aura' }),
-    ingreso(2, { contacto: 'Grupo Terra', fecha: '2026-07-01', vencida: true }),
-    ingreso(3, { contacto: 'Mezcal Luna', fecha: null, estadoFacturacion: 'por_facturar' }),
-    ingreso(4, { contacto: 'Clínica Sol', fecha: '2026-10-15' }),
-    ingreso(5, { contacto: 'Netdeckr', fecha: '2026-06-01', categoria: 'sin_factura', estadoFacturacion: null })
-  ],
+  cobrado: [],
+  cobranza: [],
+  real: 2_500_000,
+  utilidadReal: 1_300_000,
+  cobros: {
+    mes: [ingreso(1, { contacto: 'Hotel Aura' }), ingreso(5, { contacto: 'Netdeckr', fecha: '2026-06-01', categoria: 'sin_factura', estadoFacturacion: null })],
+    vencidos: [ingreso(2, { contacto: 'Grupo Terra', fecha: '2026-07-01', vencida: true })],
+    porFacturar: [ingreso(3, { contacto: 'Mezcal Luna', fecha: null, estadoFacturacion: 'por_facturar' })]
+  },
   costosPendientes: [
     { id: 7, fecha: '2026-09-22', nombre: 'Hosting anual', proveedor: 'Hostinger', proyecto: null, categoria: 'anual', estado: 'pendiente', estimado: false, subtotal: 289_000, iva: 0, total: 289_000, origen: 'manual', acciones: [] }
   ]
@@ -51,7 +52,8 @@ const cotizacion = (id: number, folio: string | null, estado: FilaCotizacion['es
 
 const tareas: ListaTareas = {
   pendientes: [{ id: 1, texto: 'Facturar anticipo Hotel Aura', fechaRegistro: '2026-09-10', fechaHecha: null }],
-  hechas: [{ id: 2, texto: 'Revisar logs', fechaRegistro: '2026-09-01', fechaHecha: '2026-09-12' }]
+  hechas: [{ id: 2, texto: 'Revisar logs', fechaRegistro: '2026-09-01', fechaHecha: '2026-09-12' }],
+  dias: 14
 }
 
 let api: DmmApi
@@ -66,8 +68,8 @@ beforeEach(() => {
     tareas: {
       listar: vi.fn(async () => tareas),
       agregar: vi.fn(async (texto: string) => ({ ...tareas, pendientes: [...tareas.pendientes, { id: 3, texto, fechaRegistro: '2026-09-18', fechaHecha: null }] })),
-      completar: vi.fn(async () => ({ pendientes: [], hechas: tareas.hechas })),
-      borrar: vi.fn(async () => ({ pendientes: [], hechas: tareas.hechas }))
+      completar: vi.fn(async () => ({ ...tareas, pendientes: [] })),
+      borrar: vi.fn(async () => ({ ...tareas, pendientes: [] }))
     }
   } as unknown as DmmApi
   window.dmm = api
@@ -101,7 +103,7 @@ describe('Inicio', () => {
   })
 
   it('shows Sin datos for profit when the month has no imported Costos', async () => {
-    vi.mocked(api.finanzas.resumen).mockResolvedValue({ ...resumen, actual: { ...resumen.actual, utilidad: null } })
+    vi.mocked(api.finanzas.resumen).mockResolvedValue({ ...resumen, actual: { ...resumen.actual, utilidad: null }, utilidadReal: null })
     renderInicio()
     const cifras = await screen.findByRole('list', { name: 'Resumen' })
     expect(within(cifras).getByText('Utilidad').nextSibling?.textContent).toBe('Sin datos')
@@ -114,7 +116,6 @@ describe('Inicio', () => {
     await within(cobros).findByText('Hotel Aura')
     expect(within(cobros).getByText('Netdeckr')).toBeTruthy()
     expect(within(cobros).queryByText('Grupo Terra')).toBeNull()
-    expect(within(cobros).queryByText('Clínica Sol')).toBeNull()
     fireEvent.click(within(cobros).getByRole('button', { name: 'Vencidos · 1' }))
     expect(within(cobros).getByText('Grupo Terra')).toBeTruthy()
     fireEvent.click(within(cobros).getByRole('button', { name: 'Por facturar · 1' }))
@@ -145,8 +146,16 @@ describe('Inicio', () => {
 
     fireEvent.click(within(panel).getAllByRole('button', { name: 'Hecha' })[0])
     await waitFor(() => expect(api.tareas.completar).toHaveBeenCalledWith(1))
-    fireEvent.click(within(panel).getByRole('button', { name: 'Hechas · 30 días' }))
+    fireEvent.click(within(panel).getByRole('button', { name: 'Hechas · 14 días' }))
     expect(within(panel).getByText('Revisar logs')).toBeTruthy()
+  })
+
+  it('states the window main applies to done tasks when there are none', async () => {
+    vi.mocked(api.tareas.listar).mockResolvedValue({ ...tareas, hechas: [] })
+    renderInicio()
+    const panel = await screen.findByRole('region', { name: 'Tareas' })
+    fireEvent.click(await within(panel).findByRole('button', { name: 'Hechas · 14 días' }))
+    expect(within(panel).getByText('Nada hecho en los últimos 14 días.')).toBeTruthy()
   })
 
   it('deletes a pending task', async () => {

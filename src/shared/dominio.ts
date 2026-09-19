@@ -578,6 +578,15 @@ export interface ResumenFinanzas {
   cobrado: FilaIngreso[]
   /** Every pending Ingreso, oldest first, whatever the period. */
   cobranza: FilaIngreso[]
+  /** Ingreso real: the sum of Cobrado. */
+  real: number
+  /** Ingreso real − Costos; `null` (Sin datos) under the same rule as `actual.utilidad`. */
+  utilidadReal: number | null
+  /**
+   * Inicio's Cobros: the pending Ingresos dated this month or earlier, each in one group —
+   * Cobranza vencida, por facturar, or everything else collectable. Later ones are in none.
+   */
+  cobros: { mes: FilaIngreso[]; vencidos: FilaIngreso[]; porFacturar: FilaIngreso[] }
   /** Every pending Costo, soonest first, whatever the period. */
   costosPendientes: FilaCosto[]
   /** The period's Ingresos and Costos, newest first. */
@@ -640,6 +649,8 @@ export interface Tarea {
 export interface ListaTareas {
   /** Oldest first. */
   pendientes: Tarea[]
-  /** Done in the last 30 days, newest first. */
+  /** Done in the last `dias` days, newest first. */
   hechas: Tarea[]
+  /** How many days a done Tarea stays in `hechas`. */
+  dias: number
 }

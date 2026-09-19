@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router'
 import {
   NOMBRES_ESTADO_COTIZACION,
   type FilaCotizacion,
-  type FilaIngreso,
   type FilaProyecto,
   type ListaTareas,
   type ResumenFinanzas
@@ -18,7 +17,7 @@ const accionCls = 'cursor-pointer font-mono text-[11px] text-primary-text disabl
 const pestanaCls = (activa: boolean) =>
   `cursor-pointer rounded-control border px-2 py-1 text-[12px] ${activa ? 'border-primary text-primary-text' : 'border-border-strong text-on-surface-muted'}`
 
-type Cobros = 'mes' | 'vencidos' | 'por_facturar'
+type Cobros = keyof ResumenFinanzas['cobros']
 
 /** Inicio: where the business stands this month, what is owed either way, and what is still to do. */
 export function Inicio() {
@@ -48,20 +47,9 @@ export function Inicio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   }, [])
 
-  const mes = resumen?.rango.hasta.slice(0, 7)
   const nombreMes = resumen ? new Date(`${resumen.rango.hasta}T12:00:00`).toLocaleDateString('es-MX', { month: 'short' }) : ''
   const proyectado = resumen?.actual.ingresos ?? 0
-  // Reembolsos are negative, so this is what actually stayed in the bank.
-  const real = (resumen?.cobrado ?? []).reduce((s, i) => s + i.subtotal, 0)
-  const costos = resumen?.actual.costos ?? 0
-
-  const pendientes = resumen?.cobranza ?? []
-  const grupos: Record<Cobros, FilaIngreso[]> = {
-    // Everything collectable up to this month that is not overdue: earlier sin_factura ones never become vencidas.
-    mes: pendientes.filter((i) => !i.vencida && i.fecha !== null && i.fecha.slice(0, 7) <= (mes ?? '')),
-    vencidos: pendientes.filter((i) => i.vencida),
-    por_facturar: pendientes.filter((i) => i.estadoFacturacion === 'por_facturar')
-  }
+  const real = resumen?.real ?? 0
 
   const tarea = (fn: () => Promise<ListaTareas>) => correr(async () => setTareas(await fn()))
   const agregar = () => {
@@ -93,8 +81,8 @@ export function Inicio() {
           <Cifra label="Ingreso proyectado" valor={pesos(proyectado)} detalle={[nombreMes, 'cobrado y por cobrar']} />
           <Cifra label="Ingreso real" valor={pesos(real)} detalle={[proyectado > 0 ? `${Math.round((real / proyectado) * 100)}% de lo proyectado` : nombreMes]} />
           <Cifra label="Diferencia" valor={pesos(real - proyectado)} detalle={['real − proyectado']} />
-          <Cifra label="Costos" valor={resumen.actual.utilidad === null ? 'Sin datos' : pesos(costos)} detalle={[nombreMes]} />
-          <Cifra label="Utilidad" valor={resumen.actual.utilidad === null ? 'Sin datos' : pesos(real - costos)} detalle={['real − costos']} />
+          <Cifra label="Costos" valor={resumen.utilidadReal === null ? 'Sin datos' : pesos(resumen.actual.costos)} detalle={[nombreMes]} />
+          <Cifra label="Utilidad" valor={resumen.utilidadReal === null ? 'Sin datos' : pesos(resumen.utilidadReal)} detalle={['real − costos']} />
         </ul>
       )}
       <Aviso error={error} />
@@ -107,18 +95,18 @@ export function Inicio() {
                 [
                   ['mes', 'Este mes'],
                   ['vencidos', 'Vencidos'],
-                  ['por_facturar', 'Por facturar']
+                  ['porFacturar', 'Por facturar']
                 ] as const
               ).map(([k, label]) => (
                 <button key={k} type="button" aria-pressed={cobros === k} onClick={() => setCobros(k)} className={pestanaCls(cobros === k)}>
-                  {k === 'mes' ? label : `${label} · ${grupos[k].length}`}
+                  {k === 'mes' ? label : `${label} · ${resumen?.cobros[k].length ?? 0}`}
                 </button>
               ))}
             </div>
             <Tabla
-              vacio={{ mes: 'Nada por cobrar este mes.', vencidos: 'Nada vencido.', por_facturar: 'Nada por facturar.' }[cobros]}
-              columnas={['Fecha', 'Contacto', 'Monto']}
-              filas={grupos[cobros].map((i) => ({
+              vacio={{ mes: 'Nada por cobrar este mes.', vencidos: 'Nada vencido.', porFacturar: 'Nada por facturar.' }[cobros]}
+              columnas={['Fecha', 'Contacto', MONTO]}
+              filas={(resumen?.cobros[cobros] ?? []).map((i) => ({
                 key: i.id,
                 celdas: [
                   i.fecha ? dia(i.fecha) : '—',
@@ -135,7 +123,7 @@ export function Inicio() {
           <Tarjeta id="inicio-costos" titulo="Costos pendientes">
             <Tabla
               vacio="Nada por pagar."
-              columnas={['Vence', 'Costo', 'Monto']}
+              columnas={['Vence', 'Costo', MONTO]}
               filas={(resumen?.costosPendientes ?? []).map((c) => ({
                 key: c.id,
                 celdas: [
@@ -165,7 +153,7 @@ export function Inicio() {
           <Tarjeta id="inicio-cotizaciones" titulo="Cotizaciones abiertas">
             <Tabla
               vacio="Ninguna cotización abierta."
-              columnas={['Folio', 'Cotización', 'Estado', 'Monto']}
+              columnas={['Folio', 'Cotización', 'Estado', MONTO]}
               filas={cotizaciones.map((c) => ({
                 key: c.id,
                 ir: () => navigate(`/cotizaciones/${c.id}`),
@@ -189,7 +177,7 @@ export function Inicio() {
               Pendientes · {tareas?.pendientes.length ?? 0}
             </button>
             <button type="button" aria-pressed={hechas} onClick={() => setHechas(true)} className={pestanaCls(hechas)}>
-              Hechas · 30 días
+              Hechas · {tareas?.dias ?? 0} días
             </button>
           </div>
           {!hechas && (
@@ -213,7 +201,7 @@ export function Inicio() {
           )}
           {hechas ? (
             <Tabla
-              vacio="Nada hecho en los últimos 30 días."
+              vacio={`Nada hecho en los últimos ${tareas?.dias ?? 0} días.`}
               columnas={['Tarea', 'Registrada', 'Hecha']}
               filas={(tareas?.hechas ?? []).map((t) => ({ key: t.id, celdas: [t.texto, dia(t.fechaRegistro), dia(t.fechaHecha!)] }))}
             />
@@ -255,15 +243,21 @@ function Tarjeta({ id, titulo, children }: { id: string; titulo: string; childre
   )
 }
 
-function Tabla({ columnas, filas, vacio }: { columnas: string[]; filas: { key: number; celdas: ReactNode[]; ir?: () => void }[]; vacio: string }) {
+/** A table column: its header, and whether it holds money (right-aligned, monospace). */
+type Columna = string | { titulo: string; monto: true }
+const MONTO: Columna = { titulo: 'Monto', monto: true }
+const titulo = (c: Columna) => (typeof c === 'string' ? c : c.titulo)
+const esMonto = (c: Columna | undefined) => typeof c === 'object'
+
+function Tabla({ columnas, filas, vacio }: { columnas: Columna[]; filas: { key: number; celdas: ReactNode[]; ir?: () => void }[]; vacio: string }) {
   if (filas.length === 0) return <p className="m-0 text-[13px] text-on-surface-muted">{vacio}</p>
   return (
     <table className="tbl w-full border-collapse text-[13px]">
       <thead>
         <tr className={etiquetaCls}>
           {columnas.map((c, k) => (
-            <th key={k} className={`${celdaCls} ${c === 'Monto' ? 'text-right' : ''}`}>
-              {c}
+            <th key={k} className={`${celdaCls} ${esMonto(c) ? 'text-right' : ''}`}>
+              {titulo(c)}
             </th>
           ))}
         </tr>
@@ -272,7 +266,7 @@ function Tabla({ columnas, filas, vacio }: { columnas: string[]; filas: { key: n
         {filas.map((f) => (
           <tr key={f.key} className={f.ir ? 'cursor-pointer' : undefined} onClick={f.ir}>
             {f.celdas.map((celda, k) => (
-              <td key={k} data-label={columnas[k] || undefined} className={`${celdaCls} ${columnas[k] === 'Monto' ? 'text-right font-mono text-[12px]' : ''}`}>
+              <td key={k} data-label={(columnas[k] && titulo(columnas[k])) || undefined} className={`${celdaCls} ${esMonto(columnas[k]) ? 'text-right font-mono text-[12px]' : ''}`}>
                 {celda}
               </td>
             ))}

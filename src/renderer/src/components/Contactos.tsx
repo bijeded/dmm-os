@@ -24,11 +24,13 @@ export function Contactos() {
   const [busqueda, setBusqueda] = useState('')
   const [estado, setEstado] = useState<EstadoContacto | ''>('')
   const [pagina, setPagina] = useState(0)
-  // Inicio's Nuevo contacto lands here with the form open.
-  const [nuevo, setNuevo] = useState(useSearchParams()[0].has('nuevo'))
+  const [params, setParams] = useSearchParams()
+  // Inicio's Nuevo contacto lands here with the form open; the flag is dropped so back or reload won't reopen it.
+  const [nuevo, setNuevo] = useState(params.has('nuevo'))
   const { error, ocupado, correr } = useAccion()
 
   useEffect(() => {
+    if (params.has('nuevo')) setParams({}, { replace: true })
     correr(async () => setLista(await window.dmm.contactos.listar()))
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   }, [])
