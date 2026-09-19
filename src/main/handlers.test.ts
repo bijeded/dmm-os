@@ -6,6 +6,7 @@ import { createDatabase, type Conexion } from './db'
 import { contactos, cotizaciones, ingresos } from './db/schema'
 import { MENSAJE_SIN_PAGAR } from './ciclo-proyecto'
 import { crearHandlers, type HandlersOptions } from './handlers'
+import { MENSAJE_MONTO } from '../shared/montos'
 import type { DmmHandlers } from '../shared/contrato'
 import { ESTADOS_PROYECTO, type AccionCosto, type AccionCotizacion, type AccionIngreso, type AccionProyecto, type FichaCotizacion, type FichaProyecto } from '../shared/dominio'
 
@@ -330,6 +331,12 @@ describe('finanzas', () => {
     await h.finanzas.configurarVencida(45)
     expect((await h.finanzas.resumen('mes')).diasVencida).toBe(45)
     expect(() => h.finanzas.configurarVencida(0)).toThrow(/mayor a cero/)
+  })
+
+  it('refuses a zero or fractional subtotal with the form\'s own message', async () => {
+    const nuevo = { categoria: 'sin_factura', facturado: false, contactoId: null, proyectoId: null, fecha: '2026-09-16', conIva: false, pagado: false, notas: null } as const
+    await expect(Promise.resolve().then(() => h.finanzas.nuevoIngreso({ ...nuevo, subtotal: 0 }))).rejects.toThrow(MENSAJE_MONTO)
+    await expect(Promise.resolve().then(() => h.finanzas.nuevoIngreso({ ...nuevo, subtotal: 1.5 }))).rejects.toThrow(MENSAJE_MONTO)
   })
 
   /** Runs `accion` on the row and checks it succeeds exactly when the row offered it. */

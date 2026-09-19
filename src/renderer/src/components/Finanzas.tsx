@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { NOMBRES_CATEGORIA_COSTO, NOMBRES_ESTADO_INGRESO, NOMBRES_PERIODO_FINANZAS, PERIODOS_FINANZAS, type FilaCosto, type FilaIngreso, type PeriodoFinanzas, type PuntoFinanzas, type ResumenFinanzas } from '../../../shared/dominio'
 import { dia, normalizar, pesos } from '../../../shared/formato'
-import { centavos } from './NuevoMovimiento'
+import { centavosDe } from '../../../shared/montos'
 import { Aviso, Cifra, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { celdaCls, etiquetaCls, inputCls, tituloCls } from './estilos'
@@ -107,9 +107,7 @@ export function Finanzas() {
 
   const reembolsar = () =>
     hacer(async () => {
-      const monto = centavos(reembolso!.monto)
-      if (!Number.isFinite(monto) || monto <= 0) throw new Error('Escribe un monto mayor a cero')
-      await window.dmm.finanzas.reembolsar(reembolso!.id, monto)
+      await window.dmm.finanzas.reembolsar(reembolso!.id, centavosDe(reembolso!.monto))
       setReembolso(null)
     })
 

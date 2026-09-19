@@ -6,6 +6,7 @@ import type { FilaCosto, FilaIngreso, ListaContactos, ListaProyectos, ResumenFin
 import type { DmmApi } from '../../../shared/contrato'
 import { Finanzas } from './Finanzas'
 import { NuevoCosto, NuevoIngreso } from './NuevoMovimiento'
+import { MENSAJE_MONTO } from '../../../shared/montos'
 
 const ingreso = (id: number, cambios: Partial<FilaIngreso> = {}): FilaIngreso => ({
   id,
@@ -196,7 +197,7 @@ describe('Nuevo ingreso / costo', () => {
   it('registers an MSI cost with its installments, and refuses one without an amount', async () => {
     montar('/finanzas/costos/nuevo')
     fireEvent.click(await screen.findByRole('button', { name: 'Registrar costo' }))
-    expect(await screen.findByRole('alert')).toBeTruthy()
+    expect((await screen.findByRole('alert')).textContent).toContain(MENSAJE_MONTO)
     const [nombre] = screen.getAllByRole('textbox')
     fireEvent.change(nombre, { target: { value: 'MacBook Pro' } })
     fireEvent.change(screen.getByRole('combobox', { name: 'Tipo' }), { target: { value: 'msi' } })
