@@ -20,7 +20,7 @@ import type { CostoNuevo, IngresoNuevo } from '../shared/dominio'
 function registrarReembolso(
   db: Db,
   ingresoId: number,
-  r: { subtotal: number; iva: number; fecha: string; montoOriginal?: number }
+  r: { subtotal: number; iva: number; retenciones: number; fecha: string; montoOriginal?: number }
 ) {
   const original = db.select().from(ingresos).where(eq(ingresos.id, ingresoId)).get()
   if (!original) throw new Error(`ingreso ${ingresoId} no existe`)
@@ -34,7 +34,8 @@ function registrarReembolso(
       estadoFacturacion: original.estadoFacturacion,
       subtotal: -Math.abs(r.subtotal),
       iva: -Math.abs(r.iva),
-      total: -(Math.abs(r.subtotal) + Math.abs(r.iva)),
+      retenciones: -Math.abs(r.retenciones),
+      total: -(Math.abs(r.subtotal) + Math.abs(r.iva) - Math.abs(r.retenciones)),
       montoOriginal: usd ? -Math.abs(r.montoOriginal!) : null,
       monedaOriginal: usd ? ('USD' as const) : null,
       proyectoId: original.proyectoId,
@@ -185,8 +186,8 @@ export function borrarIngreso(db: Db, id: number) {
 
 /**
  * Reembolso of `monto` (the total, in the Ingreso's own currency) against a paid Ingreso, dated
- * today, never more than what is left of it. A USD one converts at the Ingreso's own rate; IVA is
- * in the Ingreso's proportion; giving back all that is left takes the exact remainders.
+ * today, never more than what is left of it. A USD one converts at the Ingreso's own rate; IVA and
+ * retenciones are in the Ingreso's proportion; giving back all that is left takes the exact remainders.
  */
 export function reembolsar(db: Db, id: number, monto: number, hoy: string) {
   exigirCentavos(monto)
@@ -199,7 +200,8 @@ export function reembolsar(db: Db, id: number, monto: number, hoy: string) {
   const todo = monto === queda.original
   const total = todo ? queda.total : Math.min(queda.total, Math.round(monto * tasa))
   const iva = todo ? queda.iva : Math.min(queda.iva, Math.round((total * i.iva) / i.total))
-  registrarReembolso(db, id, { subtotal: total - iva, iva, fecha: hoy, montoOriginal: queda.moneda === 'USD' ? monto : undefined })
+  const retenciones = todo ? queda.retenciones : Math.min(queda.retenciones, Math.round((total * i.retenciones) / i.total))
+  registrarReembolso(db, id, { subtotal: total - iva + retenciones, iva, retenciones, fecha: hoy, montoOriginal: queda.moneda === 'USD' ? monto : undefined })
 }
 
 export function pagarCosto(db: Db, id: number, hoy: string) {
