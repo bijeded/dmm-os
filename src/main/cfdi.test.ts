@@ -73,6 +73,10 @@ describe('leerCfdi', () => {
     expect(leerCfdi(cfdiXml({ iva: '80.00' }))).toMatchObject({ iva: 8_000, total: 108_000, tasaIvaInusual: 8 })
   })
 
+  it('flags IVA charged on a zero subtotal', () => {
+    expect(leerCfdi(cfdiXml({ subtotal: '0.00', iva: '16.00' })).tasaIvaInusual).toBe(100)
+  })
+
   it('does not flag 0% or 16% IVA, to within a centavo', () => {
     expect(leerCfdi(cfdiXml()).tasaIvaInusual).toBeNull()
     expect(leerCfdi(cfdiXml({ iva: '0.00' })).tasaIvaInusual).toBeNull()

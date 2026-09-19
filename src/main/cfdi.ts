@@ -57,7 +57,8 @@ function hijo(padre: unknown, nombre: string): Nodo | undefined {
 /** IVA is 0 or 16% of the subtotal to within a centavo; anything else is returned as a percent. */
 function tasaInusual(subtotal: number, iva: number): number | null {
   if (iva === 0 || Math.abs(iva - subtotal * 0.16) <= 1) return null
-  return subtotal === 0 ? null : Math.round((iva / subtotal) * 10_000) / 100
+  // IVA on a zero subtotal has no rate, and is as unusual as it gets.
+  return subtotal === 0 ? 100 : Math.round((iva / subtotal) * 10_000) / 100
 }
 
 /** Reads one CFDI XML. Throws when the file is not a stamped CFDI. */
@@ -79,11 +80,11 @@ export function leerCfdi(xml: string): Cfdi {
   const subtotal = enPesos(comprobante.SubTotal) - enPesos(comprobante.Descuento)
   const iva = enPesos(impuestos?.TotalImpuestosTrasladados)
   const retenciones = enPesos(impuestos?.TotalImpuestosRetenidos)
-  const original = () =>
-    centavos(comprobante.SubTotal, 1) -
-    centavos(comprobante.Descuento, 1) +
-    centavos(impuestos?.TotalImpuestosTrasladados, 1) -
-    centavos(impuestos?.TotalImpuestosRetenidos, 1)
+  // The same amounts in the CFDI's own currency, where the SAT's centavo rounding happened.
+  const enOriginal = (valor: unknown) => centavos(valor, 1)
+  const subtotalOriginal = enOriginal(comprobante.SubTotal) - enOriginal(comprobante.Descuento)
+  const ivaOriginal = enOriginal(impuestos?.TotalImpuestosTrasladados)
+  const original = () => subtotalOriginal + ivaOriginal - enOriginal(impuestos?.TotalImpuestosRetenidos)
 
   return {
     uuid: String(timbre.UUID).toLowerCase(),
@@ -96,11 +97,7 @@ export function leerCfdi(xml: string): Cfdi {
     iva,
     retenciones,
     total: subtotal + iva - retenciones,
-    // Judged in the CFDI's own currency, where the SAT's centavo rounding happened.
-    tasaIvaInusual: tasaInusual(
-      centavos(comprobante.SubTotal, 1) - centavos(comprobante.Descuento, 1),
-      centavos(impuestos?.TotalImpuestosTrasladados, 1)
-    ),
+    tasaIvaInusual: tasaInusual(subtotalOriginal, ivaOriginal),
     moneda,
     montoOriginal: moneda === 'MXN' ? null : original()
   }
