@@ -1,0 +1,38 @@
+import type { AccionProyecto, EstadoProyecto } from '../shared/dominio'
+
+/** What the Proyecto lifecycle needs beyond its estado. */
+export interface ContextoProyecto {
+  pagadoCompleto: boolean
+}
+
+export const MENSAJE_SIN_PAGAR = 'El proyecto se completa hasta que esté pagado por completo'
+
+/** Which estados allow each action, and the refusal when the estado doesn't. */
+const REGLAS: Record<AccionProyecto, { en: readonly EstadoProyecto[]; mensaje: string }> = {
+  editar: { en: ['en_curso', 'pausado', 'completado'], mensaje: 'Un proyecto cancelado no se edita' },
+  borrar: { en: ['en_curso', 'pausado'], mensaje: 'Este proyecto no se puede borrar' },
+  pausar: { en: ['en_curso'], mensaje: 'Solo un proyecto en curso se puede pausar' },
+  reanudar: { en: ['pausado'], mensaje: 'Solo un proyecto pausado se puede reanudar' },
+  completar: { en: ['en_curso', 'pausado'], mensaje: 'Solo un proyecto en curso o pausado se puede completar' },
+  cancelar: { en: ['en_curso', 'pausado'], mensaje: 'Solo un proyecto en curso o pausado se puede cancelar' }
+}
+
+/** Why the action is refused, or `null` when it is allowed. A Proyecto is only completed once fully paid. */
+function rechazo(accion: AccionProyecto, estado: EstadoProyecto, ctx: ContextoProyecto): string | null {
+  if (!REGLAS[accion].en.includes(estado)) return REGLAS[accion].mensaje
+  if (accion === 'completar' && !ctx.pagadoCompleto) return MENSAJE_SIN_PAGAR
+  return null
+}
+
+/** The actions the Ficha offers: exactly those `exigirProyecto` accepts. */
+export const accionesProyecto = (estado: EstadoProyecto, ctx: ContextoProyecto): AccionProyecto[] =>
+  (Object.keys(REGLAS) as AccionProyecto[]).filter((a) => rechazo(a, estado, ctx) === null)
+
+export function exigirProyecto(accion: AccionProyecto, estado: EstadoProyecto, ctx: ContextoProyecto): void {
+  const mensaje = rechazo(accion, estado, ctx)
+  if (mensaje) throw new Error(mensaje)
+}
+
+/** Whether only being unpaid stands between the Proyecto and Completar, so the Ficha shows what is unpaid. */
+export const completarEsperaPago = (estado: EstadoProyecto, ctx: ContextoProyecto): boolean =>
+  rechazo('completar', estado, ctx) === MENSAJE_SIN_PAGAR
