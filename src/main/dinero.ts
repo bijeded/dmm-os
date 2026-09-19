@@ -10,13 +10,22 @@ export const monedaDe = (i: Montos): Moneda => (i.monedaOriginal === 'USD' ? 'US
 export const tasaDe = (i: Montos) => (monedaDe(i) === 'USD' && i.montoOriginal ? i.total / i.montoOriginal : null)
 
 /**
+ * The one currency rule: `monto` in `de` expressed in `a`, at `tasa` pesos per USD, rounded to
+ * the centavo (or cent). Recording a USD amount and comparing one in pesos both go through it.
+ */
+export function convertir(monto: number, de: Moneda, a: Moneda, tasa: number) {
+  if (de === a) return monto
+  return Math.round(de === 'USD' ? monto * tasa : monto / tasa)
+}
+
+/**
  * An Ingreso's total in `moneda`: centavos, or USD cents. A USD Ingreso is its own USD amount;
  * one paid in pesos converts at `tipoCambio`, and without one counts nothing in USD.
  */
 export function montoEn(i: Montos, moneda: Moneda, tipoCambio?: number | null) {
   if (moneda === 'MXN') return i.total
   if (monedaDe(i) === 'USD') return i.montoOriginal ?? 0
-  return tipoCambio ? Math.round(i.total / tipoCambio) : 0
+  return tipoCambio ? convertir(i.total, 'MXN', 'USD', tipoCambio) : 0
 }
 
 /** An amount as recorded: subtotal, IVA and total in MXN, and the USD total it came from, if any. */
@@ -33,7 +42,7 @@ export interface MontosRegistrados {
  * their USD total is kept as the original, which Cobros compares against. Without one they are pesos.
  */
 export function enMxn(subtotal: number, iva: number, tasaUsd: number | null): MontosRegistrados {
-  const mxn = (n: number) => (tasaUsd === null ? n : Math.round(n * tasaUsd))
+  const mxn = (n: number) => (tasaUsd === null ? n : convertir(n, 'USD', 'MXN', tasaUsd))
   return {
     subtotal: mxn(subtotal),
     iva: mxn(iva),
