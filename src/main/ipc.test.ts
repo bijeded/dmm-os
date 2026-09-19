@@ -115,6 +115,12 @@ function handlers() {
       cancelarCosto: vi.fn(),
       borrarCosto: vi.fn(),
       detenerCosto: vi.fn()
+    },
+    tareas: {
+      listar: vi.fn(() => ({ pendientes: [], hechas: [] })),
+      agregar: vi.fn(() => ({ pendientes: [], hechas: [] })),
+      completar: vi.fn(() => ({ pendientes: [], hechas: [] })),
+      borrar: vi.fn(() => ({ pendientes: [], hechas: [] }))
     }
   } satisfies DmmHandlers
 }

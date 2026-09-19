@@ -8,6 +8,7 @@ import { FichaCotizacion } from './components/FichaCotizacion'
 import { FichaContacto } from './components/FichaContacto'
 import { FichaProyecto } from './components/FichaProyecto'
 import { Finanzas } from './components/Finanzas'
+import { Inicio } from './components/Inicio'
 import { NuevaCotizacion } from './components/NuevaCotizacion'
 import { NuevoCosto, NuevoIngreso } from './components/NuevoMovimiento'
 import { NuevoProyecto } from './components/NuevoProyecto'
@@ -17,6 +18,7 @@ import { sections } from './sections'
 
 // Sections with a screen of their own; the rest show a placeholder.
 const pantallas: Record<string, ReactElement> = {
+  '/': <Inicio />,
   '/configuracion': <Configuracion />,
   '/contactos': <Contactos />,
   '/cotizaciones': <Cotizaciones />,

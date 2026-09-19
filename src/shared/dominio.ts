@@ -627,3 +627,19 @@ export interface CostoNuevo {
   /** Only for `unico`. */
   pagado: boolean
 }
+
+/** A to-do on Inicio. Dates are `YYYY-MM-DD`. */
+export interface Tarea {
+  id: number
+  texto: string
+  fechaRegistro: string
+  /** `null` while pending. */
+  fechaHecha: string | null
+}
+
+export interface ListaTareas {
+  /** Oldest first. */
+  pendientes: Tarea[]
+  /** Done in the last 30 days, newest first. */
+  hechas: Tarea[]
+}

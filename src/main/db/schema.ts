@@ -81,6 +81,16 @@ export const catalogo = sqliteTable('catalogo', {
   creadoEn: creadoEn()
 })
 
+/** A to-do on Inicio. Done ones stay, dated, and show for 30 days. */
+export const tareas = sqliteTable('tareas', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  texto: text('texto').notNull(),
+  /** `YYYY-MM-DD` */
+  fechaRegistro: text('fecha_registro').notNull(),
+  fechaHecha: text('fecha_hecha'),
+  creadoEn: creadoEn()
+})
+
 export const cotizaciones = sqliteTable(
   'cotizaciones',
   {
