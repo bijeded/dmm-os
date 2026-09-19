@@ -242,7 +242,8 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
   const cobranza = todosIngresos.filter((i) => i.estado === 'pendiente').sort(porFecha(fechaIngreso)).map(filaIngreso)
   // Reembolsos are negative, so this is what actually stayed in the bank.
   const real = cobrado.reduce((s, i) => s + i.subtotal, 0)
-  const hastaEsteMes = cobranza.filter((i) => i.fecha !== null && i.fecha.slice(0, 7) <= periodoActual)
+  // An invoice not yet issued may have no date; it still counts as now.
+  const hastaEsteMes = cobranza.filter((i) => i.fecha === null || i.fecha.slice(0, 7) <= periodoActual)
   const porFacturar = (i: FilaIngreso) => i.estadoFacturacion === 'por_facturar'
 
   return {
