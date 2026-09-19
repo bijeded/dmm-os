@@ -1,5 +1,8 @@
 import { and, eq, or } from 'drizzle-orm'
 import type { Db } from './index'
+import { exigirCotizacion } from '../ciclo-cotizacion'
+import { exigirProyecto } from '../ciclo-proyecto'
+import { estadoCobro } from '../cobranza'
 import { contactos, costos, cotizaciones, ingresos, proyectos } from './schema'
 
 export class RegistroVinculadoError extends Error {
@@ -25,7 +28,10 @@ export function borrar(db: Db, entidad: keyof typeof tablasBorrables, id: number
   }
 }
 
-/** Cancelling a Cotización or its Proyecto cancels both (Cancelación con pagos). */
+/**
+ * Cancelling a Cotización or its Proyecto cancels both (Cancelación con pagos), once each one's
+ * lifecycle allows it; otherwise nothing is cancelled.
+ */
 export function cancelar(db: Db, entidad: 'cotizacion' | 'proyecto', id: number) {
   db.transaction((tx) => {
     let cotizacionId: number | null
@@ -40,6 +46,16 @@ export function cancelar(db: Db, entidad: 'cotizacion' | 'proyecto', id: number)
       proyectoId =
         tx.select({ id: proyectos.id }).from(proyectos).where(eq(proyectos.cotizacionId, id)).get()
           ?.id ?? null
+    }
+
+    if (proyectoId !== null) {
+      const p = tx.select({ estado: proyectos.estado }).from(proyectos).where(eq(proyectos.id, proyectoId)).get()!
+      exigirProyecto('cancelar', p.estado, estadoCobro(tx, proyectoId))
+    }
+    if (cotizacionId !== null) {
+      const c = tx.select({ estado: cotizaciones.estado }).from(cotizaciones).where(eq(cotizaciones.id, cotizacionId)).get()
+      if (!c) throw new Error(`cotización ${cotizacionId} no existe`)
+      exigirCotizacion('cancelar', c.estado)
     }
 
     if (proyectoId !== null) {

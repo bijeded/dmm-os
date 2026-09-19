@@ -1,66 +1,15 @@
 import { eq } from 'drizzle-orm'
 import type { Db } from './db'
-import { RegistroVinculadoError } from './db/cancelacion'
 import { asignacionesCosto, costos, definicionesCosto, ingresos, proyectos, vigenciasPrecio } from './db/schema'
-import { monedaDe, montoEn, tasaDe } from './dinero'
+import { monedaDe, tasaDe } from './dinero'
+import { exigirCosto, type ContextoCosto } from './ciclo-costo'
+import { exigirIngreso, MENSAJE_REEMBOLSO_EXCEDIDO, restante, type ContextoIngreso } from './ciclo-ingreso'
 import { alDia } from './ledger'
 import { ivaDe } from '../shared/formato'
-import type { AccionCosto, AccionIngreso, CostoNuevo, FilaCosto, FilaIngreso, IngresoNuevo } from '../shared/dominio'
+import type { CostoNuevo, IngresoNuevo } from '../shared/dominio'
 
-// Movimientos: Ingresos and Costos entered, paid, cancelled, deleted, refunded or stopped, and the
-// rules for which of those each one allows now. The Finanzas rows show exactly these actions.
-
-export type Ingreso = typeof ingresos.$inferSelect
-export type Costo = typeof costos.$inferSelect
-
-export const origenIngreso = (i: Ingreso): FilaIngreso['origen'] =>
-  i.cfdiUuid !== null ? 'cfdi' : i.definicionId !== null ? 'periodo' : i.cotizacionId !== null ? 'cotizacion' : 'manual'
-
-export const origenCosto = (c: Costo): FilaCosto['origen'] => (c.cfdiUuid !== null ? 'cfdi' : c.definicionId !== null ? 'recurrente' : 'manual')
-
-/** Borrar vs cancelar: only a hand-entered Ingreso no Reembolso points at. */
-const borrableIngreso = (i: Ingreso, reembolsado: boolean) => origenIngreso(i) === 'manual' && !reembolsado
-
-/** Borrar vs cancelar: only a hand-entered one-time Costo nothing is attributed from. */
-const borrableCosto = (c: Costo, asignado: boolean) => origenCosto(c) === 'manual' && c.cotizacionId === null && !asignado
-
-export const reembolsableIngreso = (i: Ingreso) => i.estado === 'pagado' && i.total > 0 && i.reembolsoDeId === null
-
-/**
- * What is left to give back of an Ingreso after its Reembolsos: in pesos, its IVA, and in its own
- * currency (`original`, USD cents for a USD Ingreso, else the same as `total`).
- */
-export function restante(i: Ingreso, reembolsos: Ingreso[]) {
-  const moneda = monedaDe(i)
-  const suma = (f: (r: Ingreso) => number) => [i, ...reembolsos].reduce((s, r) => s + f(r), 0)
-  return { moneda, total: suma((r) => r.total), iva: suma((r) => r.iva), original: suma((r) => montoEn(r, moneda)) }
-}
-
-export function accionesIngreso(i: Ingreso, reembolsos: Ingreso[] | undefined): AccionIngreso[] {
-  const puede: Record<AccionIngreso, boolean> = {
-    pagar: i.estado === 'pendiente',
-    cancelar: i.estado === 'pendiente',
-    borrar: borrableIngreso(i, reembolsos !== undefined),
-    reembolsar: reembolsableIngreso(i) && restante(i, reembolsos ?? []).original > 0
-  }
-  return (Object.keys(puede) as AccionIngreso[]).filter((a) => puede[a])
-}
-
-export type Definicion = typeof definicionesCosto.$inferSelect
-
-/** A monthly or annual series can be stopped while it still runs; MSI is already committed. */
-const detenible = (d: Definicion | undefined, periodoActual: string) =>
-  d !== undefined && d.tipo !== 'msi' && (d.periodoFin === null || d.periodoFin > periodoActual)
-
-export function accionesCosto(c: Costo, definicion: Definicion | undefined, periodoActual: string, asignado: boolean): AccionCosto[] {
-  const puede: Record<AccionCosto, boolean> = {
-    pagar: c.estado === 'pendiente',
-    cancelar: c.estado === 'pendiente',
-    borrar: borrableCosto(c, asignado),
-    detener: detenible(definicion, periodoActual)
-  }
-  return (Object.keys(puede) as AccionCosto[]).filter((a) => puede[a])
-}
+// Movimientos: Ingresos and Costos entered, paid, cancelled, deleted, refunded or stopped. Which of
+// those each one allows now is its lifecycle's (ciclo-ingreso, ciclo-costo), as the Finanzas rows show.
 
 /**
  * Reembolso: a negative Ingreso linked to the original, dated when the money went back. A USD
@@ -115,11 +64,9 @@ function leerIngreso(db: Db, id: number) {
 
 const reembolsosDe = (db: Db, id: number) => db.select().from(ingresos).where(eq(ingresos.reembolsoDeId, id)).all()
 
-/** What can be done with Ingreso `id` now: the same rule shows its buttons and guards its commands. */
-function accionesDeIngreso(db: Db, id: number) {
-  const i = leerIngreso(db, id)
-  const reembolsos = reembolsosDe(db, id)
-  return { i, acciones: accionesIngreso(i, reembolsos.length > 0 ? reembolsos : undefined) }
+/** Ingreso `id` and what its lifecycle needs to judge it. */
+function ingresoConContexto(db: Db, id: number): { i: ReturnType<typeof leerIngreso>; ctx: ContextoIngreso } {
+  return { i: leerIngreso(db, id), ctx: { reembolsos: reembolsosDe(db, id) } }
 }
 
 function leerCosto(db: Db, id: number) {
@@ -128,12 +75,12 @@ function leerCosto(db: Db, id: number) {
   return c
 }
 
-/** What can be done with Costo `id` now in `hoy`'s month, as the Finanzas rows show it. */
-function accionesDeCosto(db: Db, id: number, hoy: string) {
+/** Costo `id` and what its lifecycle needs to judge it in `hoy`'s month. */
+function costoConContexto(db: Db, id: number, hoy: string): { c: ReturnType<typeof leerCosto>; ctx: ContextoCosto } {
   const c = leerCosto(db, id)
   const definicion = c.definicionId === null ? undefined : db.select().from(definicionesCosto).where(eq(definicionesCosto.id, c.definicionId)).get()
   const asignado = db.select({ id: asignacionesCosto.id }).from(asignacionesCosto).where(eq(asignacionesCosto.costoId, id)).get() !== undefined
-  return { c, definicion, acciones: accionesCosto(c, definicion, hoy.slice(0, 7), asignado) }
+  return { c, ctx: { definicion, periodoActual: hoy.slice(0, 7), asignado } }
 }
 
 /** A hand-entered Ingreso; given a Proyecto, its Contacto is the Proyecto's. */
@@ -217,18 +164,21 @@ export function nuevoCosto(db: Db, n: CostoNuevo, hoy: string) {
 }
 
 export function pagarIngreso(db: Db, id: number, hoy: string) {
-  if (!accionesDeIngreso(db, id).acciones.includes('pagar')) throw new Error('Solo se marca pagado un ingreso pendiente')
+  const { i, ctx } = ingresoConContexto(db, id)
+  exigirIngreso('pagar', i, ctx)
   db.update(ingresos).set({ estado: 'pagado', fechaPago: hoy }).where(eq(ingresos.id, id)).run()
 }
 
 export function cancelarIngreso(db: Db, id: number) {
-  if (!accionesDeIngreso(db, id).acciones.includes('cancelar')) throw new Error('Solo se cancela un ingreso pendiente')
+  const { i, ctx } = ingresoConContexto(db, id)
+  exigirIngreso('cancelar', i, ctx)
   db.update(ingresos).set({ estado: 'cancelado' }).where(eq(ingresos.id, id)).run()
 }
 
 /** Borrar vs cancelar: an imported, generated or quoted Ingreso, or one with a Reembolso, is cancelled instead. */
 export function borrarIngreso(db: Db, id: number) {
-  if (!accionesDeIngreso(db, id).acciones.includes('borrar')) throw new RegistroVinculadoError('El ingreso', id)
+  const { i, ctx } = ingresoConContexto(db, id)
+  exigirIngreso('borrar', i, ctx)
   db.delete(ingresos).where(eq(ingresos.id, id)).run()
 }
 
@@ -239,12 +189,12 @@ export function borrarIngreso(db: Db, id: number) {
  */
 export function reembolsar(db: Db, id: number, monto: number, hoy: string) {
   if (!Number.isInteger(monto) || monto <= 0) throw new Error('El monto debe ser mayor a cero')
-  const i = leerIngreso(db, id)
-  if (!reembolsableIngreso(i)) throw new Error('Solo se reembolsa un ingreso pagado')
+  const { i, ctx } = ingresoConContexto(db, id)
+  exigirIngreso('reembolsar', i, ctx)
   const tasa = monedaDe(i) === 'USD' ? tasaDe(i) : 1
   if (tasa === null) throw new Error('El ingreso en USD no tiene su monto en USD')
-  const queda = restante(i, reembolsosDe(db, id))
-  if (monto > queda.original) throw new Error('No se puede reembolsar más de lo pagado')
+  const queda = restante(i, ctx.reembolsos)
+  if (monto > queda.original) throw new Error(MENSAJE_REEMBOLSO_EXCEDIDO)
   const todo = monto === queda.original
   const total = todo ? queda.total : Math.min(queda.total, Math.round(monto * tasa))
   const iva = todo ? queda.iva : Math.min(queda.iva, Math.round((total * i.iva) / i.total))
@@ -252,24 +202,27 @@ export function reembolsar(db: Db, id: number, monto: number, hoy: string) {
 }
 
 export function pagarCosto(db: Db, id: number, hoy: string) {
-  if (!accionesDeCosto(db, id, hoy).acciones.includes('pagar')) throw new Error('Solo se marca pagado un costo pendiente')
+  const { c, ctx } = costoConContexto(db, id, hoy)
+  exigirCosto('pagar', c, ctx)
   db.update(costos).set({ estado: 'pagado', fechaPago: hoy }).where(eq(costos.id, id)).run()
 }
 
 export function cancelarCosto(db: Db, id: number, hoy: string) {
-  if (!accionesDeCosto(db, id, hoy).acciones.includes('cancelar')) throw new Error('Solo se cancela un costo pendiente')
+  const { c, ctx } = costoConContexto(db, id, hoy)
+  exigirCosto('cancelar', c, ctx)
   db.update(costos).set({ estado: 'cancelado' }).where(eq(costos.id, id)).run()
 }
 
 /** Borrar vs cancelar: only a hand-entered one-time Costo nothing is attributed from. */
 export function borrarCosto(db: Db, id: number, hoy: string) {
-  if (!accionesDeCosto(db, id, hoy).acciones.includes('borrar')) throw new RegistroVinculadoError('El costo', id)
+  const { c, ctx } = costoConContexto(db, id, hoy)
+  exigirCosto('borrar', c, ctx)
   db.delete(costos).where(eq(costos.id, id)).run()
 }
 
 /** Ends the monthly or annual series the Costo belongs to after this month; MSI is committed. */
 export function detenerCosto(db: Db, id: number, hoy: string) {
-  const { definicion: d, acciones } = accionesDeCosto(db, id, hoy)
-  if (!d || !acciones.includes('detener')) throw new Error('Este costo no pertenece a una serie que se pueda detener')
-  db.update(definicionesCosto).set({ periodoFin: hoy.slice(0, 7) }).where(eq(definicionesCosto.id, d.id)).run()
+  const { c, ctx } = costoConContexto(db, id, hoy)
+  exigirCosto('detener', c, ctx)
+  db.update(definicionesCosto).set({ periodoFin: ctx.periodoActual }).where(eq(definicionesCosto.id, c.definicionId!)).run()
 }
