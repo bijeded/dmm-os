@@ -2,20 +2,12 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { CATEGORIAS_COSTO, NOMBRES_CATEGORIA_COSTO, type CategoriaCosto, type FilaContacto, type FilaProyecto } from '../../../shared/dominio'
 import { hoy } from '../../../shared/fechas'
+import { centavosDe } from '../../../shared/montos'
 import { Campo } from './NuevaCotizacion'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { campoCls, tituloCls } from './estilos'
 
-/** Pesos typed by hand, e.g. `1,250.50`, as centavos; `NaN` when it isn't a number. */
-export const centavos = (pesos: string) => Math.round(Number(pesos.replace(/[,\s$]/g, '')) * 100)
-
-/** The subtotal typed by hand, in centavos. */
-function subtotal(pesos: string) {
-  const s = centavos(pesos)
-  if (!Number.isFinite(s) || s <= 0) throw new Error('Escribe un monto mayor a cero')
-  return s
-}
 
 function Formulario({ titulo, accion, ocupado, guardar, error, children }: { titulo: string; accion: string; ocupado: boolean; guardar: () => void; error: string | null; children: ReactNode }) {
   const navigate = useNavigate()
@@ -99,7 +91,7 @@ export function NuevoIngreso() {
         contactoId: proyectoId === null ? contactoId : null,
         proyectoId,
         fecha,
-        subtotal: subtotal(monto),
+        subtotal: centavosDe(monto),
         conIva: factura && conIva,
         pagado,
         notas: notas || null
@@ -182,7 +174,7 @@ export function NuevoCosto() {
         categoria,
         proyectoId,
         fecha,
-        subtotal: subtotal(monto),
+        subtotal: centavosDe(monto),
         conIva,
         parcialidades: categoria === 'msi' ? Number(parcialidades) : null,
         suscripcionIa,

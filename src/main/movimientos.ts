@@ -6,6 +6,7 @@ import { exigirCosto, type ContextoCosto } from './ciclo-costo'
 import { exigirIngreso, MENSAJE_REEMBOLSO_EXCEDIDO, restante, type ContextoIngreso } from './ciclo-ingreso'
 import { alDia } from './ledger'
 import { ivaDe } from '../shared/formato'
+import { exigirCentavos } from '../shared/montos'
 import type { CostoNuevo, IngresoNuevo } from '../shared/dominio'
 
 // Movimientos: Ingresos and Costos entered, paid, cancelled, deleted, refunded or stopped. Which of
@@ -48,8 +49,8 @@ function registrarReembolso(
 }
 
 function exigirMonto(subtotal: number, iva: number) {
-  if (!Number.isInteger(subtotal) || subtotal <= 0) throw new Error('El monto debe ser mayor a cero')
-  if (!Number.isInteger(iva) || iva < 0) throw new Error('El IVA no puede ser negativo')
+  exigirCentavos(subtotal)
+  exigirCentavos(iva, { cero: true })
 }
 
 function exigirFecha(fecha: string) {
@@ -188,7 +189,7 @@ export function borrarIngreso(db: Db, id: number) {
  * in the Ingreso's proportion; giving back all that is left takes the exact remainders.
  */
 export function reembolsar(db: Db, id: number, monto: number, hoy: string) {
-  if (!Number.isInteger(monto) || monto <= 0) throw new Error('El monto debe ser mayor a cero')
+  exigirCentavos(monto)
   const { i, ctx } = ingresoConContexto(db, id)
   exigirIngreso('reembolsar', i, ctx)
   const tasa = monedaDe(i) === 'USD' ? tasaDe(i) : 1
