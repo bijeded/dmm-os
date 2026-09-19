@@ -4,7 +4,9 @@ import { and, eq, max } from 'drizzle-orm'
 import type { Db } from './db'
 import { borrar, cancelar } from './db/cancelacion'
 import { contactos, costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, vigenciasPrecio } from './db/schema'
+import { generarPeriodos } from './db/periodos'
 import { plantillaCotizacion } from './plantilla-cotizacion'
+import { crearCarpeta } from './proyectos'
 import { CATEGORIAS, CATEGORIAS_COSTO, FACTURACIONES, type AccionCotizacion, type Categoria, type CotizacionNueva, type EstadoCotizacion, type FichaCotizacion, type ListaCotizaciones, type PartidaCotizacion } from '../shared/dominio'
 import { folioDmm, totalesCotizacion } from '../shared/formato'
 import { sumarDias } from '../shared/fechas'
@@ -164,8 +166,11 @@ export function expirarCotizaciones(db: Db, hoy: string): void {
  * until invoiced) or the monthly definition, and the estimated Costos: one-time ones as a Costo,
  * recurring ones as a definition that generates its periods. Money is always recorded in MXN;
  * a USD quote is converted at `tipoCambio` and keeps its USD amount as the original.
+ * Expiry is brought up to date first, so a quote past its validity is refused. The first
+ * Periodos are generated in the same transaction; the Proyecto folder is created once it commits.
  */
-export function aceptarCotizacion(db: Db, id: number, hoy: string, tipoCambio?: number): FichaCotizacion {
+export function aceptarCotizacion(db: Db, root: string, id: number, hoy: string, tipoCambio?: number): FichaCotizacion {
+  expirarCotizaciones(db, hoy)
   const c = leer(db, id)
   exigir('aceptar', c.estado, 'Solo una cotización enviada se puede aceptar')
   const usd = c.moneda === 'USD'
@@ -236,8 +241,12 @@ export function aceptarCotizacion(db: Db, id: number, hoy: string, tipoCambio?: 
         .get().id
       tx.insert(vigenciasPrecio).values({ ...montos(e.monto, 0), definicionCostoId, desde: periodo }).run()
     }
+    generarPeriodos(tx, periodo)
   })
-  return fichaCotizacion(db, id)
+  const ficha = fichaCotizacion(db, id)
+  if (ficha.proyectoId === null) throw new Error(`La cotización ${id} se aceptó sin crear su proyecto`)
+  crearCarpeta(db, root, ficha.proyectoId, hoy)
+  return ficha
 }
 
 export function rechazarCotizacion(db: Db, id: number): FichaCotizacion {

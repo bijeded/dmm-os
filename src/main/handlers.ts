@@ -34,7 +34,6 @@ import {
   cancelarProyecto,
   carpetaAbrible,
   completarProyecto,
-  crearCarpeta,
   fichaProyecto,
   guardarProyecto,
   listarProyectos,
@@ -153,13 +152,7 @@ export function crearHandlers({
       ficha: (id) => (expirar(), fichaCotizacion(conexion.db, id)),
       guardar: (cotizacion) => guardarCotizacion(conexion.db, cotizacion),
       enviar: (id) => enviarCotizacion(conexion.db, info.dmmOsRoot, id, imprimirPdf),
-      aceptar: (id, tipoCambio) => {
-        expirar()
-        const ficha = aceptarCotizacion(conexion.db, id, hoy(), tipoCambio)
-        // The Proyecto the quote became gets its folder like any other.
-        crearCarpeta(conexion.db, info.dmmOsRoot, ficha.proyectoId!, hoy())
-        return ficha
-      },
+      aceptar: (id, tipoCambio) => aceptarCotizacion(conexion.db, info.dmmOsRoot, id, hoy(), tipoCambio),
       rechazar: (id) => rechazarCotizacion(conexion.db, id),
       cancelar: (id) => cancelarCotizacion(conexion.db, id),
       borrar: (id) => borrarCotizacion(conexion.db, id),
