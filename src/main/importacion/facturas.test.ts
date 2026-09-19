@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { importarFacturas } from '.'
+import { resumenFinanzas } from '../finanzas'
 import { contactos, costos, cotizaciones, ingresos, proyectos, sugerenciasImportacion } from '../db/schema'
 import { contacto, cotizacionAceptada, db, proyecto, reiniciarDb } from '../db/test-db'
 import { cfdiXml, RFC_CLIENTE, RFC_DMM } from '../test-cfdi'
@@ -198,5 +199,20 @@ describe('adivinar el Proyecto', () => {
     proyecto(c.id, cotizacionAceptada(c.id).id)
     emitida(cfdiXml())
     expect(importar().sugerencias).toBe(0)
+  })
+})
+
+describe('una factura con retenciones', () => {
+  it('stores IVA and retenciones apart, and Finanzas reports them', () => {
+    emitida(cfdiXml({ retenciones: '206.67' }))
+    recibida(cfdiXml({ uuid: 'B1B2C3D4-0000-4444-8888-99AABBCCDDEE', emisor: 'PRV900101QQ1', receptor: RFC_DMM, retenciones: '100.00' }))
+    importar()
+    expect(db.select().from(ingresos).get()).toMatchObject({ subtotal: 100_000, iva: 16_000, retenciones: 20_667, total: 95_333 })
+    expect(db.select().from(costos).get()).toMatchObject({ subtotal: 100_000, iva: 16_000, retenciones: 10_000, total: 106_000 })
+
+    const r = resumenFinanzas(db, 'anio', '2026-12-31', 30)
+    expect(r.actual).toMatchObject({ ingresos: 100_000, ivaIngresos: 16_000, retencionesIngresos: 20_667, costos: 100_000, retencionesCostos: 10_000 })
+    expect(r.ingresos[0]).toMatchObject({ iva: 16_000, retenciones: 20_667, total: 95_333 })
+    expect(r.costos[0]).toMatchObject({ retenciones: 10_000 })
   })
 })

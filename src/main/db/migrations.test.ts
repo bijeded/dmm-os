@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import { readFileSync } from 'node:fs'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'vitest'
@@ -94,5 +94,79 @@ it('0009 marks imported CFDIs paid on their date, and leaves the rest alone', ()
     { nombre: 'Hosting', estado: 'pagado', fecha_pago: '2024-06-01' },
     { nombre: 'Manual', estado: 'pendiente', fecha_pago: null }
   ])
+  sqlite.close()
+})
+
+it('0012 gives existing amounts zero retenciones and keeps rows linked to rebuilt tables', () => {
+  const file = join(dir, 'retenciones.db')
+  const sqlite = new Database(file)
+  sqlite.pragma('foreign_keys = ON')
+  const anteriores = journalTimes(drizzleDir).slice(0, 12)
+  const archivos = JSON.parse(readFileSync(join(drizzleDir, 'meta', '_journal.json'), 'utf8')).entries
+    .slice(0, 12)
+    .map((e: { tag: string }) => `${e.tag}.sql`)
+  for (const m of archivos) {
+    for (const stmt of readFileSync(join(drizzleDir, m), 'utf8').split('--> statement-breakpoint')) {
+      if (stmt.trim()) sqlite.exec(stmt)
+    }
+  }
+  sqlite.exec(
+    'create table __drizzle_migrations (id integer primary key autoincrement, hash text not null, created_at numeric)'
+  )
+  const aplicar = sqlite.prepare('insert into __drizzle_migrations (hash, created_at) values (?, ?)')
+  for (const when of anteriores) aplicar.run(String(when), when)
+  sqlite.exec(`
+    insert into definiciones_ingreso (id, tipo, categoria, subtotal, iva, total, dia_del_mes, periodo_inicio)
+      values (1, 'mensual', 'sin_factura', 1000, 0, 1000, 1, '2026-01');
+    insert into ingresos (categoria, estado, subtotal, iva, total, fecha_registro, periodo, definicion_id)
+      values ('sin_factura', 'pendiente', 1000, 0, 1000, '2026-01-01', '2026-01', 1);
+    insert into definiciones_costo (id, nombre, tipo, dia_del_mes, periodo_inicio)
+      values (1, 'Hosting', 'mensual', 1, '2026-01');
+    insert into vigencias_precio (definicion_costo_id, desde, subtotal, iva, total) values (1, '2026-01', 100, 16, 116);
+    insert into costos (id, nombre, categoria, estado, subtotal, iva, total, fecha, periodo, definicion_id)
+      values (1, 'Hosting', 'mensual', 'pagado', 100, 16, 116, '2026-01-01', '2026-01', 1);
+    insert into contactos (id, nombre) values (1, 'Estudio Ocho');
+    insert into proyectos (id, nombre, contacto_id, categoria) values (1, 'Clicme', 1, 'website');
+    insert into asignaciones_costo (costo_id, proyecto_id, tokens, monto) values (1, 1, 1, 100);
+  `)
+  sqlite.close()
+
+  createDatabase(drizzleDir).abrir(file).close()
+
+  const migrada = new Database(file)
+  for (const tabla of ['definiciones_ingreso', 'ingresos', 'vigencias_precio', 'costos']) {
+    expect(migrada.prepare(`select retenciones from ${tabla}`).all()).toEqual([{ retenciones: 0 }])
+  }
+  expect(migrada.prepare('select definicion_id from ingresos').get()).toEqual({ definicion_id: 1 })
+  // Rebuilding costos must not cascade into its asignaciones.
+  expect(migrada.prepare('select costo_id from asignaciones_costo').all()).toEqual([{ costo_id: 1 }])
+  expect(migrada.pragma('foreign_key_check')).toEqual([])
+  expect(() =>
+    migrada.exec(
+      `insert into costos (nombre, categoria, estado, subtotal, iva, retenciones, total, fecha) values ('x', 'unico', 'pagado', 100, 16, 10, 116, '2026-01-01')`
+    )
+  ).toThrow(/CHECK/)
+  migrada.close()
+})
+
+it('rolls back a migration that leaves broken references, so the database stays as it was', () => {
+  const carpeta = join(dir, 'drizzle')
+  cpSync(drizzleDir, carpeta, { recursive: true })
+  const journal = JSON.parse(readFileSync(join(carpeta, 'meta', '_journal.json'), 'utf8'))
+  const ultima = journal.entries.at(-1)
+  journal.entries.push({ ...ultima, idx: ultima.idx + 1, when: ultima.when + 1, tag: '9999_rota' })
+  writeFileSync(join(carpeta, 'meta', '_journal.json'), JSON.stringify(journal))
+  writeFileSync(
+    join(carpeta, '9999_rota.sql'),
+    `insert into ingresos (categoria, estado, subtotal, iva, total, definicion_id) values ('sin_factura', 'pendiente', 1, 0, 1, 999);`
+  )
+  const file = join(dir, 'rota.db')
+  createDatabase(drizzleDir).abrir(file).close()
+
+  expect(() => createDatabase(carpeta).abrir(file)).toThrow(/referencias rotas/)
+
+  const sqlite = new Database(file)
+  expect(sqlite.prepare('select count(*) as n from ingresos').get()).toEqual({ n: 0 })
+  expect(sqlite.prepare('select max(created_at) as t from __drizzle_migrations').get()).toEqual({ t: ultima.when })
   sqlite.close()
 })

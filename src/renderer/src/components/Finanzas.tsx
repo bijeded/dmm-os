@@ -167,12 +167,12 @@ export function Finanzas() {
           <Cifra
             label={`Ingresos · ${NOMBRES_PERIODO_FINANZAS[periodo]}`}
             valor={pesos(actual.ingresos)}
-            detalle={[variacion(actual.ingresos, anterior?.ingresos) && `${variacion(actual.ingresos, anterior?.ingresos)} ${vsAnterior}`, `factura ${pesos(actual.ingresosFactura)}`, `sin factura ${pesos(actual.ingresosSinFactura)}`, `IVA ${pesos(actual.ivaIngresos)}`]}
+            detalle={[variacion(actual.ingresos, anterior?.ingresos) && `${variacion(actual.ingresos, anterior?.ingresos)} ${vsAnterior}`, `factura ${pesos(actual.ingresosFactura)}`, `sin factura ${pesos(actual.ingresosSinFactura)}`, `IVA ${pesos(actual.ivaIngresos)}`, actual.retencionesIngresos !== 0 && `retenciones ${pesos(actual.retencionesIngresos)}`]}
           />
           <Cifra
             label={`Costos · ${NOMBRES_PERIODO_FINANZAS[periodo]}`}
             valor={pesos(actual.costos)}
-            detalle={[variacion(actual.costos, anterior?.costos) && `${variacion(actual.costos, anterior?.costos)} ${vsAnterior}`, `IVA ${pesos(actual.ivaCostos)}`]}
+            detalle={[variacion(actual.costos, anterior?.costos) && `${variacion(actual.costos, anterior?.costos)} ${vsAnterior}`, `IVA ${pesos(actual.ivaCostos)}`, actual.retencionesCostos !== 0 && `retenciones ${pesos(actual.retencionesCostos)}`]}
           />
           <Cifra
             label={`Utilidad · ${NOMBRES_PERIODO_FINANZAS[periodo]}`}

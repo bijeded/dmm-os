@@ -16,6 +16,7 @@ const ingreso = (id: number, cambios: Partial<FilaIngreso> = {}): FilaIngreso =>
   estado: 'pendiente',
   subtotal: 1_000_000,
   iva: 160_000,
+  retenciones: 0,
   total: 1_160_000,
   origen: 'cfdi',
   vencida: false,
@@ -41,7 +42,7 @@ const resumen = {
     porFacturar: [ingreso(3, { contacto: 'Mezcal Luna', fecha: null, estadoFacturacion: 'por_facturar' })]
   },
   costosPendientes: [
-    { id: 7, fecha: '2026-09-22', nombre: 'Hosting anual', proveedor: 'Hostinger', proyecto: null, categoria: 'anual', estado: 'pendiente', estimado: false, subtotal: 289_000, iva: 0, total: 289_000, origen: 'manual', acciones: [] }
+    { id: 7, fecha: '2026-09-22', nombre: 'Hosting anual', proveedor: 'Hostinger', proyecto: null, categoria: 'anual', estado: 'pendiente', estimado: false, subtotal: 289_000, iva: 0, retenciones: 0, total: 289_000, origen: 'manual', acciones: [] }
   ]
 } as unknown as ResumenFinanzas
 

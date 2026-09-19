@@ -28,8 +28,31 @@ describe('leerCfdi', () => {
     })
   })
 
-  it('takes retenciones off the tax, as the bank sees it', () => {
-    expect(leerCfdi(cfdiXml({ retenciones: '106.67' }))).toMatchObject({ iva: 5333, total: 105_333 })
+  it('reads a CFDI without retenciones as having none', () => {
+    expect(leerCfdi(cfdiXml())).toMatchObject({ iva: 16_000, retenciones: 0, total: 116_000 })
+  })
+
+  it('keeps IVA and retenciones apart; the total is what the bank sees', () => {
+    expect(leerCfdi(cfdiXml({ retenciones: '206.67' }))).toMatchObject({
+      subtotal: 100_000,
+      iva: 16_000,
+      retenciones: 20_667,
+      total: 95_333
+    })
+  })
+
+  it('never makes IVA negative when more is withheld than charged', () => {
+    expect(leerCfdi(cfdiXml({ iva: '160.00', retenciones: '266.67' }))).toMatchObject({
+      iva: 16_000,
+      retenciones: 26_667,
+      total: 89_333
+    })
+  })
+
+  it('converts retenciones on a foreign-currency CFDI and nets them from the original amount', () => {
+    expect(
+      leerCfdi(cfdiXml({ moneda: 'USD', tipoCambio: '18.50', subtotal: '100.00', iva: '16.00', retenciones: '10.00' }))
+    ).toMatchObject({ subtotal: 185_000, iva: 29_600, retenciones: 18_500, total: 196_100, montoOriginal: 10_600 })
   })
 
   it('converts a foreign-currency CFDI to MXN and keeps the original amount', () => {

@@ -18,6 +18,7 @@ const ingreso = (id: number, cambios: Partial<FilaIngreso> = {}): FilaIngreso =>
   estado: 'pendiente',
   subtotal: 1_800_000,
   iva: 288_000,
+  retenciones: 0,
   total: 2_088_000,
   origen: 'cfdi',
   vencida: false,
@@ -40,6 +41,7 @@ const costo = (id: number, cambios: Partial<FilaCosto> = {}): FilaCosto => ({
   estimado: false,
   subtotal: 289_000,
   iva: 0,
+  retenciones: 0,
   total: 289_000,
   origen: 'recurrente',
   acciones: ['pagar', 'cancelar', 'detener'],
@@ -50,8 +52,8 @@ const resumen = (cambios: Partial<ResumenFinanzas> = {}): ResumenFinanzas => ({
   periodo: 'mes',
   rango: { desde: '2026-09-01', hasta: '2026-09-18' },
   rangoAnterior: { desde: '2025-09-01', hasta: '2025-09-18' },
-  actual: { ingresos: 6_843_000, ingresosFactura: 5_900_000, ingresosSinFactura: 943_000, ivaIngresos: 944_000, costos: 1_719_000, ivaCostos: 0, utilidad: 5_124_000 },
-  anterior: { ingresos: 6_110_000, ingresosFactura: 6_110_000, ingresosSinFactura: 0, ivaIngresos: 0, costos: 0, ivaCostos: 0, utilidad: null },
+  actual: { ingresos: 6_843_000, ingresosFactura: 5_900_000, ingresosSinFactura: 943_000, ivaIngresos: 944_000, retencionesIngresos: 0, costos: 1_719_000, ivaCostos: 0, retencionesCostos: 0, utilidad: 5_124_000 },
+  anterior: { ingresos: 6_110_000, ingresosFactura: 6_110_000, ingresosSinFactura: 0, ivaIngresos: 0, retencionesIngresos: 0, costos: 0, ivaCostos: 0, retencionesCostos: 0, utilidad: null },
   serie: [
     { etiqueta: '1–7', ingresos: 100, costos: 50, ingresosAnterior: 80, costosAnterior: 0 },
     { etiqueta: '8–14', ingresos: 200, costos: 60, ingresosAnterior: 90, costosAnterior: 0 }
@@ -129,8 +131,20 @@ describe('Finanzas', () => {
     const [ingresos, , utilidad] = within(kpis).getAllByRole('listitem')
     expect(ingresos.textContent).toContain('+12% vs 2025')
     expect(ingresos.textContent).toContain('IVA $9,440.00')
+    expect(ingresos.textContent).not.toContain('retenciones')
     expect(utilidad.textContent).toContain('vs 2025: sin datos de costos')
     expect(screen.getByRole('note').textContent).toContain('2025')
+  })
+
+  it('shows retenciones next to IVA when invoices carried them', async () => {
+    const actual = { ...resumen().actual, retencionesIngresos: 20_667, retencionesCostos: 10_000 }
+    api.resumen = vi.fn(async () => resumen({ actual }))
+    montar()
+    const kpis = await screen.findByRole('list', { name: 'Resumen' })
+    const [ingresos, costos] = within(kpis).getAllByRole('listitem')
+    expect(ingresos.textContent).toContain('IVA $9,440.00')
+    expect(ingresos.textContent).toContain('retenciones $206.67')
+    expect(costos.textContent).toContain('retenciones $100.00')
   })
 
   it('lists what was collected under Cobrado, and nothing pending', async () => {

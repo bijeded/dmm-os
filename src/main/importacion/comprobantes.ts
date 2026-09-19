@@ -23,7 +23,7 @@ export interface ResultadoImportacion {
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 
 /**
- * The amounts as the app records them: MXN centavos, IVA apart, original currency as
+ * The amounts as the app records them: MXN centavos, IVA and retenciones apart, original currency as
  * optional detail. Only MXN and USD are recorded; another currency keeps its MXN amounts
  * and loses only the label.
  */
@@ -31,6 +31,7 @@ function montos(cfdi: Cfdi) {
   return {
     subtotal: cfdi.subtotal,
     iva: cfdi.iva,
+    retenciones: cfdi.retenciones,
     total: cfdi.total,
     montoOriginal: cfdi.moneda === 'USD' ? cfdi.montoOriginal : null,
     monedaOriginal: cfdi.moneda === 'USD' ? ('USD' as const) : null

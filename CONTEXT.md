@@ -52,6 +52,9 @@ Money in / money out, always recorded in the MXN amount actually seen in the ban
 **Subtotal / IVA**:
 Revenue, costs and profit KPIs use the subtotal (before IVA). IVA is tracked and shown separately in Finanzas.
 
+**Retenciones**:
+Taxes the payer withholds from an invoice (TotalImpuestosRetenidos), kept apart from IVA (TotalImpuestosTrasladados). The total is what the bank sees: subtotal + IVA − retenciones. Only imported CFDIs carry them; everything else has zero. Shown next to IVA in Finanzas; KPIs still use the subtotal.
+
 **Folio** assignment:
 A Cotización receives its Folio when marked sent. Drafts have none.
 
