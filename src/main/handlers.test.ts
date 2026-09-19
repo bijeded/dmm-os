@@ -294,3 +294,37 @@ describe('finanzas', () => {
     expect(() => h.finanzas.configurarVencida(0)).toThrow(/mayor a cero/)
   })
 })
+
+describe('Completar sobre Periodos al día', () => {
+  // Reproduces #76: proyectos.ficha and proyectos.completar don't read through the ledger (alDia, #78),
+  // so Periodos after the accept month are missing until Finanzas is opened. Flip to `it` once they do.
+  it.fails('reads a monthly Proyecto’s Ingresos up to hoy in the Ficha and Completar, with Finanzas never opened', async () => {
+    const { id: contactoId } = conexion.db.insert(contactos).values({ nombre: 'Café Luna' }).returning().get()
+    h = crearHandlers({ ...opciones, ahora: () => '2026-07-16T10:00:00.000Z' })
+    const { id } = await h.cotizaciones.guardar({
+      contactoId,
+      nombre: 'Mantenimiento',
+      categoria: 'website',
+      fecha: '2026-07-16',
+      validezDias: 30,
+      moneda: 'MXN',
+      partidas: [{ concepto: 'Mantenimiento', categoria: 'website', cantidad: 1, precio: 100_000 }],
+      conIva: false,
+      facturacion: 'mensual',
+      parcialidades: null,
+      stack: null,
+      terminos: null,
+      notas: null,
+      costosEstimados: []
+    })
+    await h.cotizaciones.enviar(id)
+    const { proyectoId } = await h.cotizaciones.aceptar(id)
+    conexion.db.update(ingresos).set({ estado: 'pagado' }).run()
+
+    h = crearHandlers(opciones)
+    const f = await h.proyectos.ficha(proyectoId!)
+    expect(f.falta).toMatchObject({ pendientes: 2 })
+    expect(f.acciones).not.toContain('completar')
+    await expect(async () => h.proyectos.completar(f.id)).rejects.toThrow(MENSAJE_SIN_PAGAR)
+  })
+})
