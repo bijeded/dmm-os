@@ -256,6 +256,19 @@ describe('Reembolso', () => {
     expect(reembolsoDe(i.id)[0]).toMatchObject({ subtotal: -5000, iva: -800, total: -5800 })
   })
 
+  it('gives back retenciones in the Ingreso’s proportion, and exactly what is left at the end', () => {
+    const i = db
+      .insert(ingresos)
+      .values({ categoria: 'factura', estadoFacturacion: 'facturado', estado: 'pagado', subtotal: 10001, iva: 1600, retenciones: 1067, total: 10534, fechaRegistro: '2026-09-01', fechaPago: '2026-09-01' })
+      .returning()
+      .get()
+    reembolsar(db, i.id, 5267, hoy)
+    expect(reembolsoDe(i.id)[0]).toMatchObject({ subtotal: -5001, iva: -800, retenciones: -534, total: -5267 })
+    reembolsar(db, i.id, 5267, hoy)
+    const suma = (f: (r: typeof i) => number) => [i, ...reembolsoDe(i.id)].reduce((s, r) => s + f(r), 0)
+    expect([suma((r) => r.subtotal), suma((r) => r.iva), suma((r) => r.retenciones), suma((r) => r.total)]).toEqual([0, 0, 0, 0])
+  })
+
   it('takes a USD Ingreso’s amount in USD and converts at its own rate', () => {
     const usd = usdPagado()
     reembolsar(db, usd.id, 1000, hoy)

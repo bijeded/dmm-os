@@ -15,13 +15,13 @@ export const origenIngreso = (i: Ingreso): FilaIngreso['origen'] =>
 export const reembolsableIngreso = (i: Ingreso) => i.estado === 'pagado' && i.total > 0 && i.reembolsoDeId === null
 
 /**
- * What is left to give back of an Ingreso after its Reembolsos: in pesos, its IVA, and in its own
+ * What is left to give back of an Ingreso after its Reembolsos: in pesos, its IVA and retenciones, and in its own
  * currency (`original`, USD cents for a USD Ingreso, else the same as `total`).
  */
 export function restante(i: Ingreso, reembolsos: Ingreso[]) {
   const moneda = monedaDe(i)
   const suma = (f: (r: Ingreso) => number) => [i, ...reembolsos].reduce((s, r) => s + f(r), 0)
-  return { moneda, total: suma((r) => r.total), iva: suma((r) => r.iva), original: suma((r) => montoEn(r, moneda)) }
+  return { moneda, total: suma((r) => r.total), iva: suma((r) => r.iva), retenciones: suma((r) => r.retenciones), original: suma((r) => montoEn(r, moneda)) }
 }
 
 export const MENSAJE_REEMBOLSO_EXCEDIDO = 'No se puede reembolsar más de lo pagado'
