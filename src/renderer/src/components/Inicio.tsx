@@ -10,7 +10,7 @@ import {
 } from '../../../shared/dominio'
 import { dia, folioDmm } from '../../../shared/formato'
 import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
-import { Aviso, useAccion } from './Seccion'
+import { Aviso, Cifra, useAccion } from './Seccion'
 import { Button } from './ui/button'
 
 const cardCls = 'card flex flex-col gap-4 rounded-control border border-border p-6'
@@ -90,11 +90,11 @@ export function Inicio() {
 
       {resumen && (
         <ul aria-label="Resumen" className="g-stats m-0 grid list-none grid-cols-5 gap-3 p-0">
-          <Cifra label="Ingreso proyectado" valor={pesos(proyectado)} detalle={`${nombreMes} · cobrado y por cobrar`} />
-          <Cifra label="Ingreso real" valor={pesos(real)} detalle={proyectado > 0 ? `${Math.round((real / proyectado) * 100)}% de lo proyectado` : nombreMes} />
-          <Cifra label="Diferencia" valor={pesos(real - proyectado)} detalle="real − proyectado" />
-          <Cifra label="Costos" valor={resumen.actual.utilidad === null ? 'Sin datos' : pesos(costos)} detalle={nombreMes} />
-          <Cifra label="Utilidad" valor={resumen.actual.utilidad === null ? 'Sin datos' : pesos(real - costos)} detalle="real − costos" />
+          <Cifra label="Ingreso proyectado" valor={pesos(proyectado)} detalle={[nombreMes, 'cobrado y por cobrar']} />
+          <Cifra label="Ingreso real" valor={pesos(real)} detalle={[proyectado > 0 ? `${Math.round((real / proyectado) * 100)}% de lo proyectado` : nombreMes]} />
+          <Cifra label="Diferencia" valor={pesos(real - proyectado)} detalle={['real − proyectado']} />
+          <Cifra label="Costos" valor={resumen.actual.utilidad === null ? 'Sin datos' : pesos(costos)} detalle={[nombreMes]} />
+          <Cifra label="Utilidad" valor={resumen.actual.utilidad === null ? 'Sin datos' : pesos(real - costos)} detalle={['real − costos']} />
         </ul>
       )}
       <Aviso error={error} />
@@ -241,16 +241,6 @@ export function Inicio() {
         </Tarjeta>
       </div>
     </>
-  )
-}
-
-function Cifra({ label, valor, detalle }: { label: string; valor: string; detalle: string }) {
-  return (
-    <li className="card flex flex-col gap-1 rounded-control border border-border p-4">
-      <span className={etiquetaCls}>{label}</span>
-      <span className="font-display text-[29px] leading-none font-bold text-on-surface">{valor}</span>
-      <span className="text-[12px] text-on-surface-muted">{detalle}</span>
-    </li>
   )
 }
 
