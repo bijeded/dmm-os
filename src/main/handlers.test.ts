@@ -266,6 +266,9 @@ describe('inicio', () => {
     const rechazada = await cotizacion('Rechazada')
     await h.cotizaciones.enviar(rechazada)
     await h.cotizaciones.rechazar(rechazada)
+    const cancelada = await cotizacion('Cancelada')
+    await h.cotizaciones.enviar(cancelada)
+    await h.cotizaciones.cancelar(cancelada)
 
     const proyecto = (nombre: string) =>
       h.proyectos.guardar({ nombre, etiqueta: 'personal', contactoId: null, clienteFinal: null, categoria: 'website', fechaInicio: '', fechaEntrega: null, notas: null })

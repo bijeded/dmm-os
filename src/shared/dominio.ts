@@ -658,7 +658,7 @@ export interface ListaTareas {
   diasHechas: number
 }
 
-/** What is current, for Inicio: the month as Finanzas reads it, active Proyectos, open Cotizaciones and Tareas. */
+/** What is current, for Inicio: the month as Finanzas reads it, Proyectos en curso, open Cotizaciones and Tareas. */
 export interface ResumenInicio {
   finanzas: ResumenFinanzas
   proyectos: FilaProyecto[]

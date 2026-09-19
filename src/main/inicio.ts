@@ -1,5 +1,5 @@
 import type { Db } from './db'
-import { proyectoActivo } from './ciclo-proyecto'
+import { proyectoEnCurso } from './ciclo-proyecto'
 import { cotizacionAbierta, expirarCotizaciones, listarCotizaciones } from './cotizar'
 import { resumenFinanzas } from './finanzas'
 import { listarProyectos } from './proyectos'
@@ -11,7 +11,7 @@ export function resumenInicio(db: Db, root: string, hoy: string, diasVencida: nu
   expirarCotizaciones(db, hoy)
   return {
     finanzas: resumenFinanzas(db, 'mes', hoy, diasVencida),
-    proyectos: listarProyectos(db, root).proyectos.filter((p) => proyectoActivo(p.estado)),
+    proyectos: listarProyectos(db, root).proyectos.filter((p) => proyectoEnCurso(p.estado)),
     cotizaciones: listarCotizaciones(db).cotizaciones.filter((c) => cotizacionAbierta(c.estado)),
     tareas: listarTareas(db, hoy)
   }

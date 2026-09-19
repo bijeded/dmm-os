@@ -8,8 +8,8 @@ export interface ContextoProyecto {
 }
 
 
-/** An active Proyecto is one being worked on: en curso, not paused, completed or cancelled. */
-export const proyectoActivo = (estado: EstadoProyecto) => estado === 'en_curso'
+/** A Proyecto being worked on now: En curso, not paused, completed or cancelled. */
+export const proyectoEnCurso = (estado: EstadoProyecto) => estado === 'en_curso'
 
 /** Which estados allow each action, and the refusal when the estado doesn't. */
 const REGLAS: Record<AccionProyecto, { en: readonly EstadoProyecto[]; mensaje: string }> = {
