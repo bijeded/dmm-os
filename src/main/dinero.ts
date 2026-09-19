@@ -19,17 +19,26 @@ export function montoEn(i: Montos, moneda: Moneda, tipoCambio?: number | null) {
   return tipoCambio ? Math.round(i.total / tipoCambio) : 0
 }
 
+/** An amount as recorded: subtotal, IVA and total in MXN, and the USD total it came from, if any. */
+export interface MontosRegistrados {
+  subtotal: number
+  iva: number
+  total: number
+  montoOriginal: number | null
+  monedaOriginal: 'USD' | null
+}
+
 /**
- * An amount as recorded: always in MXN. One in USD (`tipoCambio` given) converts subtotal and IVA
- * each at the rate and keeps its USD total as the original, which Cobros compares against.
+ * `subtotal` and `iva` as recorded. With `tasaUsd` they are in USD: each converts at the rate and
+ * their USD total is kept as the original, which Cobros compares against. Without one they are pesos.
  */
-export function enMxn(subtotal: number, iva: number, tipoCambio: number | null) {
-  const mxn = (n: number) => (tipoCambio === null ? n : Math.round(n * tipoCambio))
+export function enMxn(subtotal: number, iva: number, tasaUsd: number | null): MontosRegistrados {
+  const mxn = (n: number) => (tasaUsd === null ? n : Math.round(n * tasaUsd))
   return {
     subtotal: mxn(subtotal),
     iva: mxn(iva),
     total: mxn(subtotal) + mxn(iva),
-    montoOriginal: tipoCambio === null ? null : subtotal + iva,
-    monedaOriginal: tipoCambio === null ? null : ('USD' as const)
+    montoOriginal: tasaUsd === null ? null : subtotal + iva,
+    monedaOriginal: tasaUsd === null ? null : 'USD'
   }
 }

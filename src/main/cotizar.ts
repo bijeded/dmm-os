@@ -162,7 +162,6 @@ export function aceptarCotizacion(db: Db, root: string, id: number, hoy: string,
   const c = leer(db, id)
   exigirCotizacion('aceptar', c.estado, contexto(db, id))
   const plan = planCobro(c, hoy, tipoCambio)
-  const { periodo } = plan
 
   db.transaction((tx) => {
     tx.update(cotizaciones).set({ estado: 'aceptada', tipoCambio: plan.tipoCambio }).where(eq(cotizaciones.id, id)).run()
@@ -173,26 +172,18 @@ export function aceptarCotizacion(db: Db, root: string, id: number, hoy: string,
       .get().id
     const vinculos = { proyectoId, cotizacionId: id, contactoId: c.contactoId }
 
-    if (plan.definicionIngreso) {
-      tx.insert(definicionesIngreso)
-        .values({ ...vinculos, ...plan.definicionIngreso, tipo: 'mensual', categoria: 'factura', periodoInicio: periodo })
-        .run()
-    }
-    for (const i of plan.ingresos) {
-      tx.insert(ingresos).values({ ...vinculos, ...i, categoria: 'factura', estadoFacturacion: 'por_facturar' }).run()
-    }
-    for (const costo of plan.costos) {
-      tx.insert(costos).values({ ...costo, categoria: 'unico', estimado: true, proyectoId, cotizacionId: id }).run()
-    }
-    for (const { precio, ...d } of plan.definicionesCosto) {
+    if (plan.definicionIngreso) tx.insert(definicionesIngreso).values({ ...vinculos, ...plan.definicionIngreso }).run()
+    for (const i of plan.ingresos) tx.insert(ingresos).values({ ...vinculos, ...i }).run()
+    for (const costo of plan.costos) tx.insert(costos).values({ ...costo, proyectoId, cotizacionId: id }).run()
+    for (const { definicion, precio } of plan.definicionesCosto) {
       const definicionCostoId = tx
         .insert(definicionesCosto)
-        .values({ ...d, proyectoId, cotizacionId: id, periodoInicio: periodo })
+        .values({ ...definicion, proyectoId, cotizacionId: id })
         .returning({ id: definicionesCosto.id })
         .get().id
-      tx.insert(vigenciasPrecio).values({ ...precio, definicionCostoId, desde: periodo }).run()
+      tx.insert(vigenciasPrecio).values({ ...precio, definicionCostoId }).run()
     }
-    generarPeriodos(tx, periodo)
+    generarPeriodos(tx, plan.periodo)
   })
   const ficha = fichaCotizacion(db, id)
   if (ficha.proyectoId === null) throw new Error(`La cotización ${id} se aceptó sin crear su proyecto`)
