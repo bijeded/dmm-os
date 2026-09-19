@@ -48,15 +48,14 @@ export function cancelar(db: Db, entidad: 'cotizacion' | 'proyecto', id: number)
           ?.id ?? null
     }
 
-    if (proyectoId !== null) {
-      const p = tx.select({ estado: proyectos.estado }).from(proyectos).where(eq(proyectos.id, proyectoId)).get()!
-      exigirProyecto('cancelar', p.estado, estadoCobro(tx, proyectoId))
-    }
+    // The Cotización's lifecycle judges its Proyecto too; a Proyecto without one answers alone.
+    const p = proyectoId === null ? undefined : tx.select({ estado: proyectos.estado }).from(proyectos).where(eq(proyectos.id, proyectoId)).get()
+    const proyecto = p ? { estado: p.estado, cobro: estadoCobro(tx, proyectoId!) } : null
     if (cotizacionId !== null) {
       const c = tx.select({ estado: cotizaciones.estado }).from(cotizaciones).where(eq(cotizaciones.id, cotizacionId)).get()
       if (!c) throw new Error(`cotización ${cotizacionId} no existe`)
-      exigirCotizacion('cancelar', c.estado)
-    }
+      exigirCotizacion('cancelar', c.estado, { proyecto })
+    } else if (proyecto) exigirProyecto('cancelar', proyecto.estado, proyecto.cobro)
 
     if (proyectoId !== null) {
       tx.update(proyectos).set({ estado: 'cancelado' }).where(eq(proyectos.id, proyectoId)).run()

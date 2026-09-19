@@ -5,7 +5,8 @@ import type { Db } from './db'
 import { borrar, cancelar } from './db/cancelacion'
 import { contactos, costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, vigenciasPrecio } from './db/schema'
 import { generarPeriodos } from './db/periodos'
-import { accionesCotizacion, exigirCotizacion } from './ciclo-cotizacion'
+import { accionesCotizacion, exigirCotizacion, type ContextoCotizacion } from './ciclo-cotizacion'
+import { estadoCobro } from './cobranza'
 import { plantillaCotizacion } from './plantilla-cotizacion'
 import { crearCarpeta } from './proyectos'
 import { CATEGORIAS, CATEGORIAS_COSTO, FACTURACIONES, type Categoria, type CotizacionNueva, type EstadoCotizacion, type FichaCotizacion, type ListaCotizaciones, type PartidaCotizacion } from '../shared/dominio'
@@ -24,6 +25,12 @@ function leer(db: Db, id: number) {
   const c = db.select().from(cotizaciones).where(eq(cotizaciones.id, id)).get()
   if (!c) throw new Error(`La cotización ${id} no existe`)
   return c
+}
+
+/** What the Cotización's lifecycle needs: its Proyecto, if it has one. */
+function contexto(db: Db, id: number): ContextoCotizacion {
+  const p = db.select({ id: proyectos.id, estado: proyectos.estado }).from(proyectos).where(eq(proyectos.cotizacionId, id)).get()
+  return { proyecto: p ? { estado: p.estado, cobro: estadoCobro(db, p.id) } : null }
 }
 
 export function fichaCotizacion(db: Db, id: number): FichaCotizacion {
@@ -54,7 +61,7 @@ export function fichaCotizacion(db: Db, id: number): FichaCotizacion {
     total: c.total,
     pdf: c.pdfRutaRelativa,
     proyectoId: proyecto?.id ?? null,
-    acciones: accionesCotizacion(c.estado)
+    acciones: accionesCotizacion(c.estado, contexto(db, id))
   }
 }
 
@@ -96,7 +103,7 @@ export function guardarCotizacion(db: Db, c: CotizacionNueva): FichaCotizacion {
   }
 
   if (c.id === undefined) return fichaCotizacion(db, db.insert(cotizaciones).values(valores).returning({ id: cotizaciones.id }).get().id)
-  exigirCotizacion('editar', leer(db, c.id).estado)
+  exigirCotizacion('editar', leer(db, c.id).estado, contexto(db, c.id))
   db.update(cotizaciones).set(valores).where(eq(cotizaciones.id, c.id)).run()
   return fichaCotizacion(db, c.id)
 }
@@ -114,7 +121,7 @@ export function archivoPdf({ folio, fecha, nombre }: { folio: number; fecha: str
  */
 export async function enviarCotizacion(db: Db, root: string, id: number, imprimir: ImprimirPdf): Promise<FichaCotizacion> {
   const c = leer(db, id)
-  exigirCotizacion('enviar', c.estado)
+  exigirCotizacion('enviar', c.estado, contexto(db, id))
   const folio = (db.select({ n: max(cotizaciones.folio) }).from(cotizaciones).get()?.n ?? 0) + 1
   const ficha = { ...fichaCotizacion(db, id), folio: String(folio) }
 
@@ -159,7 +166,7 @@ export function expirarCotizaciones(db: Db, hoy: string): void {
 export function aceptarCotizacion(db: Db, root: string, id: number, hoy: string, tipoCambio?: number): FichaCotizacion {
   expirarCotizaciones(db, hoy)
   const c = leer(db, id)
-  exigirCotizacion('aceptar', c.estado)
+  exigirCotizacion('aceptar', c.estado, contexto(db, id))
   const usd = c.moneda === 'USD'
   if (usd && !(tipoCambio !== undefined && tipoCambio > 0)) throw new Error('Indica el tipo de cambio de la cotización en USD')
   const mxn = (n: number) => (usd ? Math.round(n * tipoCambio!) : n)
@@ -237,20 +244,20 @@ export function aceptarCotizacion(db: Db, root: string, id: number, hoy: string,
 }
 
 export function rechazarCotizacion(db: Db, id: number): FichaCotizacion {
-  exigirCotizacion('rechazar', leer(db, id).estado)
+  exigirCotizacion('rechazar', leer(db, id).estado, contexto(db, id))
   db.update(cotizaciones).set({ estado: 'rechazada' }).where(eq(cotizaciones.id, id)).run()
   return fichaCotizacion(db, id)
 }
 
 export function cancelarCotizacion(db: Db, id: number): FichaCotizacion {
-  exigirCotizacion('cancelar', leer(db, id).estado)
+  exigirCotizacion('cancelar', leer(db, id).estado, contexto(db, id))
   cancelar(db, 'cotizacion', id)
   return fichaCotizacion(db, id)
 }
 
 /** Borrar vs cancelar: only drafts are deleted; a sent quote exists for the Contacto. */
 export function borrarCotizacion(db: Db, id: number): void {
-  exigirCotizacion('borrar', leer(db, id).estado)
+  exigirCotizacion('borrar', leer(db, id).estado, contexto(db, id))
   borrar(db, 'cotizacion', id)
 }
 

@@ -26,7 +26,7 @@ export const completarEsperaPago = (estado: EstadoProyecto, ctx: ContextoProyect
   REGLAS.completar.en.includes(estado) && !ctx.pagadoCompleto
 
 /** Why the action is refused, or `null` when it is allowed. A Proyecto is only completed once fully paid. */
-function rechazo(accion: AccionProyecto, estado: EstadoProyecto, ctx: ContextoProyecto): string | null {
+export function rechazoProyecto(accion: AccionProyecto, estado: EstadoProyecto, ctx: ContextoProyecto): string | null {
   if (!REGLAS[accion].en.includes(estado)) return REGLAS[accion].mensaje
   if (accion === 'completar' && completarEsperaPago(estado, ctx)) return MENSAJE_SIN_PAGAR
   return null
@@ -34,9 +34,9 @@ function rechazo(accion: AccionProyecto, estado: EstadoProyecto, ctx: ContextoPr
 
 /** The actions the Ficha offers: exactly those `exigirProyecto` accepts. */
 export const accionesProyecto = (estado: EstadoProyecto, ctx: ContextoProyecto): AccionProyecto[] =>
-  (Object.keys(REGLAS) as AccionProyecto[]).filter((a) => rechazo(a, estado, ctx) === null)
+  (Object.keys(REGLAS) as AccionProyecto[]).filter((a) => rechazoProyecto(a, estado, ctx) === null)
 
 export function exigirProyecto(accion: AccionProyecto, estado: EstadoProyecto, ctx: ContextoProyecto): void {
-  const mensaje = rechazo(accion, estado, ctx)
+  const mensaje = rechazoProyecto(accion, estado, ctx)
   if (mensaje) throw new Error(mensaje)
 }
