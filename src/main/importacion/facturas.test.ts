@@ -101,6 +101,22 @@ describe('importarFacturas', () => {
     expect(db.select().from(ingresos).get()).toMatchObject({ iva: -5_000, retenciones: 0, total: 95_000 })
   })
 
+  it('keeps a hand-edited IVA split whose total still matches', () => {
+    escribir('Facturas/Emitidas/2026/a.xml', cfdiXml({ retenciones: '206.67' }))
+    importarFacturas(db, root)
+    db.update(ingresos).set({ iva: 15_000, retenciones: 19_667 }).run()
+    importarFacturas(db, root)
+    expect(db.select().from(ingresos).get()).toMatchObject({ iva: 15_000, retenciones: 19_667, total: 95_333 })
+  })
+
+  it('corrects an earlier import that stored IVA net of retenciones before migration 0013', () => {
+    escribir('Facturas/Emitidas/2026/a.xml', cfdiXml({ retenciones: '206.67' }))
+    importarFacturas(db, root)
+    db.update(ingresos).set({ iva: -4_667, retenciones: 0 }).run()
+    importarFacturas(db, root)
+    expect(db.select().from(ingresos).get()).toMatchObject({ iva: 16_000, retenciones: 20_667, total: 95_333 })
+  })
+
   it('reports a missing Facturas folder as No disponible rather than failing', () => {
     expect(importarFacturas(db, root)).toMatchObject({ importados: 0, noDisponibles: ['Facturas/Emitidas', 'Facturas/Recibidas'] })
   })

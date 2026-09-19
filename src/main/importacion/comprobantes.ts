@@ -43,15 +43,28 @@ function montos(cfdi: Cfdi) {
 /**
  * A CFDI is imported once, whichever folder it turns up in. Seeing it again re-reads its IVA and
  * retenciones, so a row imported when IVA was stored net of retenciones ends as a fresh import
- * would store it. A row whose subtotal or total no longer matches the CFDI was edited, and is left alone.
+ * would store it. Only a row still holding one of the old splits is rewritten: IVA net of retenciones, or
+ * that net moved whole into retenciones by migration 0013. Any other split, or a changed subtotal or
+ * total, was edited by hand and is left alone.
  */
 function releerSiImportado(db: Tx, cfdi: Cfdi): boolean {
+  const neto = cfdi.iva - cfdi.retenciones
   const corregir = (tabla: typeof ingresos | typeof costos) => {
     const fila = db.select({ id: tabla.id }).from(tabla).where(eq(tabla.cfdiUuid, cfdi.uuid)).get()
     if (fila === undefined) return false
     db.update(tabla)
       .set({ iva: cfdi.iva, retenciones: cfdi.retenciones })
-      .where(and(eq(tabla.id, fila.id), eq(tabla.subtotal, cfdi.subtotal), eq(tabla.total, cfdi.total)))
+      .where(
+        and(
+          eq(tabla.id, fila.id),
+          eq(tabla.subtotal, cfdi.subtotal),
+          eq(tabla.total, cfdi.total),
+          or(
+            and(eq(tabla.iva, neto), eq(tabla.retenciones, 0)),
+            and(eq(tabla.iva, 0), eq(tabla.retenciones, -neto))
+          )
+        )
+      )
       .run()
     return true
   }
