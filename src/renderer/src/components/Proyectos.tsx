@@ -5,7 +5,7 @@ import { dia, normalizar } from '../../../shared/formato'
 import { PorCategoria } from './Cotizaciones'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
-import { celdaCls, etiquetaCls, selectCls, tituloCls } from './estilos'
+import { campoCls, celdaCls, etiquetaCls, tituloCls } from './estilos'
 
 /** How a folder that cannot be opened reads: Archivado is not a broken link. */
 export const NOMBRES_CARPETA: Record<CarpetaProyecto['estado'], string> = {
@@ -93,7 +93,7 @@ export function Proyectos() {
               onChange={(e) => setBusqueda(e.target.value)}
               className="srch h-9 w-56 rounded-control border border-border-strong bg-surface-sunken px-3 text-[13px] text-on-surface"
             />
-            <select aria-label="Contacto" value={contacto} onChange={(e) => setContacto(e.target.value)} className={selectCls}>
+            <select aria-label="Contacto" value={contacto} onChange={(e) => setContacto(e.target.value)} className={campoCls}>
               <option value="">Contacto: Todos</option>
               <option value="personal">Personal</option>
               {contactos.map(([id, nombre]) => (
@@ -102,13 +102,13 @@ export function Proyectos() {
                 </option>
               ))}
             </select>
-            <select aria-label="Año" value={anio} onChange={(e) => setAnio(e.target.value)} className={selectCls}>
+            <select aria-label="Año" value={anio} onChange={(e) => setAnio(e.target.value)} className={campoCls}>
               <option value="">Año: Todos</option>
               {anios.map((a) => (
                 <option key={a}>{a}</option>
               ))}
             </select>
-            <select aria-label="Categoría" value={categoria} onChange={(e) => setCategoria(e.target.value as Categoria | '')} className={selectCls}>
+            <select aria-label="Categoría" value={categoria} onChange={(e) => setCategoria(e.target.value as Categoria | '')} className={campoCls}>
               <option value="">Categoría: Todas</option>
               {CATEGORIAS.map((k) => (
                 <option key={k} value={k}>
@@ -116,7 +116,7 @@ export function Proyectos() {
                 </option>
               ))}
             </select>
-            <select aria-label="Estado" value={estado} onChange={(e) => setEstado(e.target.value as EstadoProyecto | '')} className={selectCls}>
+            <select aria-label="Estado" value={estado} onChange={(e) => setEstado(e.target.value as EstadoProyecto | '')} className={campoCls}>
               <option value="">Estado: Todos</option>
               {ESTADOS_PROYECTO.map((e) => (
                 <option key={e} value={e}>
