@@ -98,7 +98,7 @@ A completed Proyecto whose files have left `Proyectos/` for long-term storage (`
 A file location the app knows but cannot currently reach (e.g. external HDD disconnected, or folder never found). Distinct from **Archivado**.
 
 **Reembolso**:
-A negative Ingreso linked to the original Ingreso, dated the day it is recorded and counted in that period. Its amount is entered in the original Ingreso's own currency; a USD one converts to pesos at that Ingreso's own rate. Its IVA is in the original's proportion. Several may be recorded against one Ingreso, never more in total than was paid.
+A negative Ingreso linked to the original Ingreso, dated the day it is recorded and counted in that period. Its amount is entered in the original Ingreso's own currency; a USD one converts to pesos at that Ingreso's own rate. Its IVA and retenciones are in the original's proportion; the one that gives back all that is left takes the exact remainders. Several may be recorded against one Ingreso, never more in total than was paid.
 
 **Estado de Contacto**:
 Always derived from Cotizaciones and Proyectos, never set by hand. A Contacto with no Cotización is a cold lead.
