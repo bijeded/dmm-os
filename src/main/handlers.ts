@@ -141,7 +141,7 @@ export function crearHandlers({
       ficha: (id) => (ponerAlDia(), fichaContacto(conexion.db, info.dmmOsRoot, id)),
       guardar: (contacto) => guardarContacto(conexion.db, contacto),
       borrar: (id) => borrarContacto(conexion.db, id),
-      csv: () => contactosCsv(conexion.db)
+      csv: () => (ponerAlDia(), contactosCsv(conexion.db))
     },
     catalogo: {
       listar: () => listarCatalogo(conexion.db),
