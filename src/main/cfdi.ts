@@ -65,7 +65,8 @@ export function leerCfdi(xml: string): Cfdi {
   const impuestos = primero(comprobante.Impuestos)
   const concepto = hijo(comprobante.Conceptos, 'Concepto')
 
-  // Descuentos and retenciones are part of what the bank actually sees, so they belong in the amounts.
+  // Descuentos and retenciones are part of what the bank actually sees, so the total nets them;
+  // IVA stays what was charged, retenciones what was withheld.
   const enPesos = (valor: unknown) => centavos(valor, tipoCambio)
   const subtotal = enPesos(comprobante.SubTotal) - enPesos(comprobante.Descuento)
   const iva = enPesos(impuestos?.TotalImpuestosTrasladados)

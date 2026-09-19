@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import { readFileSync } from 'node:fs'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'vitest'
@@ -147,4 +147,26 @@ it('0012 gives existing amounts zero retenciones and keeps rows linked to rebuil
     )
   ).toThrow(/CHECK/)
   migrada.close()
+})
+
+it('rolls back a migration that leaves broken references, so the database stays as it was', () => {
+  const carpeta = join(dir, 'drizzle')
+  cpSync(drizzleDir, carpeta, { recursive: true })
+  const journal = JSON.parse(readFileSync(join(carpeta, 'meta', '_journal.json'), 'utf8'))
+  const ultima = journal.entries.at(-1)
+  journal.entries.push({ ...ultima, idx: ultima.idx + 1, when: ultima.when + 1, tag: '9999_rota' })
+  writeFileSync(join(carpeta, 'meta', '_journal.json'), JSON.stringify(journal))
+  writeFileSync(
+    join(carpeta, '9999_rota.sql'),
+    `insert into ingresos (categoria, estado, subtotal, iva, total, definicion_id) values ('sin_factura', 'pendiente', 1, 0, 1, 999);`
+  )
+  const file = join(dir, 'rota.db')
+  createDatabase(drizzleDir).abrir(file).close()
+
+  expect(() => createDatabase(carpeta).abrir(file)).toThrow(/referencias rotas/)
+
+  const sqlite = new Database(file)
+  expect(sqlite.prepare('select count(*) as n from ingresos').get()).toEqual({ n: 0 })
+  expect(sqlite.prepare('select max(created_at) as t from __drizzle_migrations').get()).toEqual({ t: ultima.when })
+  sqlite.close()
 })
