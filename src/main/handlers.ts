@@ -23,7 +23,6 @@ import {
   borrarCotizacion,
   cancelarCotizacion,
   enviarCotizacion,
-  expirarCotizaciones,
   fichaCotizacion,
   guardarCotizacion,
   listarCotizaciones,
@@ -76,9 +75,8 @@ export function crearHandlers({
 }: HandlersOptions): DmmHandlers {
   // The local calendar day, which is what a quote is accepted on.
   const hoy = () => diaLocal(new Date(ahora()))
-  // An expired quote turns its Contacto from hot lead back to cold, so Contactos expires too.
-  const expirar = () => expirarCotizaciones(conexion.db, hoy())
-  // The Proyectos list, Ficha and Completar read Ingresos and Cotizaciones Al día, as Finanzas does.
+  // Every read of Ingresos or Cotizaciones is Al día, as Finanzas is: an expired quote turns its
+  // Contacto from hot lead back to cold, and a Contacto's totals include this month's Periodos.
   const ponerAlDia = () => alDia(conexion.db, hoy())
 
   // The external HDD is organised like the main root, and is usually disconnected. Its path is
@@ -139,11 +137,11 @@ export function crearHandlers({
       }
     },
     contactos: {
-      listar: () => (expirar(), listarContactos(conexion.db)),
-      ficha: (id) => (expirar(), fichaContacto(conexion.db, info.dmmOsRoot, id)),
+      listar: () => (ponerAlDia(), listarContactos(conexion.db)),
+      ficha: (id) => (ponerAlDia(), fichaContacto(conexion.db, info.dmmOsRoot, id)),
       guardar: (contacto) => guardarContacto(conexion.db, contacto),
       borrar: (id) => borrarContacto(conexion.db, id),
-      csv: () => contactosCsv(conexion.db)
+      csv: () => (ponerAlDia(), contactosCsv(conexion.db))
     },
     catalogo: {
       listar: () => listarCatalogo(conexion.db),
@@ -151,9 +149,8 @@ export function crearHandlers({
       borrar: (id) => borrarConcepto(conexion.db, id)
     },
     cotizaciones: {
-      // Expiring is derived from the calendar, so it is brought up to date whenever quotes are read.
-      listar: () => (expirar(), listarCotizaciones(conexion.db)),
-      ficha: (id) => (expirar(), fichaCotizacion(conexion.db, id)),
+      listar: () => (ponerAlDia(), listarCotizaciones(conexion.db)),
+      ficha: (id) => (ponerAlDia(), fichaCotizacion(conexion.db, id)),
       guardar: (cotizacion) => guardarCotizacion(conexion.db, cotizacion),
       enviar: (id) => enviarCotizacion(conexion.db, info.dmmOsRoot, id, imprimirPdf),
       aceptar: (id, tipoCambio) => aceptarCotizacion(conexion.db, info.dmmOsRoot, id, hoy(), tipoCambio),
