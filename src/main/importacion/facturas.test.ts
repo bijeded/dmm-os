@@ -63,6 +63,19 @@ describe('importarFacturas', () => {
     expect(importarFacturas(db, root).rfcsDesconocidos).toEqual(['EOC180202XY9'])
   })
 
+  it('imports an 8% invoice unchanged and names it in the log with its rate', () => {
+    escribir('Facturas/Emitidas/2026/frontera.xml', cfdiXml({ iva: '80.00' }))
+    const log = importarFacturas(db, root)
+    expect(log.ivasInusuales).toEqual([{ archivo: 'Facturas/Emitidas/2026/frontera.xml', tasa: 8 }])
+    expect(db.select().from(ingresos).get()).toMatchObject({ iva: 8_000, total: 108_000 })
+  })
+
+  it('logs no unusual IVA for 0% and 16% invoices', () => {
+    escribir('Facturas/Emitidas/2026/a.xml', cfdi('11111111-0000-4444-8888-99AABBCCDDEE'))
+    escribir('Facturas/Recibidas/2026/b.xml', cfdiXml({ uuid: '22222222-0000-4444-8888-99AABBCCDDEE', iva: '0.00' }))
+    expect(importarFacturas(db, root).ivasInusuales).toEqual([])
+  })
+
   it('reports a missing Facturas folder as No disponible rather than failing', () => {
     expect(importarFacturas(db, root)).toMatchObject({ importados: 0, noDisponibles: ['Facturas/Emitidas', 'Facturas/Recibidas'] })
   })

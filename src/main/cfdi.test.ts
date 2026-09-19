@@ -69,6 +69,21 @@ describe('leerCfdi', () => {
     expect(leerCfdi(cfdiXml())).toMatchObject({ moneda: 'MXN', montoOriginal: null })
   })
 
+  it('reads an 8% invoice with its IVA as charged and flags its rate', () => {
+    expect(leerCfdi(cfdiXml({ iva: '80.00' }))).toMatchObject({ iva: 8_000, total: 108_000, tasaIvaInusual: 8 })
+  })
+
+  it('flags IVA charged on a zero subtotal', () => {
+    expect(leerCfdi(cfdiXml({ subtotal: '0.00', iva: '16.00' })).tasaIvaInusual).toBe(100)
+  })
+
+  it('does not flag 0% or 16% IVA, to within a centavo', () => {
+    expect(leerCfdi(cfdiXml()).tasaIvaInusual).toBeNull()
+    expect(leerCfdi(cfdiXml({ iva: '0.00' })).tasaIvaInusual).toBeNull()
+    expect(leerCfdi(cfdiXml({ subtotal: '333.33', iva: '53.34' })).tasaIvaInusual).toBeNull()
+    expect(leerCfdi(cfdiXml({ moneda: 'USD', tipoCambio: '18.4567', subtotal: '333.33', iva: '53.33' })).tasaIvaInusual).toBeNull()
+  })
+
   it('reports the type of voucher so pagos are not read as income', () => {
     expect(leerCfdi(cfdiXml()).tipo).toBe('I')
     expect(leerCfdi(cfdiXml({ tipo: 'P' })).tipo).toBe('P')

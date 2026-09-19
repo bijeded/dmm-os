@@ -22,6 +22,8 @@ export interface Cfdi {
   retenciones: number
   /** Subtotal + IVA − retenciones: what the bank sees. */
   total: number
+  /** IVA as a percent of the subtotal, when it is neither 0 nor 16% (e.g. the 8% border rate). */
+  tasaIvaInusual: number | null
   /** The currency the CFDI was issued in; 'MXN' unless it was a foreign invoice. */
   moneda: string
   /** The same total in its original currency, when that currency was not MXN. */
@@ -52,6 +54,13 @@ function hijo(padre: unknown, nombre: string): Nodo | undefined {
   return primero(primero(padre)?.[nombre])
 }
 
+/** IVA is 0 or 16% of the subtotal to within a centavo; anything else is returned as a percent. */
+function tasaInusual(subtotal: number, iva: number): number | null {
+  if (iva === 0 || Math.abs(iva - subtotal * 0.16) <= 1) return null
+  // IVA on a zero subtotal has no rate, and is as unusual as it gets.
+  return subtotal === 0 ? 100 : Math.round((iva / subtotal) * 10_000) / 100
+}
+
 /** Reads one CFDI XML. Throws when the file is not a stamped CFDI. */
 export function leerCfdi(xml: string): Cfdi {
   const comprobante = primero(parser.parse(xml)?.Comprobante)
@@ -71,11 +80,11 @@ export function leerCfdi(xml: string): Cfdi {
   const subtotal = enPesos(comprobante.SubTotal) - enPesos(comprobante.Descuento)
   const iva = enPesos(impuestos?.TotalImpuestosTrasladados)
   const retenciones = enPesos(impuestos?.TotalImpuestosRetenidos)
-  const original = () =>
-    centavos(comprobante.SubTotal, 1) -
-    centavos(comprobante.Descuento, 1) +
-    centavos(impuestos?.TotalImpuestosTrasladados, 1) -
-    centavos(impuestos?.TotalImpuestosRetenidos, 1)
+  // The same amounts in the CFDI's own currency, where the SAT's centavo rounding happened.
+  const enOriginal = (valor: unknown) => centavos(valor, 1)
+  const subtotalOriginal = enOriginal(comprobante.SubTotal) - enOriginal(comprobante.Descuento)
+  const ivaOriginal = enOriginal(impuestos?.TotalImpuestosTrasladados)
+  const original = () => subtotalOriginal + ivaOriginal - enOriginal(impuestos?.TotalImpuestosRetenidos)
 
   return {
     uuid: String(timbre.UUID).toLowerCase(),
@@ -88,6 +97,7 @@ export function leerCfdi(xml: string): Cfdi {
     iva,
     retenciones,
     total: subtotal + iva - retenciones,
+    tasaIvaInusual: tasaInusual(subtotalOriginal, ivaOriginal),
     moneda,
     montoOriginal: moneda === 'MXN' ? null : original()
   }

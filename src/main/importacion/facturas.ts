@@ -39,6 +39,7 @@ export function importarFacturas(db: Db, root: string): LogImportacion {
     ignorados: 0,
     sugerencias: 0,
     rfcsDesconocidos: [],
+    ivasInusuales: [],
     errores: [],
     noDisponibles: []
   }
@@ -58,6 +59,7 @@ export function importarFacturas(db: Db, root: string): LogImportacion {
         else log.ignorados++
         if (r.sugerencia) log.sugerencias++
         if (r.rfcDesconocido) rfcs.add(r.rfcDesconocido)
+        if (r.tasaIvaInusual !== null) log.ivasInusuales.push({ archivo, tasa: r.tasaIvaInusual })
       } catch (e) {
         log.errores.push({ archivo, error: e instanceof Error ? e.message : String(e) })
       }
