@@ -53,7 +53,7 @@ const cotizacion = (id: number, folio: string | null, estado: FilaCotizacion['es
 const tareas: ListaTareas = {
   pendientes: [{ id: 1, texto: 'Facturar anticipo Hotel Aura', fechaRegistro: '2026-09-10', fechaHecha: null }],
   hechas: [{ id: 2, texto: 'Revisar logs', fechaRegistro: '2026-09-01', fechaHecha: '2026-09-12' }],
-  dias: 14
+  diasHechas: 14
 }
 
 let api: DmmApi

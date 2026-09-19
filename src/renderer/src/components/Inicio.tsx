@@ -177,7 +177,7 @@ export function Inicio() {
               Pendientes · {tareas?.pendientes.length ?? 0}
             </button>
             <button type="button" aria-pressed={hechas} onClick={() => setHechas(true)} className={pestanaCls(hechas)}>
-              Hechas · {tareas?.dias ?? 0} días
+              Hechas · {tareas?.diasHechas ?? 0} días
             </button>
           </div>
           {!hechas && (
@@ -201,7 +201,7 @@ export function Inicio() {
           )}
           {hechas ? (
             <Tabla
-              vacio={`Nada hecho en los últimos ${tareas?.dias ?? 0} días.`}
+              vacio={`Nada hecho en los últimos ${tareas?.diasHechas ?? 0} días.`}
               columnas={['Tarea', 'Registrada', 'Hecha']}
               filas={(tareas?.hechas ?? []).map((t) => ({ key: t.id, celdas: [t.texto, dia(t.fechaRegistro), dia(t.fechaHecha!)] }))}
             />
