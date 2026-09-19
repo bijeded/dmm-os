@@ -380,6 +380,9 @@ export type EtiquetaProyecto = (typeof ETIQUETAS_PROYECTO)[number]
 /** What can be done to a Proyecto; which ones apply depends on its estado and is decided in main. */
 export type AccionProyecto = 'editar' | 'borrar' | 'pausar' | 'reanudar' | 'completar' | 'cancelar'
 
+/** Why Completar is held back: the Ficha shows it beside what is unpaid, and the command refuses with it. */
+export const MENSAJE_SIN_PAGAR = 'El proyecto se completa cuando esté pagado por completo'
+
 /**
  * Where a Proyecto's files are. `disponible`: its folder is there to open. `archivado`: its
  * files left `Proyectos/` for long-term storage. `no_disponible`: a folder the app knows but
