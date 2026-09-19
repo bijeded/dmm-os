@@ -1,9 +1,9 @@
 import { eq } from 'drizzle-orm'
 import type { Db } from './db'
 import { RegistroVinculadoError } from './db/cancelacion'
-import { generarPeriodos } from './db/periodos'
 import { asignacionesCosto, costos, definicionesCosto, ingresos, proyectos, vigenciasPrecio } from './db/schema'
 import { monedaDe, montoEn, tasaDe } from './dinero'
+import { alDia } from './ledger'
 import { ivaDe } from '../shared/formato'
 import type { AccionCosto, AccionIngreso, CostoNuevo, FilaCosto, FilaIngreso, IngresoNuevo } from '../shared/dominio'
 
@@ -213,7 +213,7 @@ export function nuevoCosto(db: Db, n: CostoNuevo, hoy: string) {
       .get().id
     tx.insert(vigenciasPrecio).values({ definicionCostoId, desde: periodoInicio, ...montos }).run()
   })
-  generarPeriodos(db, hoy.slice(0, 7))
+  alDia(db, hoy)
 }
 
 export function pagarIngreso(db: Db, id: number, hoy: string) {

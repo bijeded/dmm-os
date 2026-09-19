@@ -2,8 +2,8 @@ import { and, eq, lte } from 'drizzle-orm'
 import type { Db } from './db'
 import { coberturaCostos } from './db/cobertura'
 import { fechaEnPeriodo, sumarAnios, sumarDias, sumarMeses } from '../shared/fechas'
-import { generarPeriodos } from './db/periodos'
 import { monedaDe } from './dinero'
+import { alDia } from './ledger'
 import { accionesCosto, accionesIngreso, origenCosto, origenIngreso, reembolsableIngreso, restante, type Costo, type Definicion, type Ingreso } from './movimientos'
 import {
   asignacionesCosto,
@@ -165,13 +165,13 @@ function siguientesPeriodos(db: Db, defs: Definicion[], periodoActual: string, h
 }
 
 /**
- * Finanzas for a period: generates the periods due up to this month, then reads revenue, costs
+ * Finanzas for a period: brings the ledger up to hoy, then reads revenue, costs
  * and profit (subtotals, IVA apart) against the same span a period earlier, the chart, what is
  * still to be collected and paid, and what comes up next.
  */
 export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, diasVencida: number): ResumenFinanzas {
   const periodoActual = hoy.slice(0, 7)
-  generarPeriodos(db, periodoActual)
+  alDia(db, hoy)
 
   const todosIngresos = db.select().from(ingresos).all()
   const todosCostos = db.select().from(costos).all()
