@@ -28,6 +28,10 @@ _Avoid_: active (for projects)
 **Periodo generado**:
 A dated Ingreso or Costo created from a monthly/installment definition, produced up to the current month only. A monthly series (Ingreso or Costo) ends when its Proyecto is completed or cancelled, or at its end date. MSI and annual Costos are already committed, so they run to their end even after the Proyecto closes. A monthly Costo estimated in a Cotización is the exception: it runs until it is stopped in Finanzas → Costos, whatever happens to its Proyecto.
 
+**Al día**:
+The ledger brought up to hoy before money is read: sent Cotizaciones past their validity become expiradas, then every Periodo generado due this month exists. Idempotent; reading twice changes nothing.
+_Avoid_: sync, refresh
+
 **Catálogo**:
 Products and services with default prices, kept in Configuración. A Cotización copies prices at creation; later edits don't touch past quotes.
 
