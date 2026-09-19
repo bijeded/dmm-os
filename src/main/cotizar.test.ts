@@ -114,7 +114,7 @@ describe('enviar', () => {
 
 describe('aceptar', () => {
   it('creates the Proyecto, a pending Ingreso por facturar with blank dates, and the estimated Costos', async () => {
-    const f = aceptarCotizacion(db, (await enviada()).id, '2026-09-20')
+    const f = aceptarCotizacion(db, root, (await enviada()).id, '2026-09-20')
     expect(f.estado).toBe('aceptada')
     const p = db.select().from(proyectos).where(eq(proyectos.id, f.proyectoId!)).get()!
     expect(p).toMatchObject({ nombre: 'Rediseño sitio web', contactoId, cotizacionId: f.id, categoria: 'website', estado: 'en_curso', fechaInicio: '2026-09-20' })
@@ -127,16 +127,28 @@ describe('aceptar', () => {
   })
 
   it('splits parcialidades into pending Ingresos that add up to the total', async () => {
-    aceptarCotizacion(db, (await enviada({ facturacion: 'parcialidades', parcialidades: 3, conIva: false, partidas: [{ concepto: 'x', categoria: 'app', cantidad: 1, precio: 1000 }] })).id, '2026-09-20')
+    aceptarCotizacion(db, root, (await enviada({ facturacion: 'parcialidades', parcialidades: 3, conIva: false, partidas: [{ concepto: 'x', categoria: 'app', cantidad: 1, precio: 1000 }] })).id, '2026-09-20')
     const is = db.select().from(ingresos).all()
     expect(is.map((i) => i.subtotal)).toEqual([334, 333, 333])
     expect(is.map((i) => i.notas)).toEqual(['Parcialidad 1 de 3', 'Parcialidad 2 de 3', 'Parcialidad 3 de 3'])
   })
 
   it('turns monthly billing into a monthly Ingreso definition from the month it was accepted', async () => {
-    const f = aceptarCotizacion(db, (await enviada({ facturacion: 'mensual' })).id, '2026-09-20')
+    const f = aceptarCotizacion(db, root, (await enviada({ facturacion: 'mensual' })).id, '2026-09-20')
     expect(db.select().from(definicionesIngreso).all()).toMatchObject([{ tipo: 'mensual', periodoInicio: '2026-09', subtotal: 3_000_000, total: 3_480_000, proyectoId: f.proyectoId }])
-    expect(db.select().from(ingresos).all()).toEqual([])
+    expect(db.select().from(ingresos).all()).toMatchObject([{ periodo: '2026-09', total: 3_480_000, proyectoId: f.proyectoId }])
+  })
+
+  it('creates the Proyecto folder in the DMM OS root', async () => {
+    aceptarCotizacion(db, root, (await enviada()).id, '2026-09-20')
+    expect(existsSync(join(root, 'Proyectos/Clínica Sol - Rediseño sitio web'))).toBe(true)
+  })
+
+  it('refuses a sent quote past its validity, marking it expirada', async () => {
+    const { id } = await enviada({ fecha: '2026-09-01', validezDias: 30 })
+    expect(() => aceptarCotizacion(db, root, id, '2026-10-02')).toThrow('enviada')
+    expect(fichaCotizacion(db, id).estado).toBe('expirada')
+    expect(db.select().from(proyectos).all()).toEqual([])
   })
 
   it('converts a USD quote to MXN at the given exchange rate, keeping the USD amount', async () => {
@@ -145,8 +157,8 @@ describe('aceptar', () => {
       partidas: [{ concepto: 'App', categoria: 'app', cantidad: 1, precio: 100_000 }],
       costosEstimados: [{ concepto: 'Servidor', monto: 10_000, categoria: 'unico', parcialidades: null }]
     })
-    expect(() => aceptarCotizacion(db, id, '2026-09-20')).toThrow('tipo de cambio')
-    aceptarCotizacion(db, id, '2026-09-20', 18.5)
+    expect(() => aceptarCotizacion(db, root, id, '2026-09-20')).toThrow('tipo de cambio')
+    aceptarCotizacion(db, root, id, '2026-09-20', 18.5)
     expect(db.select().from(ingresos).all()).toMatchObject([{ subtotal: 1_850_000, iva: 296_000, total: 2_146_000, montoOriginal: 116_000, monedaOriginal: 'USD' }])
     expect(db.select().from(costos).all()).toMatchObject([{ subtotal: 185_000, total: 185_000, montoOriginal: 10_000, monedaOriginal: 'USD' }])
     expect(db.select().from(cotizaciones).where(eq(cotizaciones.id, id)).get()?.tipoCambio).toBe(18.5)
@@ -155,6 +167,7 @@ describe('aceptar', () => {
   it('turns recurring estimated costs into Costo definitions from the month it was accepted', async () => {
     const f = aceptarCotizacion(
       db,
+      root,
       (
         await enviada({
           costosEstimados: [
@@ -166,7 +179,7 @@ describe('aceptar', () => {
       ).id,
       '2026-09-20'
     )
-    expect(db.select().from(costos).all()).toEqual([])
+    expect(db.select().from(costos).all().map((c) => c.periodo)).toEqual(['2026-09', '2026-09', '2026-09'])
     expect(db.select().from(definicionesCosto).all()).toMatchObject([
       { nombre: 'Hosting', tipo: 'mensual', periodoInicio: '2026-09', diaDelMes: 20, numeroParcialidades: null, proyectoId: f.proyectoId },
       { nombre: 'Laptop', tipo: 'msi', periodoInicio: '2026-09', numeroParcialidades: 12, proyectoId: f.proyectoId },
@@ -182,6 +195,7 @@ describe('aceptar', () => {
   it('keeps a monthly estimated cost running after the quote is cancelled, until stopped in Finanzas', async () => {
     const f = aceptarCotizacion(
       db,
+      root,
       (await enviada({ costosEstimados: [{ concepto: 'Hosting', monto: 50_000, categoria: 'mensual', parcialidades: null }] })).id,
       '2026-09-20'
     )
@@ -197,7 +211,7 @@ describe('aceptar', () => {
 
   it('only accepts sent quotes', () => {
     const { id } = guardarCotizacion(db, nueva())
-    expect(() => aceptarCotizacion(db, id, '2026-09-20')).toThrow('enviada')
+    expect(() => aceptarCotizacion(db, root, id, '2026-09-20')).toThrow('enviada')
   })
 })
 
@@ -208,12 +222,12 @@ describe('expirar', () => {
     expect(fichaCotizacion(db, id).estado).toBe('enviada')
     expirarCotizaciones(db, '2026-10-02')
     expect(fichaCotizacion(db, id).estado).toBe('expirada')
-    expect(() => aceptarCotizacion(db, id, '2026-10-02')).toThrow('enviada')
+    expect(() => aceptarCotizacion(db, root, id, '2026-10-02')).toThrow('enviada')
   })
 
   it('leaves drafts and answered quotes alone', async () => {
     const borrador = guardarCotizacion(db, nueva({ fecha: '2020-01-01' }))
-    const aceptada = aceptarCotizacion(db, (await enviada({ fecha: '2020-01-01' })).id, '2020-01-02')
+    const aceptada = aceptarCotizacion(db, root, (await enviada({ fecha: '2020-01-01' })).id, '2020-01-02')
     expirarCotizaciones(db, '2026-10-02')
     expect(fichaCotizacion(db, borrador.id).estado).toBe('borrador')
     expect(fichaCotizacion(db, aceptada.id).estado).toBe('aceptada')
@@ -226,7 +240,7 @@ describe('rechazar, cancelar y borrar', () => {
   })
 
   it('cancelling an accepted quote cancels its Proyecto and pending money', async () => {
-    const f = aceptarCotizacion(db, (await enviada()).id, '2026-09-20')
+    const f = aceptarCotizacion(db, root, (await enviada()).id, '2026-09-20')
     expect(cancelarCotizacion(db, f.id).estado).toBe('cancelada')
     expect(db.select().from(proyectos).get()!.estado).toBe('cancelado')
     expect(db.select().from(ingresos).get()!.estado).toBe('cancelado')
@@ -246,7 +260,7 @@ describe('listar', () => {
   it('lists drafts first, then by Folio descending, with the stat cards and categories', async () => {
     const a = await enviada()
     const b = await enviada({ categoria: 'ai', partidas: [{ concepto: 'Bot', categoria: 'ai', cantidad: 1, precio: 1_000_000 }] })
-    aceptarCotizacion(db, a.id, '2026-09-20')
+    aceptarCotizacion(db, root, a.id, '2026-09-20')
     guardarCotizacion(db, nueva({ nombre: 'Borrador' }))
 
     const l = listarCotizaciones(db)
@@ -262,7 +276,7 @@ describe('acciones', () => {
     expect(guardarCotizacion(db, nueva()).acciones).toEqual(['editar', 'borrar', 'enviar'])
     const f = await enviada()
     expect(f.acciones).toEqual(['aceptar', 'rechazar', 'cancelar'])
-    expect(aceptarCotizacion(db, f.id, '2026-09-20').acciones).toEqual(['cancelar'])
+    expect(aceptarCotizacion(db, root, f.id, '2026-09-20').acciones).toEqual(['cancelar'])
     expect(cancelarCotizacion(db, f.id).acciones).toEqual([])
     const r = await enviada()
     expect(rechazarCotizacion(db, r.id).acciones).toEqual([])

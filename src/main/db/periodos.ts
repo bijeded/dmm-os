@@ -11,6 +11,9 @@ import {
   vigenciasPrecio
 } from './schema'
 
+/** A transaction, which reads and writes exactly like the database itself. */
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
+
 export function periodoDe(fecha: Date): string {
   return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`
 }
@@ -37,7 +40,7 @@ function periodosHasta(
  * Monthly Costo series stop when their Proyecto is completed or cancelled; MSI and annual
  * Costo series run to their end date or installment count regardless.
  */
-export function generarPeriodos(db: Db, periodoActual: string) {
+export function generarPeriodos(db: Db | Tx, periodoActual: string) {
   db.transaction((tx) => {
     const proyectosCerrados = new Map(
       tx
