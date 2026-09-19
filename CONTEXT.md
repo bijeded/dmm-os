@@ -67,6 +67,10 @@ _Avoid_: "pendiente" for not-yet-invoiced
 **Cobranza vencida**:
 An invoiced, unpaid Ingreso older than the configured number of days (default 30). Uninvoiced Ingresos are never overdue.
 
+**Cobros**:
+The pending Ingresos dated this month or earlier (or not yet dated), split into three groups so each appears in exactly one: *Vencidos* (the Cobranza vencida), *Por facturar* (Estado de facturación por facturar), and *Este mes* (everything else collectable). Pending Ingresos dated after this month are in none. Worked out by main; currently shown on Inicio.
+_Avoid_: "Cobranza" for this grouping (Cobranza is every pending Ingreso, whatever its date)
+
 **Sin ingresos registrados**:
 A completed Proyecto with files somewhere (local or external HDD) and a one-off or installment Cotización whose paid Ingresos never reached the quote total. Usually imported history (ADR-0002) whose uninvoiced Ingresos are still to be entered by hand. Derived, never stored: it clears once the Ingresos are entered.
 _Avoid_: "sin pagar" (it is about what the app has recorded, not what the client owes)
