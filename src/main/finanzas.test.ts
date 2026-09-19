@@ -157,6 +157,16 @@ describe('Cobrado', () => {
     expect(cobrado.map((f) => f.fecha)).toEqual(['2026-09-05', '2026-09-03'])
     expect(cobrado.find((f) => f.id === pagada.id)?.origen).toBe('cfdi')
   })
+
+  it("dates an Ingreso the day it was paid in the period's figures too, so Cobrado never exceeds them", () => {
+    nuevoIngreso(db, ingreso({ fecha: '2026-08-20', pagado: false }), hoy)
+    const [pendiente] = db.select().from(ingresos).all()
+    pagarIngreso(db, pendiente.id, '2026-09-10')
+    const septiembre = resumenFinanzas(db, 'mes', hoy, 30)
+    expect(septiembre.cobrado.map((f) => f.id)).toEqual([pendiente.id])
+    expect(septiembre.actual.ingresos).toBe(10000)
+    expect(resumenFinanzas(db, 'mes', '2026-08-31', 30).actual.ingresos).toBe(0)
+  })
 })
 
 describe('recurring and installment Costos', () => {

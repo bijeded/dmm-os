@@ -35,6 +35,13 @@ Products and services with default prices, kept in Configuración. A Cotización
 The home screen summarising current business status.
 _Avoid_: Panel de Control, Dashboard
 
+**Tarea**:
+A to-do on Inicio, dated the day it is registered. Marking it done dates it and keeps it in view for 30 days; deleting it removes it. Not linked to any Contacto, Cotización or Proyecto.
+_Avoid_: pendiente (reserved for money not yet paid)
+
+**Ingreso proyectado / Ingreso real**:
+On Inicio, the month's Ingresos, pending and paid (proyectado), against those paid this month (real). A paid Ingreso counts on the day it was paid in both, so real never exceeds proyectado.
+
 **Ingreso** / **Costo**:
 Money in / money out, always recorded in the MXN amount actually seen in the bank; original currency is optional detail.
 
