@@ -362,3 +362,33 @@ describe('Proyectos y Cobros al día', () => {
     expect(conexion.db.select().from(ingresos).all()).toHaveLength(3)
   })
 })
+
+describe('Contactos, Cotizaciones e Inicio al día', () => {
+  it('the Ficha de Contacto reads Periodos up to hoy with Finanzas never opened, and matches Finanzas', async () => {
+    const id = await mensualEnviada('2026-07-16')
+    await h.cotizaciones.aceptar(id)
+    const [{ id: contactoId }] = conexion.db.select().from(contactos).all()
+    h = crearHandlers(opciones)
+
+    const ficha = await h.contactos.ficha(contactoId)
+    const { cobros } = await h.finanzas.resumen('mes')
+    const enFinanzas = [...cobros.mes, ...cobros.vencidos, ...cobros.porFacturar].reduce((s, i) => s + i.subtotal, 0)
+    // July (accepted), August and September (hoy).
+    expect(ficha.porCobrar).toBe(300_000)
+    expect(ficha.porCobrar).toBe(enFinanzas)
+  })
+
+  it('Inicio reads the month as Finanzas does, with Finanzas never opened', async () => {
+    const id = await mensualEnviada('2026-07-16')
+    await h.cotizaciones.aceptar(id)
+    h = crearHandlers(opciones)
+    const { finanzas } = await h.inicio.resumen()
+    expect(finanzas).toEqual(await h.finanzas.resumen('mes'))
+  })
+
+  it('the Ficha de Cotización expires a quote past its validity', async () => {
+    const id = await mensualEnviada('2026-07-16')
+    h = crearHandlers(opciones)
+    expect((await h.cotizaciones.ficha(id)).estado).toBe('expirada')
+  })
+})
