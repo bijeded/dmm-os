@@ -5,6 +5,7 @@ import { borrarContacto, contactosCsv, fichaContacto, guardarContacto, listarCon
 import type { Conexion } from './db'
 import { coberturaCostos } from './db/cobertura'
 import { DIAS_VENCIDA, resumenFinanzas } from './finanzas'
+import { resumenInicio } from './inicio'
 import {
   borrarCosto,
   borrarIngreso,
@@ -200,6 +201,9 @@ export function crearHandlers({
       agregar: (texto) => agregarTarea(conexion.db, texto, hoy()),
       completar: (id) => completarTarea(conexion.db, id, hoy()),
       borrar: (id) => borrarTarea(conexion.db, id, hoy())
+    },
+    inicio: {
+      resumen: () => resumenInicio(conexion.db, info.dmmOsRoot, hoy(), diasVencida())
     }
   }
 }

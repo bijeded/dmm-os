@@ -25,6 +25,7 @@ import type {
   RespuestaSugerencia,
   ResultadoRestaurar,
   ResumenFinanzas,
+  ResumenInicio,
   Rutas,
   Sugerencia
 } from './dominio'
@@ -162,6 +163,10 @@ export const contrato = {
     agregar: canal<[texto: string], ListaTareas>(),
     completar: canal<[id: number], ListaTareas>(),
     borrar: canal<[id: number], ListaTareas>()
+  },
+  inicio: {
+    /** This month, Proyectos en curso, open Cotizaciones and Tareas, in one read. */
+    resumen: canal<[], ResumenInicio>()
   }
 }
 
