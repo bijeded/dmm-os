@@ -36,7 +36,8 @@ const resumen = {
     ingreso(1, { contacto: 'Hotel Aura' }),
     ingreso(2, { contacto: 'Grupo Terra', fecha: '2026-07-01', vencida: true }),
     ingreso(3, { contacto: 'Mezcal Luna', fecha: null, estadoFacturacion: 'por_facturar' }),
-    ingreso(4, { contacto: 'Clínica Sol', fecha: '2026-10-15' })
+    ingreso(4, { contacto: 'Clínica Sol', fecha: '2026-10-15' }),
+    ingreso(5, { contacto: 'Netdeckr', fecha: '2026-06-01', categoria: 'sin_factura', estadoFacturacion: null })
   ],
   costosPendientes: [
     { id: 7, fecha: '2026-09-22', nombre: 'Hosting anual', proveedor: 'Hostinger', proyecto: null, categoria: 'anual', estado: 'pendiente', estimado: false, subtotal: 289_000, iva: 0, total: 289_000, origen: 'manual', acciones: [] }
@@ -104,12 +105,14 @@ describe('Inicio', () => {
     renderInicio()
     const cifras = await screen.findByRole('list', { name: 'Resumen' })
     expect(within(cifras).getByText('Utilidad').nextSibling?.textContent).toBe('Sin datos')
+    expect(within(cifras).getByText('Costos').nextSibling?.textContent).toBe('Sin datos')
   })
 
   it('splits Cobros into this month, overdue and por facturar', async () => {
     renderInicio()
     const cobros = await screen.findByRole('region', { name: 'Cobros' })
     await within(cobros).findByText('Hotel Aura')
+    expect(within(cobros).getByText('Netdeckr')).toBeTruthy()
     expect(within(cobros).queryByText('Grupo Terra')).toBeNull()
     expect(within(cobros).queryByText('Clínica Sol')).toBeNull()
     fireEvent.click(within(cobros).getByRole('button', { name: 'Vencidos · 1' }))

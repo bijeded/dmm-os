@@ -57,7 +57,8 @@ export function Inicio() {
 
   const pendientes = resumen?.cobranza ?? []
   const grupos: Record<Cobros, FilaIngreso[]> = {
-    mes: pendientes.filter((i) => !i.vencida && i.fecha?.startsWith(mes ?? '')),
+    // Everything collectable up to this month that is not overdue: earlier sin_factura ones never become vencidas.
+    mes: pendientes.filter((i) => !i.vencida && i.fecha !== null && i.fecha.slice(0, 7) <= (mes ?? '')),
     vencidos: pendientes.filter((i) => i.vencida),
     por_facturar: pendientes.filter((i) => i.estadoFacturacion === 'por_facturar')
   }
@@ -92,7 +93,7 @@ export function Inicio() {
           <Cifra label="Ingreso proyectado" valor={pesos(proyectado)} detalle={`${nombreMes} · cobrado y por cobrar`} />
           <Cifra label="Ingreso real" valor={pesos(real)} detalle={proyectado > 0 ? `${Math.round((real / proyectado) * 100)}% de lo proyectado` : nombreMes} />
           <Cifra label="Diferencia" valor={pesos(real - proyectado)} detalle="real − proyectado" />
-          <Cifra label="Costos" valor={pesos(costos)} detalle={nombreMes} />
+          <Cifra label="Costos" valor={resumen.actual.utilidad === null ? 'Sin datos' : pesos(costos)} detalle={nombreMes} />
           <Cifra label="Utilidad" valor={resumen.actual.utilidad === null ? 'Sin datos' : pesos(real - costos)} detalle="real − costos" />
         </ul>
       )}
