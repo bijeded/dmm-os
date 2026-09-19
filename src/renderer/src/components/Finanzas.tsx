@@ -4,7 +4,7 @@ import { NOMBRES_CATEGORIA_COSTO, NOMBRES_ESTADO_INGRESO, NOMBRES_PERIODO_FINANZ
 import { dia, normalizar } from '../../../shared/formato'
 import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
 import { centavos } from './NuevoMovimiento'
-import { Aviso, inputCls, useAccion } from './Seccion'
+import { Aviso, Cifra, inputCls, useAccion } from './Seccion'
 import { Button } from './ui/button'
 
 // Validated for the dark surface (dataviz validator): lightness band, CVD and contrast all pass.
@@ -309,16 +309,6 @@ export function Finanzas() {
         <TablaCostos filas={costos} acciones={accionesCosto} vacio="Ningún costo coincide." />
       </section>
     </>
-  )
-}
-
-function Cifra({ label, valor, detalle }: { label: string; valor: string; detalle: (string | null | false | undefined)[] }) {
-  return (
-    <li className="card flex flex-col gap-1 rounded-control border border-border p-4">
-      <span className={etiquetaCls}>{label}</span>
-      <span className="font-display text-[29px] leading-none font-bold text-on-surface">{valor}</span>
-      <span className="text-[12px] text-on-surface-muted">{detalle.filter(Boolean).join(' · ')}</span>
-    </li>
   )
 }
 

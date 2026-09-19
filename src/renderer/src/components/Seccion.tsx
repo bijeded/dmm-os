@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { etiquetaCls } from './Contactos'
 
 /** The pieces every Configuración card is built from, so each section only says what it shows. */
 
@@ -66,5 +67,16 @@ export function Aviso({ error }: { error: string | null }) {
     <p role="alert" className="m-0 text-[13px] text-error-text">
       {error}
     </p>
+  )
+}
+
+/** A stat card: its figure, and the details under it joined by " · " (empty ones dropped). */
+export function Cifra({ label, valor, detalle }: { label: string; valor: string; detalle: (string | null | false | undefined)[] }) {
+  return (
+    <li className="card flex flex-col gap-1 rounded-control border border-border p-4">
+      <span className={etiquetaCls}>{label}</span>
+      <span className="font-display text-[29px] leading-none font-bold text-on-surface">{valor}</span>
+      <span className="text-[12px] text-on-surface-muted">{detalle.filter(Boolean).join(' · ')}</span>
+    </li>
   )
 }
