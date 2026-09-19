@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { NOMBRES_CATEGORIA, NOMBRES_ESTADO_PROYECTO, type FichaProyecto as Ficha } from '../../../shared/dominio'
+import { MENSAJE_SIN_PAGAR, NOMBRES_CATEGORIA, NOMBRES_ESTADO_PROYECTO, type FichaProyecto as Ficha } from '../../../shared/dominio'
 import { dia, folioDmm, monto, pesos } from '../../../shared/formato'
 import { NOMBRES_CARPETA } from './Proyectos'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
@@ -115,7 +115,7 @@ export function FichaProyecto() {
               </Datos>
               {f.falta && (
                 <p id="sin-completar" className="m-0 text-[13px] text-on-surface-muted">
-                  Se completa cuando esté pagado por completo:{' '}
+                  {MENSAJE_SIN_PAGAR}:{' '}
                   {[
                     f.falta.pendientes > 0 && `${f.falta.pendientes} ${f.falta.pendientes === 1 ? 'pago pendiente' : 'pagos pendientes'} por cobrar`,
                     f.falta.faltante > 0 && `faltan ${monto(f.falta.faltante, f.falta.moneda)} para el total de la cotización`

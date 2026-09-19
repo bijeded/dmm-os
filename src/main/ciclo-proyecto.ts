@@ -1,11 +1,12 @@
-import type { AccionProyecto, EstadoProyecto } from '../shared/dominio'
+import { MENSAJE_SIN_PAGAR, type AccionProyecto, type EstadoProyecto } from '../shared/dominio'
+
+export { MENSAJE_SIN_PAGAR }
 
 /** What the Proyecto lifecycle needs beyond its estado. */
 export interface ContextoProyecto {
   pagadoCompleto: boolean
 }
 
-export const MENSAJE_SIN_PAGAR = 'El proyecto se completa hasta que esté pagado por completo'
 
 /** Which estados allow each action, and the refusal when the estado doesn't. */
 const REGLAS: Record<AccionProyecto, { en: readonly EstadoProyecto[]; mensaje: string }> = {
