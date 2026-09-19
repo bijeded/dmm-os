@@ -8,6 +8,9 @@ export interface ContextoProyecto {
 }
 
 
+/** A Proyecto being worked on now: En curso, not paused, completed or cancelled. */
+export const proyectoEnCurso = (estado: EstadoProyecto) => estado === 'en_curso'
+
 /** Which estados allow each action, and the refusal when the estado doesn't. */
 const REGLAS: Record<AccionProyecto, { en: readonly EstadoProyecto[]; mensaje: string }> = {
   editar: { en: ['en_curso', 'pausado', 'completado'], mensaje: 'Un proyecto cancelado no se edita' },

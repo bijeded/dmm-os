@@ -60,13 +60,15 @@ let api: DmmApi
 
 beforeEach(() => {
   api = {
-    finanzas: { resumen: vi.fn(async () => resumen) },
-    proyectos: { listar: vi.fn(async () => ({ proyectos: [proyecto(1, 'Sitio web', 'en_curso'), proyecto(2, 'Tienda', 'completado')] })) },
-    cotizaciones: {
-      listar: vi.fn(async () => ({ cotizaciones: [cotizacion(1, null, 'borrador'), cotizacion(2, '520', 'enviada'), cotizacion(3, '519', 'aceptada')] }))
+    inicio: {
+      resumen: vi.fn(async () => ({
+        finanzas: resumen,
+        proyectos: [proyecto(1, 'Sitio web', 'en_curso')],
+        cotizaciones: [cotizacion(1, null, 'borrador'), cotizacion(2, '520', 'enviada')],
+        tareas
+      }))
     },
     tareas: {
-      listar: vi.fn(async () => tareas),
       agregar: vi.fn(async (texto: string) => ({ ...tareas, pendientes: [...tareas.pendientes, { id: 3, texto, fechaRegistro: '2026-09-18', fechaHecha: null }] })),
       completar: vi.fn(async () => ({ ...tareas, pendientes: [] })),
       borrar: vi.fn(async () => ({ ...tareas, pendientes: [] }))
@@ -94,7 +96,7 @@ describe('Inicio', () => {
     renderInicio()
     const cifras = await screen.findByRole('list', { name: 'Resumen' })
     const valor = (label: string) => within(cifras).getByText(label).nextSibling?.textContent
-    expect(api.finanzas.resumen).toHaveBeenCalledWith('mes')
+    expect(api.inicio.resumen).toHaveBeenCalledTimes(1)
     expect(valor('Ingreso proyectado')).toBe('$50,000.00')
     expect(valor('Ingreso real')).toBe('$25,000.00')
     expect(valor('Diferencia')).toBe('-$25,000.00')
@@ -103,7 +105,12 @@ describe('Inicio', () => {
   })
 
   it('shows Sin datos for profit when the month has no imported Costos', async () => {
-    vi.mocked(api.finanzas.resumen).mockResolvedValue({ ...resumen, actual: { ...resumen.actual, utilidad: null }, utilidadReal: null })
+    vi.mocked(api.inicio.resumen).mockResolvedValue({
+      finanzas: { ...resumen, actual: { ...resumen.actual, utilidad: null }, utilidadReal: null },
+      proyectos: [],
+      cotizaciones: [],
+      tareas
+    })
     renderInicio()
     const cifras = await screen.findByRole('list', { name: 'Resumen' })
     expect(within(cifras).getByText('Utilidad').nextSibling?.textContent).toBe('Sin datos')
@@ -123,16 +130,21 @@ describe('Inicio', () => {
     expect(within(cobros).queryByText('Hotel Aura')).toBeNull()
   })
 
-  it('lists pending Costos, Proyectos en curso and draft or sent quotes', async () => {
+  it('lists pending Costos, and the Proyectos and Cotizaciones main says are current', async () => {
     renderInicio()
     expect(await within(await screen.findByRole('region', { name: 'Costos pendientes' })).findByText('Hosting anual')).toBeTruthy()
     const proyectos = screen.getByRole('region', { name: 'Proyectos en curso' })
     expect(await within(proyectos).findByText('Sitio web')).toBeTruthy()
-    expect(within(proyectos).queryByText('Tienda')).toBeNull()
     const cotizaciones = screen.getByRole('region', { name: 'Cotizaciones abiertas' })
     expect(await within(cotizaciones).findByText('Propuesta 1')).toBeTruthy()
     expect(within(cotizaciones).getByText('Propuesta 2')).toBeTruthy()
-    expect(within(cotizaciones).queryByText('Propuesta 3')).toBeNull()
+  })
+
+  it('shows why Inicio could not load', async () => {
+    vi.mocked(api.inicio.resumen).mockRejectedValue(new Error("Error invoking remote method 'inicio:resumen': Error: La base de datos está bloqueada"))
+    renderInicio()
+    expect((await screen.findByRole('alert')).textContent).toBe('La base de datos está bloqueada')
+    expect(screen.queryByRole('list', { name: 'Resumen' })).toBeNull()
   })
 
   it('adds, completes and deletes tasks, and shows those done', async () => {
@@ -151,7 +163,7 @@ describe('Inicio', () => {
   })
 
   it('states the window main applies to done tasks when there are none', async () => {
-    vi.mocked(api.tareas.listar).mockResolvedValue({ ...tareas, hechas: [] })
+    vi.mocked(api.inicio.resumen).mockResolvedValue({ finanzas: resumen, proyectos: [], cotizaciones: [], tareas: { ...tareas, hechas: [] } })
     renderInicio()
     const panel = await screen.findByRole('region', { name: 'Tareas' })
     fireEvent.click(await within(panel).findByRole('button', { name: 'Hechas · 14 días' }))

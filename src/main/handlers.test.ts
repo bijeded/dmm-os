@@ -236,6 +236,56 @@ describe('proyectos', () => {
   })
 })
 
+describe('inicio', () => {
+  it('reads what is current: Proyectos en curso, open Cotizaciones, the month as Finanzas reads it, and Tareas', async () => {
+    const { id: contactoId } = conexion.db.insert(contactos).values({ nombre: 'Hotel Aura' }).returning().get()
+    const cotizacion = async (nombre: string) =>
+      (
+        await h.cotizaciones.guardar({
+          contactoId,
+          nombre,
+          categoria: 'website',
+          fecha: '2026-09-16',
+          validezDias: 30,
+          moneda: 'MXN',
+          partidas: [{ concepto: nombre, categoria: 'website', cantidad: 1, precio: 100_000 }],
+          conIva: false,
+          facturacion: 'unica',
+          parcialidades: null,
+          stack: null,
+          terminos: null,
+          notas: null,
+          costosEstimados: []
+        })
+      ).id
+    await cotizacion('Borrador')
+    await h.cotizaciones.enviar(await cotizacion('Enviada'))
+    const aceptada = await cotizacion('Aceptada')
+    await h.cotizaciones.enviar(aceptada)
+    await h.cotizaciones.aceptar(aceptada)
+    const rechazada = await cotizacion('Rechazada')
+    await h.cotizaciones.enviar(rechazada)
+    await h.cotizaciones.rechazar(rechazada)
+    const cancelada = await cotizacion('Cancelada')
+    await h.cotizaciones.enviar(cancelada)
+    await h.cotizaciones.cancelar(cancelada)
+
+    const proyecto = (nombre: string) =>
+      h.proyectos.guardar({ nombre, etiqueta: 'personal', contactoId: null, clienteFinal: null, categoria: 'website', fechaInicio: '', fechaEntrega: null, notas: null })
+    await proyecto('En curso')
+    await h.proyectos.pausar((await proyecto('Pausado')).id)
+    await h.proyectos.completar((await proyecto('Completado')).id)
+    await h.proyectos.cancelar((await proyecto('Cancelado')).id)
+    await h.tareas.agregar('Llamar a Hotel Aura')
+
+    const inicio = await h.inicio.resumen()
+    expect(inicio.cotizaciones.map((c) => c.nombre).sort()).toEqual(['Borrador', 'Enviada'])
+    expect(inicio.proyectos.map((p) => p.nombre).sort()).toEqual(['Aceptada', 'En curso'])
+    expect(inicio.finanzas).toEqual(await h.finanzas.resumen('mes'))
+    expect(inicio.tareas.pendientes.map((t) => t.texto)).toEqual(['Llamar a Hotel Aura'])
+  })
+})
+
 describe('finanzas', () => {
   it('reads Cobranza vencida after 30 days until another number is configured', async () => {
     expect((await h.finanzas.resumen('mes')).diasVencida).toBe(30)

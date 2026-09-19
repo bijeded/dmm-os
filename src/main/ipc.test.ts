@@ -121,6 +121,9 @@ function handlers() {
       agregar: vi.fn(() => ({ pendientes: [], hechas: [], diasHechas: 30 })),
       completar: vi.fn(() => ({ pendientes: [], hechas: [], diasHechas: 30 })),
       borrar: vi.fn(() => ({ pendientes: [], hechas: [], diasHechas: 30 }))
+    },
+    inicio: {
+      resumen: vi.fn(() => ({ finanzas: {} as ResumenFinanzas, proyectos: [], cotizaciones: [], tareas: { pendientes: [], hechas: [], diasHechas: 30 } }))
     }
   } satisfies DmmHandlers
 }

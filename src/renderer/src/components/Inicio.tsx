@@ -33,16 +33,11 @@ export function Inicio() {
 
   useEffect(() => {
     correr(async () => {
-      const [r, p, c, t] = await Promise.all([
-        window.dmm.finanzas.resumen('mes'),
-        window.dmm.proyectos.listar(),
-        window.dmm.cotizaciones.listar(),
-        window.dmm.tareas.listar()
-      ])
-      setResumen(r)
-      setProyectos(p.proyectos.filter((x) => x.estado === 'en_curso'))
-      setCotizaciones(c.cotizaciones.filter((x) => x.estado === 'borrador' || x.estado === 'enviada'))
-      setTareas(t)
+      const inicio = await window.dmm.inicio.resumen()
+      setResumen(inicio.finanzas)
+      setProyectos(inicio.proyectos)
+      setCotizaciones(inicio.cotizaciones)
+      setTareas(inicio.tareas)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   }, [])
