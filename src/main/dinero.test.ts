@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { monto } from '../shared/formato'
-import { enMxn, monedaDe, montoEn, tasaDe } from './dinero'
+import { convertir, enMxn, monedaDe, montoEn, tasaDe } from './dinero'
 
 const enPesos = { total: 1800, montoOriginal: null, monedaOriginal: null }
 const enUsd = { total: 1800, montoOriginal: 100, monedaOriginal: 'USD' as const }
@@ -14,6 +14,10 @@ describe('dinero', () => {
   it('reads an Ingreso in pesos or in USD, converting one paid in pesos at the tipo de cambio', () => {
     expect([montoEn(enUsd, 'MXN'), montoEn(enUsd, 'USD')]).toEqual([1800, 100])
     expect([montoEn(enPesos, 'USD', 18), montoEn(enPesos, 'USD'), montoEn(enPesos, 'USD', null)]).toEqual([100, 0, 0])
+  })
+
+  it('converts between pesos and USD by one rule, rounding to the centavo', () => {
+    expect([convertir(333, 'USD', 'MXN', 18.5), convertir(6161, 'MXN', 'USD', 18.5), convertir(500, 'MXN', 'MXN', 18.5)]).toEqual([6161, 333, 500])
   })
 
   it('records an amount in MXN, converting one in USD at the tipo de cambio and keeping it as the original', () => {
