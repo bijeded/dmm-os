@@ -66,4 +66,22 @@ describe('cancelar', () => {
     cancelar(db, 'cotizacion', q.id)
     expect(db.select().from(proyectos).get()?.estado).toBe('cancelado')
   })
+
+  it('asks each lifecycle first: a completed Proyecto keeps its Cotización from cancelling', () => {
+    const c = contacto()
+    const q = cotizacionAceptada(c.id)
+    const p = proyecto(c.id, q.id)
+    db.update(proyectos).set({ estado: 'completado' }).run()
+    expect(() => cancelar(db, 'cotizacion', q.id)).toThrow(/en curso o pausado/)
+    expect(() => cancelar(db, 'proyecto', p.id)).toThrow(/en curso o pausado/)
+    expect(db.select().from(cotizaciones).get()?.estado).toBe('aceptada')
+    expect(db.select().from(proyectos).get()?.estado).toBe('completado')
+  })
+
+  it('refuses a draft Cotización with its own message', () => {
+    const c = contacto()
+    const q = cotizacionAceptada(c.id)
+    db.update(cotizaciones).set({ estado: 'borrador', folio: null }).run()
+    expect(() => cancelar(db, 'cotizacion', q.id)).toThrow(/enviada o aceptada/)
+  })
 })

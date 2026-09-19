@@ -7,7 +7,7 @@ import { contactos, cotizaciones, ingresos } from './db/schema'
 import { MENSAJE_SIN_PAGAR } from './ciclo-proyecto'
 import { crearHandlers, type HandlersOptions } from './handlers'
 import type { DmmHandlers } from '../shared/contrato'
-import { ESTADOS_PROYECTO, type AccionProyecto, type FichaProyecto } from '../shared/dominio'
+import { ESTADOS_PROYECTO, type AccionCosto, type AccionCotizacion, type AccionIngreso, type AccionProyecto, type FichaCotizacion, type FichaProyecto } from '../shared/dominio'
 
 const migrationsFolder = resolve(import.meta.dirname, '../../drizzle')
 
@@ -185,6 +185,44 @@ describe('cotizaciones', () => {
     await h.cotizaciones.enviar(id)
     expect((await h.cotizaciones.listar()).cotizaciones[0].estado).toBe('expirada')
   })
+
+  const borrador = async () => {
+    const { id: contactoId } = conexion.db.insert(contactos).values({ nombre: 'Estudio Ocho' }).returning().get()
+    return h.cotizaciones.guardar({
+      contactoId,
+      nombre: 'Landing',
+      categoria: 'website',
+      fecha: '2026-09-16',
+      validezDias: 30,
+      moneda: 'MXN',
+      partidas: [{ concepto: 'Landing', categoria: 'website', cantidad: 1, precio: 100 }],
+      conIva: false,
+      facturacion: 'unica',
+      parcialidades: null,
+      stack: null,
+      terminos: null,
+      notas: null,
+      costosEstimados: []
+    })
+  }
+  const llevarA = { borrador: [], enviada: ['enviar'], aceptada: ['enviar', 'aceptar'], rechazada: ['enviar', 'rechazar'], cancelada: ['enviar', 'cancelar'] } as const
+  const hacer = (a: AccionCotizacion, f: FichaCotizacion) =>
+    a === 'editar' ? h.cotizaciones.guardar({ ...f, notas: 'x' }) : a === 'borrar' ? h.cotizaciones.borrar(f.id) : h.cotizaciones[a](f.id)
+
+  it.each(Object.keys(llevarA) as (keyof typeof llevarA)[])('offers in the Ficha exactly the actions a %s Cotización accepts', async (estado) => {
+    for (const accion of ['editar', 'borrar', 'enviar', 'aceptar', 'rechazar', 'cancelar'] as const) {
+      let f = await borrador()
+      for (const paso of llevarA[estado]) f = await h.cotizaciones[paso](f.id)
+      const ofrecida = (await h.cotizaciones.ficha(f.id)).acciones.includes(accion)
+      const resultado = await Promise.resolve()
+        .then(() => hacer(accion, f))
+        .then(
+          () => true,
+          () => false
+        )
+      expect([accion, resultado]).toEqual([accion, ofrecida])
+    }
+  })
 })
 
 describe('proyectos', () => {
@@ -292,6 +330,70 @@ describe('finanzas', () => {
     await h.finanzas.configurarVencida(45)
     expect((await h.finanzas.resumen('mes')).diasVencida).toBe(45)
     expect(() => h.finanzas.configurarVencida(0)).toThrow(/mayor a cero/)
+  })
+
+  /** Runs `accion` on the row and checks it succeeds exactly when the row offered it. */
+  async function ofreceLoQueAcepta<A extends string>(acciones: readonly A[], preparar: () => Promise<{ id: number; acciones: A[] }>, hacer: (a: A, id: number) => unknown) {
+    for (const accion of acciones) {
+      const fila = await preparar()
+      const resultado = await Promise.resolve()
+        .then(() => hacer(accion, fila.id))
+        .then(
+          () => true,
+          () => false
+        )
+      expect([accion, resultado]).toEqual([accion, fila.acciones.includes(accion)])
+    }
+  }
+
+  const ingreso = async (pagado: boolean) => {
+    await h.finanzas.nuevoIngreso({ categoria: 'sin_factura', facturado: false, contactoId: null, proyectoId: null, fecha: '2026-09-16', subtotal: 1000, conIva: false, pagado, notas: null })
+    return (await h.finanzas.resumen('mes')).ingresos.reduce((a, b) => (a.id > b.id ? a : b))
+  }
+  const filaIngreso = async (id: number) => (await h.finanzas.resumen('mes')).ingresos.find((i) => i.id === id)!
+  const hacerIngreso = (a: AccionIngreso, id: number) =>
+    a === 'reembolsar' ? h.finanzas.reembolsar(id, 1) : h.finanzas[`${a}Ingreso` as const](id)
+  const accionesIngreso = ['pagar', 'cancelar', 'borrar', 'reembolsar'] as const
+
+  it.each([
+    ['pendiente', () => ingreso(false)],
+    ['pagado', () => ingreso(true)],
+    [
+      'reembolsado del todo',
+      async () => {
+        const { id } = await ingreso(true)
+        await h.finanzas.reembolsar(id, 1000)
+        return filaIngreso(id)
+      }
+    ]
+  ] as const)('offers on a %s Ingreso exactly the actions it accepts', async (_, preparar) => {
+    await ofreceLoQueAcepta(accionesIngreso, preparar, hacerIngreso)
+  })
+
+  let n = 0
+  const costo = async (categoria: 'unico' | 'mensual' | 'msi', pagado = false) => {
+    const nombre = `C${++n}`
+    await h.finanzas.nuevoCosto({ nombre, proveedor: null, referencia: null, categoria, proyectoId: null, fecha: '2026-09-01', subtotal: 1000, conIva: false, parcialidades: categoria === 'msi' ? 3 : null, suscripcionIa: false, pagado })
+    return (await h.finanzas.resumen('mes')).costos.find((c) => c.nombre === nombre)!
+  }
+  const accionesCosto = ['pagar', 'cancelar', 'borrar', 'detener'] as const
+  const hacerCosto = (a: AccionCosto, id: number) => h.finanzas[`${a}Costo` as const](id)
+
+  it.each([
+    ['pendiente', () => costo('unico')],
+    ['pagado', () => costo('unico', true)],
+    ['mensual', () => costo('mensual')],
+    ['MSI', () => costo('msi')],
+    [
+      'mensual detenido',
+      async () => {
+        const { id, nombre } = await costo('mensual')
+        await h.finanzas.detenerCosto(id)
+        return (await h.finanzas.resumen('mes')).costos.find((c) => c.nombre === nombre)!
+      }
+    ]
+  ] as const)('offers on a %s Costo exactly the actions it accepts', async (_, preparar) => {
+    await ofreceLoQueAcepta(accionesCosto, preparar, hacerCosto)
   })
 })
 

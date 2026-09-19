@@ -4,7 +4,8 @@ import { coberturaCostos } from './db/cobertura'
 import { fechaEnPeriodo, sumarAnios, sumarDias, sumarMeses } from '../shared/fechas'
 import { monedaDe } from './dinero'
 import { alDia } from './ledger'
-import { accionesCosto, accionesIngreso, origenCosto, origenIngreso, reembolsableIngreso, restante, type Costo, type Definicion, type Ingreso } from './movimientos'
+import { accionesCosto, origenCosto, type Costo, type Definicion } from './ciclo-costo'
+import { accionesIngreso, origenIngreso, reembolsableIngreso, restante, type Ingreso } from './ciclo-ingreso'
 import {
   asignacionesCosto,
   contactos,
@@ -209,7 +210,7 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     reembolsable: reembolsableIngreso(i) ? restante(i, reembolsosDe.get(i.id) ?? []).original : 0,
     reembolsoDeId: i.reembolsoDeId,
     notas: i.notas,
-    acciones: accionesIngreso(i, reembolsosDe.get(i.id))
+    acciones: accionesIngreso(i, { reembolsos: reembolsosDe.get(i.id) ?? [] })
   })
   const filaCosto = (c: Costo): FilaCosto => ({
     id: c.id,
@@ -224,7 +225,11 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     iva: c.iva,
     total: c.total,
     origen: origenCosto(c),
-    acciones: accionesCosto(c, c.definicionId === null ? undefined : definicion.get(c.definicionId), periodoActual, asignados.has(c.id))
+    acciones: accionesCosto(c, {
+      definicion: c.definicionId === null ? undefined : definicion.get(c.definicionId),
+      periodoActual,
+      asignado: asignados.has(c.id)
+    })
   })
 
   const porFecha = <T>(f: (x: T) => string | null) => (a: T, b: T) => (f(a) ?? '').localeCompare(f(b) ?? '')
