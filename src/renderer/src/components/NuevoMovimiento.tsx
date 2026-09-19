@@ -2,10 +2,10 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { CATEGORIAS_COSTO, NOMBRES_CATEGORIA_COSTO, type CategoriaCosto, type FilaContacto, type FilaProyecto } from '../../../shared/dominio'
 import { hoy } from '../../../shared/fechas'
-import { tituloCls } from './Contactos'
 import { Campo, campoCls } from './NuevaCotizacion'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
+import { tituloCls } from './estilos'
 
 /** Pesos typed by hand, e.g. `1,250.50`, as centavos; `NaN` when it isn't a number. */
 export const centavos = (pesos: string) => Math.round(Number(pesos.replace(/[,\s$]/g, '')) * 100)

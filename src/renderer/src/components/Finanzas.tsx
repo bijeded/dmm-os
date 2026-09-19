@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { NOMBRES_CATEGORIA_COSTO, NOMBRES_ESTADO_INGRESO, NOMBRES_PERIODO_FINANZAS, PERIODOS_FINANZAS, type FilaCosto, type FilaIngreso, type PeriodoFinanzas, type PuntoFinanzas, type ResumenFinanzas } from '../../../shared/dominio'
 import { dia, normalizar } from '../../../shared/formato'
-import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
+import { pesos } from './Contactos'
 import { centavos } from './NuevoMovimiento'
 import { Aviso, Cifra, inputCls, useAccion } from './Seccion'
 import { Button } from './ui/button'
+import { celdaCls, etiquetaCls, tituloCls } from './estilos'
 
 // Validated for the dark surface (dataviz validator): lightness band, CVD and contrast all pass.
 const COLOR_INGRESOS = '#c07f0a'

@@ -9,9 +9,10 @@ import {
   type ResumenFinanzas
 } from '../../../shared/dominio'
 import { dia, folioDmm } from '../../../shared/formato'
-import { celdaCls, etiquetaCls, pesos, tituloCls } from './Contactos'
+import { pesos } from './Contactos'
 import { Aviso, Cifra, useAccion } from './Seccion'
 import { Button } from './ui/button'
+import { celdaCls, etiquetaCls, tituloCls } from './estilos'
 
 const cardCls = 'card flex flex-col gap-4 rounded-control border border-border p-6'
 const accionCls = 'cursor-pointer font-mono text-[11px] text-primary-text disabled:opacity-50'

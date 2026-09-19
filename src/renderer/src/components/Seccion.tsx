@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { etiquetaCls } from './Contactos'
+import { etiquetaCls } from './estilos'
 
 /** The pieces every Configuración card is built from, so each section only says what it shows. */
 
