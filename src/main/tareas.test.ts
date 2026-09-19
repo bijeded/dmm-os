@@ -36,7 +36,7 @@ describe('Tareas', () => {
     completarTarea(db, a.id, '2026-08-19')
     completarTarea(db, b.id, '2026-08-18')
     const lista = listarTareas(db, '2026-09-18')
-    expect(lista.dias).toBe(30)
+    expect(lista.diasHechas).toBe(30)
     expect(lista.hechas.map((t) => t.texto)).toEqual(['Justo'])
   })
 

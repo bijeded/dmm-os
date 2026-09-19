@@ -18,7 +18,7 @@ export function listarTareas(db: Db, hoy: string): ListaTareas {
     hechas: todas
       .filter((t) => t.fechaHecha !== null && t.fechaHecha >= desde)
       .sort((a, b) => b.fechaHecha!.localeCompare(a.fechaHecha!) || b.id - a.id),
-    dias: DIAS_HECHAS
+    diasHechas: DIAS_HECHAS
   }
 }
 

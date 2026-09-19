@@ -649,8 +649,8 @@ export interface Tarea {
 export interface ListaTareas {
   /** Oldest first. */
   pendientes: Tarea[]
-  /** Done in the last `dias` days, newest first. */
+  /** Done in the last `diasHechas` days, newest first. */
   hechas: Tarea[]
   /** How many days a done Tarea stays in `hechas`. */
-  dias: number
+  diasHechas: number
 }
