@@ -8,8 +8,7 @@ import {
   type ListaTareas,
   type ResumenFinanzas
 } from '../../../shared/dominio'
-import { dia, folioDmm } from '../../../shared/formato'
-import { pesos } from './Contactos'
+import { dia, folioDmm, pesos } from '../../../shared/formato'
 import { Aviso, Cifra, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { celdaCls, etiquetaCls, tituloCls } from './estilos'
