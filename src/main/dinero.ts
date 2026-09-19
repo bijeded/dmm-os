@@ -18,3 +18,18 @@ export function montoEn(i: Montos, moneda: Moneda, tipoCambio?: number | null) {
   if (monedaDe(i) === 'USD') return i.montoOriginal ?? 0
   return tipoCambio ? Math.round(i.total / tipoCambio) : 0
 }
+
+/**
+ * An amount as recorded: always in MXN. One in USD (`tipoCambio` given) converts subtotal and IVA
+ * each at the rate and keeps its USD total as the original, which Cobros compares against.
+ */
+export function enMxn(subtotal: number, iva: number, tipoCambio: number | null) {
+  const mxn = (n: number) => (tipoCambio === null ? n : Math.round(n * tipoCambio))
+  return {
+    subtotal: mxn(subtotal),
+    iva: mxn(iva),
+    total: mxn(subtotal) + mxn(iva),
+    montoOriginal: tipoCambio === null ? null : subtotal + iva,
+    monedaOriginal: tipoCambio === null ? null : ('USD' as const)
+  }
+}

@@ -8,6 +8,7 @@ import { generarPeriodos } from './db/periodos'
 import { accionesCotizacion, exigirCotizacion, type ContextoCotizacion } from './ciclo-cotizacion'
 import { estadoCobro } from './cobranza'
 import { plantillaCotizacion } from './plantilla-cotizacion'
+import { planCobro } from './plan-cobro'
 import { crearCarpeta } from './proyectos'
 import { CATEGORIAS, CATEGORIAS_COSTO, FACTURACIONES, type Categoria, type CotizacionNueva, type EstadoCotizacion, type FichaCotizacion, type ListaCotizaciones, type PartidaCotizacion } from '../shared/dominio'
 import { folioDmm, totalesCotizacion } from '../shared/formato'
@@ -135,12 +136,6 @@ export async function enviarCotizacion(db: Db, root: string, id: number, imprimi
   return fichaCotizacion(db, id)
 }
 
-/** Splits `total` into `n` parts that add up to it, the remainder going to the first. */
-const repartir = (total: number, n: number) => {
-  const parte = Math.floor(total / n)
-  return Array.from({ length: n }, (_, i) => (i === 0 ? total - parte * (n - 1) : parte))
-}
-
 /** The last day a quote can be accepted: its date plus its validity. */
 export function venceEl(fecha: string, validezDias: number): string {
   return sumarDias(fecha, validezDias)
@@ -157,9 +152,8 @@ export function expirarCotizaciones(db: Db, hoy: string): void {
 
 /**
  * Accepting a sent quote creates its Proyecto, the pending Ingresos (por facturar, dates blank
- * until invoiced) or the monthly definition, and the estimated Costos: one-time ones as a Costo,
- * recurring ones as a definition that generates its periods. Money is always recorded in MXN;
- * a USD quote is converted at `tipoCambio` and keeps its USD amount as the original.
+ * until invoiced) or the monthly definition, and the estimated Costos, as its Plan de cobro
+ * (`planCobro`) lays them out; a USD quote needs `tipoCambio`.
  * Expiry is brought up to date first, so a quote past its validity is refused. The first
  * Periodos are generated in the same transaction; the Proyecto folder is created once it commits.
  */
@@ -167,21 +161,11 @@ export function aceptarCotizacion(db: Db, root: string, id: number, hoy: string,
   expirarCotizaciones(db, hoy)
   const c = leer(db, id)
   exigirCotizacion('aceptar', c.estado, contexto(db, id))
-  const usd = c.moneda === 'USD'
-  if (usd && !(tipoCambio !== undefined && tipoCambio > 0)) throw new Error('Indica el tipo de cambio de la cotización en USD')
-  const mxn = (n: number) => (usd ? Math.round(n * tipoCambio!) : n)
-  /** Subtotal and IVA converted to MXN, their total, and the original amount when it was USD. */
-  const montos = (subtotal: number, iva: number) => ({
-    subtotal: mxn(subtotal),
-    iva: mxn(iva),
-    total: mxn(subtotal) + mxn(iva),
-    montoOriginal: usd ? subtotal + iva : null,
-    monedaOriginal: usd ? ('USD' as const) : null
-  })
-  const periodo = hoy.slice(0, 7)
+  const plan = planCobro(c, hoy, tipoCambio)
+  const { periodo } = plan
 
   db.transaction((tx) => {
-    tx.update(cotizaciones).set({ estado: 'aceptada', tipoCambio: usd ? tipoCambio : null }).where(eq(cotizaciones.id, id)).run()
+    tx.update(cotizaciones).set({ estado: 'aceptada', tipoCambio: plan.tipoCambio }).where(eq(cotizaciones.id, id)).run()
     const proyectoId = tx
       .insert(proyectos)
       .values({ nombre: c.nombre ?? `Cotización ${folioDe(c)}`, contactoId: c.contactoId, cotizacionId: id, categoria: c.categoria, fechaInicio: hoy })
@@ -189,51 +173,24 @@ export function aceptarCotizacion(db: Db, root: string, id: number, hoy: string,
       .get().id
     const vinculos = { proyectoId, cotizacionId: id, contactoId: c.contactoId }
 
-    if (c.facturacion === 'mensual') {
+    if (plan.definicionIngreso) {
       tx.insert(definicionesIngreso)
-        .values({ ...vinculos, ...montos(c.subtotal, c.iva), tipo: 'mensual', categoria: 'factura', periodoInicio: periodo })
+        .values({ ...vinculos, ...plan.definicionIngreso, tipo: 'mensual', categoria: 'factura', periodoInicio: periodo })
         .run()
-    } else {
-      const n = c.facturacion === 'parcialidades' ? (c.parcialidades ?? 1) : 1
-      const subtotales = repartir(c.subtotal, n)
-      const ivas = repartir(c.iva, n)
-      subtotales.forEach((subtotal, i) =>
-        tx
-          .insert(ingresos)
-          .values({
-            ...vinculos,
-            categoria: 'factura',
-            estadoFacturacion: 'por_facturar',
-            ...montos(subtotal, ivas[i]),
-            notas: n > 1 ? `Parcialidad ${i + 1} de ${n}` : null
-          })
-          .run()
-      )
     }
-
-    for (const e of c.costosEstimados) {
-      // Quotes saved before costs had a type were all one-time.
-      const categoria = e.categoria ?? 'unico'
-      if (categoria === 'unico') {
-        tx.insert(costos)
-          .values({ ...montos(e.monto, 0), nombre: e.concepto, categoria, estimado: true, fecha: hoy, proyectoId, cotizacionId: id })
-          .run()
-        continue
-      }
+    for (const i of plan.ingresos) {
+      tx.insert(ingresos).values({ ...vinculos, ...i, categoria: 'factura', estadoFacturacion: 'por_facturar' }).run()
+    }
+    for (const costo of plan.costos) {
+      tx.insert(costos).values({ ...costo, categoria: 'unico', estimado: true, proyectoId, cotizacionId: id }).run()
+    }
+    for (const { precio, ...d } of plan.definicionesCosto) {
       const definicionCostoId = tx
         .insert(definicionesCosto)
-        .values({
-          nombre: e.concepto,
-          tipo: categoria,
-          proyectoId,
-          cotizacionId: id,
-          diaDelMes: Number(hoy.slice(8, 10)),
-          periodoInicio: periodo,
-          numeroParcialidades: categoria === 'msi' ? e.parcialidades : null
-        })
+        .values({ ...d, proyectoId, cotizacionId: id, periodoInicio: periodo })
         .returning({ id: definicionesCosto.id })
         .get().id
-      tx.insert(vigenciasPrecio).values({ ...montos(e.monto, 0), definicionCostoId, desde: periodo }).run()
+      tx.insert(vigenciasPrecio).values({ ...precio, definicionCostoId, desde: periodo }).run()
     }
     generarPeriodos(tx, periodo)
   })
