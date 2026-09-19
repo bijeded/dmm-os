@@ -1,17 +1,16 @@
 import { useState, type ReactNode } from 'react'
 import { etiquetaCls } from './estilos'
 
-/** The pieces every Configuración card is built from, so each section only says what it shows. */
+/**
+ * The pieces screens are built from: Configuración cards (Seccion, Datos, Fila, Aviso), the stat
+ * card (Cifra), and running an action (useAccion), so each screen only says what it shows.
+ */
 
 export const fecha = (iso: string) => new Date(iso).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
 
 // Electron wraps main-process errors as "Error invoking remote method '…': Error: <message>".
 export const mensaje = (e: unknown) =>
   String(e instanceof Error ? e.message : e).replace(/^Error invoking remote method '[^']*': (?:Error: )?/, '')
-
-export const inputCls = 'h-9 w-24 rounded-control border border-border-strong bg-surface-sunken px-2 font-mono text-[12px] text-on-surface'
-
-export const monoCls = 'font-mono text-[12px] break-all'
 
 /**
  * Running one action of a section: nothing else runs while it does, and whatever main answers

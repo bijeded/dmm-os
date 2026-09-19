@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ContactoNuevo } from '../../../shared/dominio'
-import { Campo, campoCls } from './NuevaCotizacion'
+import { Campo } from './NuevaCotizacion'
+import { campoCls } from './estilos'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
 

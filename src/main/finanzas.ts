@@ -237,16 +237,31 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     ...siguientesPeriodos(db, defs, periodoActual, hoy, horizonte)
   ].sort(porFecha((p) => p.fecha))
 
+  const actual = cifras(todosIngresos, todosCostos, rango, sinDatos)
+  const cobrado = todosIngresos.filter((i) => i.estado === 'pagado' && dentro(i.fechaPago, rango)).sort(porFecha(fechaIngreso)).reverse().map(filaIngreso)
+  const cobranza = todosIngresos.filter((i) => i.estado === 'pendiente').sort(porFecha(fechaIngreso)).map(filaIngreso)
+  // Reembolsos are negative, so this is what actually stayed in the bank.
+  const real = cobrado.reduce((s, i) => s + i.subtotal, 0)
+  const hastaEsteMes = cobranza.filter((i) => i.fecha !== null && i.fecha.slice(0, 7) <= periodoActual)
+  const porFacturar = (i: FilaIngreso) => i.estadoFacturacion === 'por_facturar'
+
   return {
     periodo,
     rango,
     rangoAnterior,
-    actual: cifras(todosIngresos, todosCostos, rango, sinDatos),
+    actual,
     anterior: rangoAnterior ? cifras(todosIngresos, todosCostos, rangoAnterior, sinDatos) : null,
     serie: serie(periodo, todosIngresos, todosCostos, rango, rangoAnterior),
     sinDatos: [...new Set([...aniosSinDatos(rangoAnterior), ...aniosSinDatos(rango)])].sort(),
-    cobrado: todosIngresos.filter((i) => i.estado === 'pagado' && dentro(i.fechaPago, rango)).sort(porFecha(fechaIngreso)).reverse().map(filaIngreso),
-    cobranza: todosIngresos.filter((i) => i.estado === 'pendiente').sort(porFecha(fechaIngreso)).map(filaIngreso),
+    cobrado,
+    cobranza,
+    real,
+    utilidadReal: actual.utilidad === null ? null : real - actual.costos,
+    cobros: {
+      mes: hastaEsteMes.filter((i) => !i.vencida && !porFacturar(i)),
+      vencidos: hastaEsteMes.filter((i) => i.vencida),
+      porFacturar: hastaEsteMes.filter(porFacturar)
+    },
     costosPendientes: pendientesCosto.map(filaCosto),
     ingresos: todosIngresos.filter((i) => i.estado !== 'cancelado' && dentro(fechaIngreso(i), rango)).sort(porFecha(fechaIngreso)).reverse().map(filaIngreso),
     costos: todosCostos.filter((c) => cuentaCosto(c) && dentro(c.fecha, rango)).sort(porFecha((c) => c.fecha)).reverse().map(filaCosto),

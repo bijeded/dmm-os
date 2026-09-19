@@ -117,10 +117,10 @@ function handlers() {
       detenerCosto: vi.fn()
     },
     tareas: {
-      listar: vi.fn(() => ({ pendientes: [], hechas: [] })),
-      agregar: vi.fn(() => ({ pendientes: [], hechas: [] })),
-      completar: vi.fn(() => ({ pendientes: [], hechas: [] })),
-      borrar: vi.fn(() => ({ pendientes: [], hechas: [] }))
+      listar: vi.fn(() => ({ pendientes: [], hechas: [], dias: 30 })),
+      agregar: vi.fn(() => ({ pendientes: [], hechas: [], dias: 30 })),
+      completar: vi.fn(() => ({ pendientes: [], hechas: [], dias: 30 })),
+      borrar: vi.fn(() => ({ pendientes: [], hechas: [], dias: 30 }))
     }
   } satisfies DmmHandlers
 }

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { CATEGORIAS, NOMBRES_CATEGORIA, type Categoria, type ConceptoCatalogo } from '../../../shared/dominio'
 import { pesos } from '../../../shared/formato'
-import { Aviso, Seccion, inputCls, mensaje, useAccion } from './Seccion'
+import { Aviso, Seccion, mensaje, useAccion } from './Seccion'
+import { inputCls } from './estilos'
 import { Button } from './ui/button'
 
 interface Borrador {

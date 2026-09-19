@@ -31,6 +31,15 @@ describe('Tareas', () => {
     ])
   })
 
+  it('reports its window, and keeps a task done exactly that many days ago', () => {
+    const [a, b] = ['Justo', 'Fuera'].map((t) => agregarTarea(db, t, '2026-08-01').pendientes.at(-1)!)
+    completarTarea(db, a.id, '2026-08-19')
+    completarTarea(db, b.id, '2026-08-18')
+    const lista = listarTareas(db, '2026-09-18')
+    expect(lista.dias).toBe(30)
+    expect(lista.hechas.map((t) => t.texto)).toEqual(['Justo'])
+  })
+
   it('completing twice keeps the first done date', () => {
     const [t] = agregarTarea(db, 'Una', '2026-09-01').pendientes
     completarTarea(db, t.id, '2026-09-02')
@@ -39,7 +48,7 @@ describe('Tareas', () => {
 
   it('deletes a task', () => {
     const [t] = agregarTarea(db, 'Una', '2026-09-01').pendientes
-    expect(borrarTarea(db, t.id, '2026-09-01')).toEqual({ pendientes: [], hechas: [] })
+    expect(borrarTarea(db, t.id, '2026-09-01')).toMatchObject({ pendientes: [], hechas: [] })
   })
 
   it('cannot complete a task that does not exist', () => {

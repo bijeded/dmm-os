@@ -310,3 +310,43 @@ describe('nuevo', () => {
     expect(() => nuevoCosto(db, costo({ categoria: 'msi', parcialidades: null }), hoy)).toThrow(/parcialidades/)
   })
 })
+
+describe('Inicio figures', () => {
+  const pendiente = (cambios: Partial<IngresoNuevo>) => {
+    nuevoIngreso(db, ingreso({ pagado: false, ...cambios }), hoy)
+    return db.select().from(ingresos).all().at(-1)!
+  }
+
+  it('reads Ingreso real from what was paid, Reembolsos netted in, and Utilidad real as real − costos', () => {
+    nuevoIngreso(db, ingreso({ fecha: '2026-09-02', subtotal: 10000 }), hoy)
+    pendiente({ fecha: '2026-09-03', subtotal: 4000 })
+    const [pagado] = db.select().from(ingresos).all()
+    reembolsar(db, pagado.id, 3000, hoy)
+    nuevoCosto(db, costo({ subtotal: 2000 }), hoy)
+    const r = resumenFinanzas(db, 'mes', hoy, 30)
+    expect(r.actual.ingresos).toBe(11000)
+    expect(r.real).toBe(7000)
+    expect(r.utilidadReal).toBe(5000)
+  })
+
+  it('shows Sin datos for Utilidad real when the year has no Costos', () => {
+    nuevoIngreso(db, ingreso(), hoy)
+    const r = resumenFinanzas(db, 'mes', hoy, 30)
+    expect(r.real).toBe(10000)
+    expect(r.utilidadReal).toBeNull()
+  })
+
+  it('puts each pending Ingreso up to this month into exactly one Cobros tab', () => {
+    const anterior = pendiente({ fecha: '2026-01-10' })
+    const vencida = facturaPendiente('2026-08-01')
+    const reciente = facturaPendiente('2026-08-25')
+    const porFacturar = pendiente({ categoria: 'factura', facturado: false, fecha: '2026-09-04' })
+    pendiente({ fecha: '2026-10-05' })
+    pendiente({ categoria: 'factura', facturado: false, fecha: '2026-10-06' })
+    const ids = (fs: { id: number }[]) => fs.map((f) => f.id)
+    const { cobros } = resumenFinanzas(db, 'mes', hoy, 30)
+    expect(ids(cobros.mes)).toEqual([anterior.id, reciente.id])
+    expect(ids(cobros.vencidos)).toEqual([vencida.id])
+    expect(ids(cobros.porFacturar)).toEqual([porFacturar.id])
+  })
+})

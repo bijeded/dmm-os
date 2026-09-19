@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { EstadoRespaldos, MotivoRespaldo } from '../../../shared/dominio'
-import { Aviso, Datos, Fila, Seccion, fecha, inputCls, mensaje, monoCls, useAccion } from './Seccion'
+import { Aviso, Datos, Fila, Seccion, fecha, mensaje, useAccion } from './Seccion'
+import { inputCls, monoCls } from './estilos'
 import { Button } from './ui/button'
 
 const motivos: Record<MotivoRespaldo, string> = {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Rutas } from '../../../shared/dominio'
-import { Aviso, Datos, Fila, Seccion, mensaje, monoCls, useAccion } from './Seccion'
+import { Aviso, Datos, Fila, Seccion, mensaje, useAccion } from './Seccion'
+import { monoCls } from './estilos'
 import { Button } from './ui/button'
 
 /**

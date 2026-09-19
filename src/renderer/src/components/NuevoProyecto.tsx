@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { CATEGORIAS, NOMBRES_CATEGORIA, type Categoria, type FilaContacto, type ProyectoNuevo } from '../../../shared/dominio'
-import { Campo, campoCls } from './NuevaCotizacion'
+import { Campo } from './NuevaCotizacion'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
-import { tituloCls } from './estilos'
+import { campoCls, tituloCls } from './estilos'
 
 const vacio = (): ProyectoNuevo => ({
   nombre: '',
