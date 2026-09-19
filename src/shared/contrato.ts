@@ -16,6 +16,7 @@ import type {
   ListaContactos,
   ListaCotizaciones,
   ListaProyectos,
+  ListaTareas,
   LogCarpetas,
   LogImportacion,
   PeriodoFinanzas,
@@ -154,6 +155,13 @@ export const contrato = {
     borrarCosto: canal<[id: number], void>(),
     /** Stops the monthly or annual series the Costo belongs to after this month. */
     detenerCosto: canal<[id: number], void>()
+  },
+  tareas: {
+    /** Pending ones, and those done in the last 30 days. */
+    listar: canal<[], ListaTareas>(),
+    agregar: canal<[texto: string], ListaTareas>(),
+    completar: canal<[id: number], ListaTareas>(),
+    borrar: canal<[id: number], ListaTareas>()
   }
 }
 

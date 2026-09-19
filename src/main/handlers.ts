@@ -41,6 +41,7 @@ import {
   pausarProyecto,
   reanudarProyecto
 } from './proyectos'
+import { agregarTarea, borrarTarea, completarTarea, listarTareas } from './tareas'
 import { escanearCarpetas, importarFacturas, marcarHddNoDisponible } from './importacion'
 import { leerRutas } from './rutas'
 import { pendientes, responder } from './sugerencias'
@@ -200,6 +201,12 @@ export function crearHandlers({
       cancelarCosto: (id) => cancelarCosto(conexion.db, id, hoy()),
       borrarCosto: (id) => borrarCosto(conexion.db, id, hoy()),
       detenerCosto: (id) => detenerCosto(conexion.db, id, hoy())
+    },
+    tareas: {
+      listar: () => listarTareas(conexion.db, hoy()),
+      agregar: (texto) => agregarTarea(conexion.db, texto, hoy()),
+      completar: (id) => completarTarea(conexion.db, id, hoy()),
+      borrar: (id) => borrarTarea(conexion.db, id, hoy())
     }
   }
 }

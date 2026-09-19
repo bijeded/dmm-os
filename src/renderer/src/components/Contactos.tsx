@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 import { ESTADOS_CONTACTO, NOMBRES_ESTADO_CONTACTO, type EstadoContacto, type ListaContactos } from '../../../shared/dominio'
 import { monto, normalizar } from '../../../shared/formato'
 import { FormContacto } from './FormContacto'
@@ -30,7 +30,8 @@ export function Contactos() {
   const [busqueda, setBusqueda] = useState('')
   const [estado, setEstado] = useState<EstadoContacto | ''>('')
   const [pagina, setPagina] = useState(0)
-  const [nuevo, setNuevo] = useState(false)
+  // Inicio's Nuevo contacto lands here with the form open.
+  const [nuevo, setNuevo] = useState(useSearchParams()[0].has('nuevo'))
   const { error, ocupado, correr } = useAccion()
 
   useEffect(() => {

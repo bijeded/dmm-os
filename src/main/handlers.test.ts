@@ -127,6 +127,15 @@ describe('Catálogo', () => {
   })
 })
 
+describe('Tareas', () => {
+  it('dates a task and its completion with today', async () => {
+    const { pendientes } = await h.tareas.agregar('Llamar a Hotel Aura')
+    expect(pendientes).toMatchObject([{ texto: 'Llamar a Hotel Aura', fechaRegistro: '2026-09-16', fechaHecha: null }])
+    expect((await h.tareas.completar(pendientes[0].id)).hechas).toMatchObject([{ fechaHecha: '2026-09-16' }])
+    expect(await h.tareas.borrar(pendientes[0].id)).toEqual(await h.tareas.listar())
+  })
+})
+
 describe('cotizaciones', () => {
   it('sends a quote into the DMM OS root, accepts it on the local day, and opens its PDF', async () => {
     const { id: contactoId } = conexion.db.insert(contactos).values({ nombre: 'Clínica Sol' }).returning().get()
