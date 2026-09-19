@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { costos, definicionesCosto, ingresos } from './db/schema'
+import { costos, cotizaciones, definicionesCosto, ingresos } from './db/schema'
 import { contacto, db, reiniciarDb } from './db/test-db'
 import { rangos, resumenFinanzas } from './finanzas'
 import { borrarCosto, borrarIngreso, cancelarIngreso, detenerCosto, nuevoCosto, nuevoIngreso, pagarIngreso, reembolsar } from './movimientos'
@@ -86,6 +86,20 @@ describe('resumen', () => {
     const r = resumenFinanzas(db, 'anio', hoy, 30)
     expect(r.actual).toEqual({ ingresos: 15000, ingresosFactura: 5000, ingresosSinFactura: 10000, ivaIngresos: 800, costos: 2000, ivaCostos: 320, utilidad: 13000 })
     expect(r.anterior).toMatchObject({ ingresos: 4000, costos: 1000, utilidad: 3000 })
+  })
+
+  it('reads the same figures once a Cotización expires', () => {
+    const c = db
+      .insert(cotizaciones)
+      .values({ contactoId, folio: 1, categoria: 'website', estado: 'enviada', fecha: '2026-08-01', validezDias: 15 })
+      .returning()
+      .get()
+    db.insert(ingresos).values({ categoria: 'sin_factura', subtotal: 3000, iva: 0, total: 3000, contactoId, cotizacionId: c.id, fechaRegistro: '2026-09-01' }).run()
+    nuevoIngreso(db, ingreso({ subtotal: 10000 }), hoy)
+
+    const r = resumenFinanzas(db, 'anio', hoy, 30)
+    expect(db.select().from(cotizaciones).where(eq(cotizaciones.id, c.id)).get()!.estado).toBe('expirada')
+    expect(r.actual).toMatchObject({ ingresos: 13000, ingresosSinFactura: 13000 })
   })
 
   it('shows Sin datos for profit when a year of the span has no Costos', () => {
