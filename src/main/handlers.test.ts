@@ -3,9 +3,11 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDatabase, type Conexion } from './db'
-import { contactos } from './db/schema'
+import { contactos, ingresos } from './db/schema'
+import { MENSAJE_SIN_PAGAR } from './ciclo-proyecto'
 import { crearHandlers, type HandlersOptions } from './handlers'
 import type { DmmHandlers } from '../shared/contrato'
+import { ESTADOS_PROYECTO, type AccionProyecto, type FichaProyecto } from '../shared/dominio'
 
 const migrationsFolder = resolve(import.meta.dirname, '../../drizzle')
 
@@ -202,6 +204,35 @@ describe('proyectos', () => {
     expect(opciones.abrirCarpeta).toHaveBeenCalledWith(join(root, 'Proyectos/Portafolio'))
     expect((await h.proyectos.completar(f.id)).estado).toBe('completado')
     expect((await h.proyectos.listar()).conteo.completado).toBe(1)
+  })
+
+  let n = 0
+  const personal = () =>
+    h.proyectos.guardar({ nombre: `P${++n}`, etiqueta: 'personal', contactoId: null, clienteFinal: null, categoria: 'website', fechaInicio: '', fechaEntrega: null, notas: null })
+  const llevarA = { en_curso: [], pausado: ['pausar'], completado: ['completar'], cancelado: ['cancelar'] } as const
+  const hacer = async (a: AccionProyecto, f: FichaProyecto) => (a === 'editar' ? h.proyectos.guardar({ ...f, notas: 'x' }) : h.proyectos[a](f.id))
+
+  it.each(ESTADOS_PROYECTO)('offers in the Ficha exactly the actions a %s Proyecto accepts', async (estado) => {
+    for (const accion of ['editar', 'borrar', 'pausar', 'reanudar', 'completar', 'cancelar'] as const) {
+      let f = await personal()
+      for (const paso of llevarA[estado]) f = await h.proyectos[paso](f.id)
+      const ofrecida = (await h.proyectos.ficha(f.id)).acciones.includes(accion)
+      const resultado = await hacer(accion, f).then(
+        () => true,
+        () => false
+      )
+      expect([accion, resultado]).toEqual([accion, ofrecida])
+    }
+  })
+
+  it.each(['en_curso', 'pausado'] as const)('hides and refuses Completar on an unpaid %s Proyecto, and says what is unpaid', async (estado) => {
+    let f = await personal()
+    conexion.db.insert(ingresos).values({ fechaRegistro: '2026-09-16', subtotal: 1000, total: 1000, categoria: 'sin_factura', proyectoId: f.id, estado: 'pendiente' }).run()
+    for (const paso of llevarA[estado]) f = await h.proyectos[paso](f.id)
+    f = await h.proyectos.ficha(f.id)
+    expect(f.acciones).not.toContain('completar')
+    expect(f.falta).toEqual({ pendientes: 1, faltante: 0, moneda: 'MXN' })
+    await expect(async () => h.proyectos.completar(f.id)).rejects.toThrow(MENSAJE_SIN_PAGAR)
   })
 })
 

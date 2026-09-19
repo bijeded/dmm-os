@@ -7,20 +7,14 @@ import { cancelar, RegistroVinculadoError } from './db/cancelacion'
 import { contactos, cotizaciones, proyectos, ubicacionesArchivo } from './db/schema'
 import { folioDe } from './cotizar'
 import { rutaDeProyecto } from './paths'
+import { accionesProyecto, completarEsperaPago, exigirProyecto } from './ciclo-proyecto'
 import { CATEGORIAS, ESTADOS_PROYECTO, type AccionProyecto, type CarpetaProyecto, type Categoria, type EstadoProyecto, type FichaProyecto, type ListaProyectos, type ProyectoNuevo } from '../shared/dominio'
 
-/** Which estados allow each action. The guards below and the ficha's `acciones` both read this. */
-const PERMITIDA_EN: Record<AccionProyecto, readonly EstadoProyecto[]> = {
-  editar: ['en_curso', 'pausado', 'completado'],
-  borrar: ['en_curso', 'pausado'],
-  pausar: ['en_curso'],
-  reanudar: ['pausado'],
-  completar: ['en_curso', 'pausado'],
-  cancelar: ['en_curso', 'pausado']
-}
-
-function exigir(accion: AccionProyecto, estado: EstadoProyecto, mensaje: string) {
-  if (!PERMITIDA_EN[accion].includes(estado)) throw new Error(mensaje)
+/** Reads the Proyecto and refuses the action unless its lifecycle allows it. */
+function leerPara(db: Db, accion: AccionProyecto, id: number) {
+  const p = leer(db, id)
+  exigirProyecto(accion, p.estado, estadoCobro(db, id))
+  return p
 }
 
 export const referenciaProyecto = (id: number) => `PRY-${String(id).padStart(3, '0')}`
@@ -83,10 +77,8 @@ export function fichaProyecto(db: Db, root: string, id: number): FichaProyecto {
   const p = leer(db, id)
   const contacto = p.contactoId === null ? undefined : db.select({ nombre: contactos.nombre }).from(contactos).where(eq(contactos.id, p.contactoId)).get()
   const cotizacion = p.cotizacionId === null ? undefined : db.select().from(cotizaciones).where(eq(cotizaciones.id, p.cotizacionId)).get()
-  const { porCobrar, cobrado, pagadoCompleto, falta } = estadoCobro(db, p.id)
-  const acciones = (Object.keys(PERMITIDA_EN) as AccionProyecto[]).filter(
-    (a) => PERMITIDA_EN[a].includes(p.estado) && !(a === 'completar' && !pagadoCompleto)
-  )
+  const cobro = estadoCobro(db, p.id)
+  const { porCobrar, cobrado, falta } = cobro
   return {
     id: p.id,
     referencia: referenciaProyecto(p.id),
@@ -106,8 +98,8 @@ export function fichaProyecto(db: Db, root: string, id: number): FichaProyecto {
     carpeta: carpeta(db, root, id),
     porCobrar,
     cobrado,
-    falta: PERMITIDA_EN.completar.includes(p.estado) ? falta : null,
-    acciones
+    falta: completarEsperaPago(p.estado, cobro) ? falta : null,
+    acciones: accionesProyecto(p.estado, cobro)
   }
 }
 
@@ -173,8 +165,7 @@ export function guardarProyecto(db: Db, root: string, p: ProyectoNuevo, hoy: str
     crearCarpeta(db, root, id, hoy)
     return fichaProyecto(db, root, id)
   }
-  const actual = leer(db, p.id)
-  exigir('editar', actual.estado, 'Un proyecto cancelado no se edita')
+  const actual = leerPara(db, 'editar', p.id)
   if (actual.cotizacionId !== null) {
     if (personal) throw new Error('Un proyecto de una cotización no puede ser personal')
     valores.contactoId = actual.contactoId
@@ -189,26 +180,25 @@ function cambiarEstado(db: Db, root: string, id: number, estado: EstadoProyecto)
 }
 
 export function pausarProyecto(db: Db, root: string, id: number): FichaProyecto {
-  exigir('pausar', leer(db, id).estado, 'Solo un proyecto en curso se puede pausar')
+  leerPara(db, 'pausar', id)
   return cambiarEstado(db, root, id, 'pausado')
 }
 
 export function reanudarProyecto(db: Db, root: string, id: number): FichaProyecto {
-  exigir('reanudar', leer(db, id).estado, 'Solo un proyecto pausado se puede reanudar')
+  leerPara(db, 'reanudar', id)
   return cambiarEstado(db, root, id, 'en_curso')
 }
 
 /** A Proyecto is only completed once fully paid; delivered but unpaid it stays En curso. */
 export function completarProyecto(db: Db, root: string, id: number, hoy: string): FichaProyecto {
-  exigir('completar', leer(db, id).estado, 'Solo un proyecto en curso o pausado se puede completar')
-  if (!estadoCobro(db, id).pagadoCompleto) throw new Error('El proyecto se completa hasta que esté pagado por completo')
+  leerPara(db, 'completar', id)
   db.update(proyectos).set({ estado: 'completado', fechaFin: hoy }).where(eq(proyectos.id, id)).run()
   return fichaProyecto(db, root, id)
 }
 
 /** Cancels the Proyecto and the Cotización it came from (Cancelación con pagos). */
 export function cancelarProyecto(db: Db, root: string, id: number, hoy: string): FichaProyecto {
-  exigir('cancelar', leer(db, id).estado, 'Solo un proyecto en curso o pausado se puede cancelar')
+  leerPara(db, 'cancelar', id)
   cancelar(db, 'proyecto', id)
   db.update(proyectos).set({ fechaFin: hoy }).where(eq(proyectos.id, id)).run()
   return fichaProyecto(db, root, id)
@@ -219,7 +209,7 @@ export function cancelarProyecto(db: Db, root: string, id: number, hoy: string):
  * its folder stays on disk. Anything linked refuses it, and nothing is removed.
  */
 export function borrarProyecto(db: Db, id: number): void {
-  exigir('borrar', leer(db, id).estado, 'Este proyecto no se puede borrar')
+  leerPara(db, 'borrar', id)
   try {
     db.transaction((tx) => {
       tx.delete(ubicacionesArchivo).where(eq(ubicacionesArchivo.proyectoId, id)).run()
