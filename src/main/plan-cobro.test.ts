@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { planCobro, type CotizacionAPlanear } from './plan-cobro'
+import { MENSAJE_SIN_TIPO_CAMBIO, planCobro, type CotizacionAPlanear } from './plan-cobro'
 
 const hoy = '2026-09-18'
 const cot = (cambios: Partial<CotizacionAPlanear> = {}): CotizacionAPlanear => ({
@@ -12,11 +12,12 @@ const cot = (cambios: Partial<CotizacionAPlanear> = {}): CotizacionAPlanear => (
   ...cambios
 })
 const sinUsd = { montoOriginal: null, monedaOriginal: null }
+const porFacturar = { categoria: 'factura', estadoFacturacion: 'por_facturar' }
 
 describe('planCobro', () => {
   it('a one-off quote becomes one Ingreso for its whole amount', () => {
     const plan = planCobro(cot(), hoy)
-    expect(plan.ingresos).toEqual([{ subtotal: 10_000, iva: 1600, total: 11_600, ...sinUsd, notas: null }])
+    expect(plan.ingresos).toEqual([{ subtotal: 10_000, iva: 1600, total: 11_600, ...sinUsd, ...porFacturar, notas: null }])
     expect(plan.definicionIngreso).toBeNull()
     expect(plan.tipoCambio).toBeNull()
   })
@@ -34,7 +35,7 @@ describe('planCobro', () => {
   it('a monthly quote becomes a monthly definition starting this month', () => {
     const plan = planCobro(cot({ facturacion: 'mensual' }), hoy)
     expect(plan.ingresos).toEqual([])
-    expect(plan.definicionIngreso).toEqual({ subtotal: 10_000, iva: 1600, total: 11_600, ...sinUsd })
+    expect(plan.definicionIngreso).toEqual({ subtotal: 10_000, iva: 1600, total: 11_600, ...sinUsd, tipo: 'mensual', categoria: 'factura', periodoInicio: '2026-09' })
     expect(plan.periodo).toBe('2026-09')
   })
 
@@ -49,10 +50,16 @@ describe('planCobro', () => {
       }),
       hoy
     )
-    expect(plan.costos).toEqual([{ nombre: 'Hosting', fecha: hoy, subtotal: 500, iva: 0, total: 500, ...sinUsd }])
+    expect(plan.costos).toEqual([{ nombre: 'Hosting', categoria: 'unico', estimado: true, fecha: hoy, subtotal: 500, iva: 0, total: 500, ...sinUsd }])
     expect(plan.definicionesCosto).toEqual([
-      { nombre: 'Dominio', tipo: 'anual', diaDelMes: 18, numeroParcialidades: null, precio: { subtotal: 300, iva: 0, total: 300, ...sinUsd } },
-      { nombre: 'Laptop', tipo: 'msi', diaDelMes: 18, numeroParcialidades: 12, precio: { subtotal: 2000, iva: 0, total: 2000, ...sinUsd } }
+      {
+        definicion: { nombre: 'Dominio', tipo: 'anual', diaDelMes: 18, periodoInicio: '2026-09', numeroParcialidades: null },
+        precio: { subtotal: 300, iva: 0, total: 300, ...sinUsd, desde: '2026-09' }
+      },
+      {
+        definicion: { nombre: 'Laptop', tipo: 'msi', diaDelMes: 18, periodoInicio: '2026-09', numeroParcialidades: 12 },
+        precio: { subtotal: 2000, iva: 0, total: 2000, ...sinUsd, desde: '2026-09' }
+      }
     ])
   })
 
@@ -65,13 +72,13 @@ describe('planCobro', () => {
     const plan = planCobro(cot({ moneda: 'USD', facturacion: 'parcialidades', parcialidades: 2, subtotal: 333, iva: 53 }), hoy, 18.5)
     expect(plan.tipoCambio).toBe(18.5)
     expect(plan.ingresos).toEqual([
-      { subtotal: 3090, iva: 500, total: 3590, montoOriginal: 194, monedaOriginal: 'USD', notas: 'Parcialidad 1 de 2' },
-      { subtotal: 3071, iva: 481, total: 3552, montoOriginal: 192, monedaOriginal: 'USD', notas: 'Parcialidad 2 de 2' }
+      { subtotal: 3090, iva: 500, total: 3590, montoOriginal: 194, monedaOriginal: 'USD', ...porFacturar, notas: 'Parcialidad 1 de 2' },
+      { subtotal: 3071, iva: 481, total: 3552, montoOriginal: 192, monedaOriginal: 'USD', ...porFacturar, notas: 'Parcialidad 2 de 2' }
     ])
     expect(plan.ingresos.reduce((s, i) => s + i.montoOriginal!, 0)).toBe(386)
   })
 
   it.each([undefined, 0, -1])('refuses a USD quote with tipo de cambio %s', (tc) => {
-    expect(() => planCobro(cot({ moneda: 'USD' }), hoy, tc)).toThrow('Indica el tipo de cambio de la cotización en USD')
+    expect(() => planCobro(cot({ moneda: 'USD' }), hoy, tc)).toThrow(MENSAJE_SIN_TIPO_CAMBIO)
   })
 })
