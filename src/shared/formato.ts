@@ -13,6 +13,9 @@ export const fechaLarga = (d: string) =>
 export const monto = (centavos: number, moneda: 'MXN' | 'USD' = 'MXN') =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: moneda, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(centavos / 100)
 
+/** Centavos as pesos with two-digit cents, e.g. `$296,000.00`. */
+export const pesos = (centavos: number) => monto(centavos)
+
 /** A Folio as shown everywhere, e.g. `DMM475a`. */
 export const folioDmm = (folio: string | number) => `DMM${folio}`
 

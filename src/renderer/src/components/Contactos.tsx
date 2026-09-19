@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { ESTADOS_CONTACTO, NOMBRES_ESTADO_CONTACTO, type EstadoContacto, type ListaContactos } from '../../../shared/dominio'
-import { monto, normalizar } from '../../../shared/formato'
+import { normalizar, pesos } from '../../../shared/formato'
 import { FormContacto } from './FormContacto'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
@@ -9,8 +9,6 @@ import { celdaCls, etiquetaCls, tituloCls } from './estilos'
 
 const POR_PAGINA = 10
 
-/** Centavos as pesos with two-digit cents, e.g. `$296,000.00`. */
-export const pesos = (centavos: number) => monto(centavos)
 
 const plurales: Record<EstadoContacto, string> = {
   lead_frio: 'Leads fríos',
