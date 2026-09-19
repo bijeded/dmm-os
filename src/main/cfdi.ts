@@ -22,6 +22,8 @@ export interface Cfdi {
   retenciones: number
   /** Subtotal + IVA − retenciones: what the bank sees. */
   total: number
+  /** IVA as a percent of the subtotal, when it is neither 0 nor 16% (e.g. the 8% border rate). */
+  tasaIvaInusual: number | null
   /** The currency the CFDI was issued in; 'MXN' unless it was a foreign invoice. */
   moneda: string
   /** The same total in its original currency, when that currency was not MXN. */
@@ -50,6 +52,12 @@ function primero(valor: unknown): Nodo | undefined {
 /** The first `hijo` element of `padre`, whichever way the parser collapsed repeats. */
 function hijo(padre: unknown, nombre: string): Nodo | undefined {
   return primero(primero(padre)?.[nombre])
+}
+
+/** IVA is 0 or 16% of the subtotal to within a centavo; anything else is returned as a percent. */
+function tasaInusual(subtotal: number, iva: number): number | null {
+  if (iva === 0 || Math.abs(iva - subtotal * 0.16) <= 1) return null
+  return subtotal === 0 ? null : Math.round((iva / subtotal) * 10_000) / 100
 }
 
 /** Reads one CFDI XML. Throws when the file is not a stamped CFDI. */
@@ -88,6 +96,11 @@ export function leerCfdi(xml: string): Cfdi {
     iva,
     retenciones,
     total: subtotal + iva - retenciones,
+    // Judged in the CFDI's own currency, where the SAT's centavo rounding happened.
+    tasaIvaInusual: tasaInusual(
+      centavos(comprobante.SubTotal, 1) - centavos(comprobante.Descuento, 1),
+      centavos(impuestos?.TotalImpuestosTrasladados, 1)
+    ),
     moneda,
     montoOriginal: moneda === 'MXN' ? null : original()
   }

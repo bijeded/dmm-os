@@ -49,6 +49,8 @@ export interface LogImportacion {
   sugerencias: number
   /** RFCs no Contacto claims, so their Ingresos and Costos stayed unlinked. */
   rfcsDesconocidos: string[]
+  /** Invoices imported this run whose IVA is neither 0 nor 16%, imported as charged. */
+  ivasInusuales: { archivo: string; tasa: number }[]
   errores: { archivo: string; error: string }[]
   /** Folders the app knows but could not read on this run (No disponible). */
   noDisponibles: string[]

@@ -45,7 +45,7 @@ let api: DmmApi['importacion']
 
 const montar = (sugerencias: Sugerencia[] = [vincular, ubicacion], e: EstadoImportacion = estado) => {
   api = {
-    facturas: vi.fn(async () => ({ importados: 0, duplicados: 0, ignorados: 0, sugerencias: 0, rfcsDesconocidos: [], errores: [], noDisponibles: [] })),
+    facturas: vi.fn(async () => ({ importados: 0, duplicados: 0, ignorados: 0, sugerencias: 0, rfcsDesconocidos: [], ivasInusuales: [], errores: [], noDisponibles: [] })),
     carpetas: vi.fn(async () => e.carpetas!.log),
     estado: vi.fn(async () => e),
     sugerencias: vi.fn(async () => sugerencias),

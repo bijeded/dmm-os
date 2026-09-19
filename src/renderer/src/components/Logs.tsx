@@ -142,5 +142,6 @@ const lineasCarpetas = (l: LogCarpetas) => [
 const lineasFacturas = (l: LogImportacion) => [
   `Facturas: ${l.importados} importadas · ${l.duplicados} duplicadas · ${l.ignorados} ignoradas`,
   `Sugerencias: ${l.sugerencias}`,
-  ...(l.rfcsDesconocidos.length > 0 ? [`RFC sin Contacto: ${l.rfcsDesconocidos.join(', ')}`] : [])
+  ...(l.rfcsDesconocidos.length > 0 ? [`RFC sin Contacto: ${l.rfcsDesconocidos.join(', ')}`] : []),
+  ...l.ivasInusuales.map((f) => `IVA inusual (${f.tasa}%): ${f.archivo}`)
 ]

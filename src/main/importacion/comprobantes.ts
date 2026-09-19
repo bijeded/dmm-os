@@ -15,6 +15,8 @@ export interface ResultadoImportacion {
   id: number | null
   /** The RFC no Contacto claims, when the Contacto could not be linked. */
   rfcDesconocido: string | null
+  /** The IVA rate, in percent, when it is neither 0 nor 16%; the amounts are imported as charged. */
+  tasaIvaInusual: number | null
   /** The Proyecto guessed for it, waiting in Logs as a Sugerencia de importación. */
   sugerencia: { proyectoId: number; motivo: string } | null
 }
@@ -52,7 +54,7 @@ function yaImportado(db: Tx, uuid: string): boolean {
  */
 export function importarCfdi(db: Db, xml: string, direccion: Direccion): ResultadoImportacion {
   const cfdi = leerCfdi(xml)
-  const vacio = { uuid: cfdi.uuid, id: null, rfcDesconocido: null, sugerencia: null }
+  const vacio = { uuid: cfdi.uuid, id: null, rfcDesconocido: null, tasaIvaInusual: null, sugerencia: null }
 
   // Only ingreso vouchers carry new money; pagos, nóminas and traslados restate what exists.
   // Egresos (notas de crédito) are Reembolsos, which are entered against their original Ingreso.
@@ -83,6 +85,7 @@ export function importarCfdi(db: Db, xml: string, direccion: Direccion): Resulta
       uuid: cfdi.uuid,
       id,
       rfcDesconocido: contacto ? null : rfc,
+      tasaIvaInusual: cfdi.tasaIvaInusual,
       sugerencia
     }
   })
