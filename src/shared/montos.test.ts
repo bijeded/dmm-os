@@ -29,6 +29,6 @@ describe('exigirCentavos', () => {
 
   it('takes zero when cero is allowed, never a negative', () => {
     expect(exigirCentavos(0, { cero: true })).toBe(0)
-    expect(() => exigirCentavos(-1, { cero: true })).toThrow()
+    expect(() => exigirCentavos(-1, { cero: true })).toThrow(MENSAJE_MONTO)
   })
 })

@@ -8,7 +8,6 @@ import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { campoCls, tituloCls } from './estilos'
 
-
 function Formulario({ titulo, accion, ocupado, guardar, error, children }: { titulo: string; accion: string; ocupado: boolean; guardar: () => void; error: string | null; children: ReactNode }) {
   const navigate = useNavigate()
   return (

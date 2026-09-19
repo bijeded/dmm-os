@@ -3,10 +3,10 @@ export const MENSAJE_MONTO = 'Escribe un monto mayor a cero'
 
 /**
  * `n` centavos when it is a whole number above zero (or zero too, with `cero`); otherwise throws
- * `mensaje`. Both the forms and main judge amounts by this rule.
+ * `MENSAJE_MONTO`. Both the forms and main judge amounts by this rule.
  */
-export function exigirCentavos(n: number, { cero = false, mensaje = MENSAJE_MONTO }: { cero?: boolean; mensaje?: string } = {}) {
-  if (!Number.isInteger(n) || n < 0 || (n === 0 && !cero)) throw new Error(mensaje)
+export function exigirCentavos(n: number, { cero = false }: { cero?: boolean } = {}) {
+  if (!Number.isInteger(n) || n < 0 || (n === 0 && !cero)) throw new Error(MENSAJE_MONTO)
   return n
 }
 
