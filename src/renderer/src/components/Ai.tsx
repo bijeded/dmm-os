@@ -8,6 +8,8 @@ import {
   NOMBRES_PERIODO_FINANZAS,
   PERIODOS_AI,
   type AgenteOSkill,
+  type AsignacionCosto,
+  type CriterioAsignacion,
   type EstadoProyecto,
   type EtiquetaProyecto,
   type FilaProyectoAi,
@@ -124,6 +126,12 @@ export function Ai() {
           <p className="m-0 text-[12px] text-on-surface-muted">Vista filtrada de Costos · proveedor AI</p>
           <TablaSuscripciones filas={resumen.suscripciones} />
           <p className="m-0 text-[12px] text-on-surface-muted">Mismo registro que Finanzas → Costos.</p>
+        </Seccion>
+      )}
+
+      {resumen && (
+        <Seccion id="ai-asignacion" titulo={`Asignación de costo · ${new Date(`${resumen.asignacion.mes}-01T12:00:00`).toLocaleDateString('es-MX', { month: 'short' })}`}>
+          <TablaAsignacion asignacion={resumen.asignacion} />
         </Seccion>
       )}
 
@@ -350,6 +358,7 @@ function ProyectosAi({ filas, sinProyecto }: Pick<ResumenAi, 'sinProyecto'> & { 
             <th className={celdaCls}>Modelos</th>
             <th className={`${celdaCls} text-right`}>Tokens</th>
             <th className={`${celdaCls} text-right`}>API aprox.</th>
+            <th className={`${celdaCls} text-right`}>Costo real</th>
             <th className={celdaCls}>Estado</th>
             <th className={celdaCls}>Carpeta</th>
           </tr>
@@ -375,6 +384,9 @@ function ProyectosAi({ filas, sinProyecto }: Pick<ResumenAi, 'sinProyecto'> & { 
               </td>
               <td data-label="API aprox." className={`${celdaCls} text-right font-mono text-[12px]`}>
                 {costoApi(p)}
+              </td>
+              <td data-label="Costo real" className={`${celdaCls} text-right font-mono text-[12px]`}>
+                {pesos(p.costoReal)}
               </td>
               <td data-label="Estado" className={celdaCls}>
                 {NOMBRES_ESTADO_PROYECTO[p.estado]}
@@ -414,6 +426,7 @@ function ProyectosAi({ filas, sinProyecto }: Pick<ResumenAi, 'sinProyecto'> & { 
               <td data-label="API aprox." className={`${celdaCls} text-right font-mono text-[12px]`}>
                 {costoApi(sinProyecto)}
               </td>
+              <td className={celdaCls} />
               <td className={celdaCls} />
               <td className={celdaCls} />
             </tr>
@@ -461,5 +474,66 @@ function TablaSuscripciones({ filas }: { filas: FilaSuscripcion[] }) {
         ))}
       </tbody>
     </table>
+  )
+}
+
+const NOTAS_CRITERIO: Record<CriterioAsignacion, string> = {
+  tokens: 'Por uso de tokens.',
+  partes_iguales: 'Sin datos de uso este mes: partes iguales entre los proyectos AI abiertos.',
+  sin_proyectos: 'Ningún proyecto AI abierto este mes: todo queda sin asignar.'
+}
+
+/**
+ * This month's Suscripciones split across AI Proyectos, as main works it out when read. Sin
+ * asignar is only noted, never spread.
+ */
+function TablaAsignacion({ asignacion }: { asignacion: AsignacionCosto }) {
+  const porTokens = asignacion.criterio === 'tokens'
+  return (
+    <>
+      <table aria-labelledby="ai-asignacion" className="tbl w-full border-collapse text-[13px]">
+        <thead>
+          <tr className={etiquetaCls}>
+            <th className={celdaCls}>Proyecto</th>
+            <th className={`${celdaCls} text-right`}>Tokens</th>
+            <th className={`${celdaCls} text-right`}>%</th>
+            <th className={`${celdaCls} text-right`}>Asignado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {asignacion.filas.map((f) => (
+            <tr key={f.proyectoId}>
+              <td data-label="Proyecto" className={celdaCls}>
+                {f.nombre}
+              </td>
+              <td data-label="Tokens" className={`${celdaCls} text-right font-mono text-[12px]`}>
+                {porTokens ? tokens(f.tokens) : '—'}
+              </td>
+              <td data-label="%" className={`${celdaCls} text-right font-mono text-[12px]`}>
+                {porcentaje(f.parte)}
+              </td>
+              <td data-label="Asignado" className={`${celdaCls} text-right font-mono text-[12px]`}>
+                {pesos(f.monto)}
+              </td>
+            </tr>
+          ))}
+          <tr className="text-on-surface-muted">
+            <td data-label="Proyecto" className={celdaCls}>
+              Sin asignar
+            </td>
+            <td data-label="Tokens" className={`${celdaCls} text-right font-mono text-[12px]`}>
+              —
+            </td>
+            <td data-label="%" className={`${celdaCls} text-right font-mono text-[12px]`}>
+              —
+            </td>
+            <td data-label="Asignado" className={`${celdaCls} text-right font-mono text-[12px]`}>
+              {pesos(asignacion.sinAsignar)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p className="m-0 text-[12px] text-on-surface-muted">{NOTAS_CRITERIO[asignacion.criterio]}</p>
+    </>
   )
 }

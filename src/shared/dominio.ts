@@ -541,6 +541,41 @@ export interface ResumenAi extends LecturaUso {
   proyectos: FilaProyectoAi[]
   /** The period's usage in folders that are no Proyecto's. */
   sinProyecto: UsoTokens
+  /** This month's Asignación de costo, in either period. */
+  asignacion: AsignacionCosto
+}
+
+/**
+ * How a month's Suscripciones are split across AI Proyectos: by tokens among those with usage in
+ * it, else evenly among those open during it, else not at all.
+ */
+export type CriterioAsignacion = 'tokens' | 'partes_iguales' | 'sin_proyectos'
+
+/**
+ * A month's Asignación de costo, worked out when read and never stored as Costos. The rows plus
+ * Sin asignar add up to `total` to the centavo.
+ */
+export interface AsignacionCosto {
+  /** `YYYY-MM` */
+  mes: string
+  /** The subtotal of the month's Suscripciones. */
+  total: number
+  criterio: CriterioAsignacion
+  /** The AI Proyectos it is split across, by name. */
+  filas: FilaAsignacion[]
+  /** What no Proyecto takes: the whole pool when there is none. */
+  sinAsignar: number
+}
+
+export interface FilaAsignacion {
+  proyectoId: number
+  nombre: string
+  /** Its tokens in the month; 0 in an even split. */
+  tokens: number
+  /** Its share of the pool, 0 to 1. */
+  parte: number
+  /** Centavos assigned. */
+  monto: number
 }
 
 /** Token usage and what it would cost through the API. */
@@ -563,6 +598,8 @@ export type FilaProyectoAi = Omit<FilaProyecto, 'referencia' | 'sinIngresosRegis
     referencia: string | null
     /** The model families it used, in the chart's order. */
     modelos: string[]
+    /** Its Asignación de costo in the period plus the Costos linked to it, in centavos. */
+    costoReal: number
   }
 
 /** A model family's usage in a period: every version of it, from every folder. */

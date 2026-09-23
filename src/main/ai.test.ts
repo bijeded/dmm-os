@@ -516,3 +516,165 @@ describe('Ingreso cards', () => {
     expect(resumenAi(db, ajustes, DISCO, 'todo', HOY)).toMatchObject({ ingresoProyectos: 0, ingresoAi: 0 })
   })
 })
+
+describe('Asignación de costo', () => {
+  /** Claude Max, marked Suscripción de IA: $360 a month since April, on the 5th. */
+  const suscripcion = () =>
+    nuevoCosto(
+      db,
+      { nombre: 'Claude Max', proveedor: 'Anthropic', referencia: null, categoria: 'mensual', proyectoId: null, fecha: '2026-04-05', subtotal: 36_000, conIva: false, parcialidades: null, suscripcionIa: true, pagado: true },
+      HOY
+    )
+
+  /** This month's usage: `tokens` per folder, all on the 20th. */
+  const usoDelMes = (tokens: Record<string, number>) =>
+    leer({
+      ccusage: ccusage(Object.fromEntries(Object.entries(tokens).map(([carpeta, entrada]) => [carpeta, [diaCc('2026-09-20', [{ modelo: 'claude-opus-5', entrada }])]]))),
+      rtk: AHORRO
+    })
+
+  const asignacion = (hoy = HOY) => resumenAi(db, ajustes, DISCO, 'mes', hoy).asignacion
+
+  beforeEach(suscripcion)
+
+  it('splits the month’s Suscripciones across AI Proyectos by their tokens, rounding so the rows add up to the pool', async () => {
+    const aura = proyectoAi('Aura', { contactoId: contacto('Hotel Aura').id, ruta: 'Proyectos/Aura' })
+    const netdeckr = proyectoAi('Netdeckr', { ruta: 'Proyectos/Netdeckr' })
+    await usoDelMes({ [AURA]: 9_100, [NETDECKR]: 6_600 })
+    // 36,000 × 9,100 ÷ 15,700 = 20,866.24 and 36,000 × 6,600 ÷ 15,700 = 15,133.76: the centavo left goes to the larger remainder.
+    expect(asignacion()).toEqual({
+      mes: '2026-09',
+      total: 36_000,
+      criterio: 'tokens',
+      filas: [
+        { proyectoId: aura.id, nombre: 'Aura', tokens: 9_100, parte: 9_100 / 15_700, monto: 20_866 },
+        { proyectoId: netdeckr.id, nombre: 'Netdeckr', tokens: 6_600, parte: 6_600 / 15_700, monto: 15_134 }
+      ],
+      sinAsignar: 0
+    })
+  })
+
+  it('leaves out AI Proyectos with no usage while another has some', async () => {
+    proyectoAi('Aura', { ruta: 'Proyectos/Aura' })
+    proyectoAi('Netdeckr', { ruta: 'Proyectos/Netdeckr' })
+    await usoDelMes({ [NETDECKR]: 500 })
+    expect(asignacion().filas.map((f) => [f.nombre, f.monto])).toEqual([['Netdeckr', 36_000]])
+  })
+
+  it('gives the whole pool to the only AI Proyecto (Aura, April 2026)', async () => {
+    const aura = proyectoAi('Aura', { fechaInicio: '2026-04-10', ruta: 'Proyectos/Aura' })
+    await leer({ ccusage: ccusage({ [AURA]: [diaCc('2026-04-12', [{ modelo: 'claude-opus-5', entrada: 800 }])] }) })
+    expect(asignacion('2026-04-22')).toEqual({
+      mes: '2026-04',
+      total: 36_000,
+      criterio: 'tokens',
+      filas: [{ proyectoId: aura.id, nombre: 'Aura', tokens: 800, parte: 1, monto: 36_000 }],
+      sinAsignar: 0
+    })
+  })
+
+  it('splits evenly across the AI Proyectos open during the month when none has usage in it', () => {
+    proyectoAi('Aura', { fechaInicio: '2026-04-10' })
+    proyectoAi('Netdeckr', { fechaInicio: '2026-09-20', estado: 'pausado' })
+    proyectoAi('Voz', { fechaInicio: '2026-05-01', estado: 'completado' })
+    db.update(proyectos).set({ fechaFin: '2026-08-31' }).where(eq(proyectos.nombre, 'Voz')).run()
+    // Completed this month: still open during it.
+    proyectoAi('Chatbot Terra', { fechaInicio: '2026-06-01', estado: 'completado' })
+    db.update(proyectos).set({ fechaFin: '2026-09-02' }).where(eq(proyectos.nombre, 'Chatbot Terra')).run()
+    // Starts next month.
+    proyectoAi('Agente Sol', { fechaInicio: '2026-10-01' })
+    const a = asignacion()
+    expect(a.criterio).toBe('partes_iguales')
+    expect(a.filas.map((f) => [f.nombre, f.tokens, f.parte, f.monto])).toEqual([
+      ['Aura', 0, 1 / 3, 12_000],
+      ['Chatbot Terra', 0, 1 / 3, 12_000],
+      ['Netdeckr', 0, 1 / 3, 12_000]
+    ])
+    expect(a.sinAsignar).toBe(0)
+  })
+
+  it('adds up to the pool to the centavo when it does not divide evenly', () => {
+    for (const nombre of ['Aura', 'Netdeckr', 'Voz']) proyectoAi(nombre)
+    const a = asignacion()
+    expect(a.filas.map((f) => f.monto)).toEqual([12_000, 12_000, 12_000])
+    nuevoCosto(
+      db,
+      { nombre: 'API créditos', proveedor: 'OpenAI', referencia: null, categoria: 'unico', proyectoId: null, fecha: '2026-09-02', subtotal: 10_001, conIva: false, parcialidades: null, suscripcionIa: true, pagado: true },
+      HOY
+    )
+    const b = asignacion()
+    expect(b.total).toBe(46_001)
+    expect(b.filas.map((f) => f.monto)).toEqual([15_334, 15_334, 15_333])
+    expect(b.filas.reduce((s, f) => s + f.monto, 0) + b.sinAsignar).toBe(46_001)
+  })
+
+  it('leaves the whole pool Sin asignar when there is no AI Proyecto', async () => {
+    // Usage in a folder, but no AI Proyecto to give it to.
+    db.insert(proyectos).values({ nombre: 'Tienda', contactoId: contacto().id, categoria: 'ecommerce', fechaInicio: '2026-01-10' }).run()
+    await usoDelMes({ [AURA]: 900 })
+    expect(asignacion()).toEqual({ mes: '2026-09', total: 36_000, criterio: 'sin_proyectos', filas: [], sinAsignar: 36_000 })
+  })
+
+  it('is empty with no Suscripciones this month', () => {
+    reiniciarDb()
+    proyectoAi('Aura')
+    expect(asignacion()).toMatchObject({ total: 0, filas: [{ nombre: 'Aura', monto: 0 }], sinAsignar: 0 })
+  })
+
+  it('never stores anything, so Finanzas totals and Costos stay as they were', async () => {
+    proyectoAi('Aura', { ruta: 'Proyectos/Aura' })
+    proyectoAi('Netdeckr', { ruta: 'Proyectos/Netdeckr' })
+    await usoDelMes({ [AURA]: 9_100, [NETDECKR]: 6_600 })
+    const costosAntes = db.select().from(costos).all()
+    const antes = resumenFinanzas(db, 'todo', HOY, 30)
+    resumenAi(db, ajustes, DISCO, 'mes', HOY)
+    resumenAi(db, ajustes, DISCO, 'todo', HOY)
+    expect(resumenFinanzas(db, 'todo', HOY, 30)).toEqual(antes)
+    expect(db.select().from(costos).all()).toEqual(costosAntes)
+  })
+
+  describe('Costo real', () => {
+    let aura: typeof proyectos.$inferSelect
+
+    beforeEach(async () => {
+      aura = proyectoAi('Aura', { contactoId: contacto('Hotel Aura').id, fechaInicio: '2026-04-10', ruta: 'Proyectos/Aura' })
+      proyectoAi('Netdeckr', { fechaInicio: '2026-09-01', ruta: 'Proyectos/Netdeckr' })
+      // Aura: 1,000 tokens on Aug 30 and 11,030 in September; Netdeckr: 1,000 in September.
+      await leer()
+    })
+
+    const costoReal = (nombre: string, periodo: 'mes' | 'todo') => resumenAi(db, ajustes, DISCO, periodo, HOY).proyectos.find((p) => p.nombre === nombre)!.costoReal
+
+    /** A Costo linked to a Proyecto. */
+    const ligado = (proyectoId: number, fecha: string, subtotal: number, estado: 'pagado' | 'cancelado' = 'pagado') =>
+      db.insert(costos).values({ nombre: 'Hosting', categoria: 'unico', estado, proveedor: 'Hostinger', fecha, subtotal, iva: 0, total: subtotal, proyectoId }).run()
+
+    it('is the period’s Asignación de costo plus the Costos linked to it', () => {
+      ligado(aura.id, '2026-09-03', 5_000)
+      ligado(aura.id, '2026-06-03', 7_000)
+      ligado(aura.id, '2026-09-04', 9_000, 'cancelado')
+      // September: 36,000 × 10,030 ÷ 11,030 = 32,736.17 and × 1,000 ÷ 11,030 = 3,263.83.
+      expect(costoReal('Aura', 'mes')).toBe(32_736 + 5_000)
+      expect(costoReal('Netdeckr', 'mes')).toBe(3_264)
+      // April to July Aura was the only AI Proyecto open, with no usage; August it was the only one with usage.
+      expect(costoReal('Aura', 'todo')).toBe(4 * 36_000 + 36_000 + 32_736 + 5_000 + 7_000)
+      expect(costoReal('Netdeckr', 'todo')).toBe(3_264)
+    })
+
+    it('does not count a Suscripción linked to it twice', () => {
+      nuevoCosto(
+        db,
+        { nombre: 'API créditos', proveedor: 'OpenAI', referencia: null, categoria: 'unico', proyectoId: aura.id, fecha: '2026-09-02', subtotal: 11_030, conIva: false, parcialidades: null, suscripcionIa: true, pagado: true },
+        HOY
+      )
+      // The pool is now 47,030: 47,030 × 10,030 ÷ 11,030 = 42,766.
+      expect(costoReal('Aura', 'mes')).toBe(42_766)
+    })
+
+    it('is zero with no pool and nothing linked', () => {
+      reiniciarDb()
+      proyectoAi('Aura')
+      expect(costoReal('Aura', 'todo')).toBe(0)
+    })
+  })
+})
