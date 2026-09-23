@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { type ResumenFinanzas } from '../shared/dominio'
+import { type ResumenAi, type ResumenFinanzas } from '../shared/dominio'
 import { contrato, crearApi, recorrerContrato, type DmmHandlers } from '../shared/contrato'
 import { registerIpc } from './ipc'
 
@@ -131,6 +131,10 @@ function handlers() {
       buscar: vi.fn(() => []),
       vistaPrevia: vi.fn(() => null),
       abrir: vi.fn(async () => {})
+    },
+    ai: {
+      resumen: vi.fn(() => ({} as ResumenAi)),
+      leerUso: vi.fn(async () => ({ ultimoEscaneo: null, avisos: [] }))
     }
   } satisfies DmmHandlers
 }
@@ -149,7 +153,7 @@ describe('IPC contract', () => {
     recorrerContrato(contrato, (canal) => canales.push(canal))
     expect([...conectar(handlers()).registrados.keys()]).toEqual(canales)
     expect(canales).toContain('respaldos:estado')
-    expect(canales).toEqual(expect.arrayContaining(['lab:carpetas', 'lab:archivos', 'lab:buscar', 'lab:vistaPrevia', 'lab:abrir']))
+    expect(canales).toEqual(expect.arrayContaining(['lab:carpetas', 'lab:archivos', 'lab:buscar', 'lab:vistaPrevia', 'lab:abrir', 'ai:resumen', 'ai:leerUso']))
   })
 
   it('round-trips calls and arguments from the renderer API to main handlers', async () => {
@@ -168,6 +172,9 @@ describe('IPC contract', () => {
 
     await api.lab.abrir('Benchmarks/a.md')
     expect(h.lab.abrir).toHaveBeenCalledWith('Benchmarks/a.md')
+
+    await api.ai.resumen('todo')
+    expect(h.ai.resumen).toHaveBeenCalledWith('todo')
   })
 
   it('refuses to start with an endpoint missing its handler', () => {

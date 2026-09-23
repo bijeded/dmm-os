@@ -1,0 +1,101 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import type { PeriodoAi, ResumenAi } from '../../../shared/dominio'
+import type { DmmApi } from '../../../shared/contrato'
+import { monto } from '../../../shared/formato'
+import { fecha } from './Seccion'
+import { Ai } from './Ai'
+
+const ESCANEO = '2026-09-12T15:14:00.000Z'
+
+const resumen = (periodo: PeriodoAi, cambios: Partial<ResumenAi> = {}): ResumenAi => ({
+  periodo,
+  tokens: periodo === 'mes' ? 15_700_000 : 48_200_000,
+  tokensAhorrados: periodo === 'mes' ? 4_200_000 : 9_100_000,
+  ahorro: periodo === 'mes' ? 0.211 : 0.159,
+  costoApiUsd: periodo === 'mes' ? 9_400 : 31_050,
+  costoApiMxn: periodo === 'mes' ? 172_960 : 571_320,
+  tipoCambio: 18.4,
+  ultimoEscaneo: ESCANEO,
+  avisos: [],
+  ...cambios
+})
+
+let api: DmmApi['ai']
+
+const montar = (ai: Partial<DmmApi['ai']> = {}) => {
+  api = {
+    resumen: vi.fn(async (periodo: PeriodoAi) => resumen(periodo)),
+    leerUso: vi.fn(async () => ({ ultimoEscaneo: ESCANEO, avisos: [] })),
+    ...ai
+  }
+  window.dmm = { ai: api } as unknown as DmmApi
+  render(<Ai />)
+}
+
+const tarjeta = (label: RegExp) => screen.getByText(label).closest('li') as HTMLElement
+
+afterEach(cleanup)
+
+describe('AI', () => {
+  it('opens on Este mes with its token and API cost cards', async () => {
+    montar()
+    await screen.findByText('15.7 M')
+    expect(api.resumen).toHaveBeenCalledWith('mes')
+    expect(screen.getByRole('button', { name: 'Este mes' }).getAttribute('aria-pressed')).toBe('true')
+    expect(tarjeta(/Tokens totales/).textContent).toContain('15.7 M')
+    expect(tarjeta(/Tokens ahorrados/).textContent).toContain('4.2 M')
+    expect(tarjeta(/Tokens ahorrados/).textContent).toContain('21.1% vía RTK')
+    expect(tarjeta(/Costo API aprox/).textContent).toContain('$1,729.60')
+    expect(tarjeta(/Costo API aprox/).textContent).toContain(`≈ ${monto(9_400, 'USD')}`)
+  })
+
+  it('switches to Todo el tiempo', async () => {
+    montar()
+    await screen.findByText('15.7 M')
+    fireEvent.click(screen.getByRole('button', { name: 'Todo el tiempo' }))
+    await screen.findByText('48.2 M')
+    expect(api.resumen).toHaveBeenLastCalledWith('todo')
+    expect(tarjeta(/Tokens ahorrados/).textContent).toContain('15.9% vía RTK')
+    expect(tarjeta(/Costo API aprox/).textContent).toContain('$5,713.20')
+  })
+
+  it('shows the API cost in USD when the app has no tipo de cambio', async () => {
+    montar({ resumen: vi.fn(async (p: PeriodoAi) => resumen(p, { costoApiMxn: null, tipoCambio: null })) })
+    await screen.findByText('15.7 M')
+    expect(tarjeta(/Costo API aprox/).textContent).toContain(monto(9_400, 'USD'))
+    expect(tarjeta(/Costo API aprox/).textContent).toContain('sin tipo de cambio registrado')
+  })
+
+  it('shows when usage was last read, and Nunca before the first read', async () => {
+    montar()
+    expect(await screen.findByText(`Último escaneo: ${fecha(ESCANEO)}`)).toBeTruthy()
+    cleanup()
+    montar({ resumen: vi.fn(async (p: PeriodoAi) => resumen(p, { ultimoEscaneo: null, tokens: 0, tokensAhorrados: 0, ahorro: null, costoApiUsd: 0, costoApiMxn: 0 })) })
+    expect(await screen.findByText('Último escaneo: Nunca')).toBeTruthy()
+    expect(tarjeta(/Tokens ahorrados/).textContent).not.toContain('vía RTK')
+  })
+
+  it('reads usage again on demand, then shows the new figures', async () => {
+    const figuras = [resumen('mes'), resumen('mes', { tokens: 16_000_000, ultimoEscaneo: '2026-09-22T15:00:00.000Z' })]
+    montar({ resumen: vi.fn(async () => figuras.shift() ?? resumen('mes')) })
+    await screen.findByText('15.7 M')
+    fireEvent.click(screen.getByRole('button', { name: 'Leer uso' }))
+    await screen.findByText('16.0 M')
+    expect(api.leerUso).toHaveBeenCalledOnce()
+    expect(screen.getByText(`Último escaneo: ${fecha('2026-09-22T15:00:00.000Z')}`)).toBeTruthy()
+  })
+
+  it('says why a source could not be read, and still shows the cards', async () => {
+    montar({ resumen: vi.fn(async (p: PeriodoAi) => resumen(p, { avisos: ['CC Usage: no está instalado (no se encontró `ccusage`)'] })) })
+    const avisos = await screen.findByRole('list', { name: 'Avisos de lectura' })
+    expect(within(avisos).getByText('CC Usage: no está instalado (no se encontró `ccusage`)')).toBeTruthy()
+    expect(tarjeta(/Tokens totales/).textContent).toContain('15.7 M')
+  })
+
+  it('says why the figures could not be read', async () => {
+    montar({ resumen: vi.fn(async () => Promise.reject(new Error('disco lleno'))) })
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('disco lleno'))
+  })
+})

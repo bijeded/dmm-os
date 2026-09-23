@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react'
 import type { RouteObject } from 'react-router'
+import { Ai } from './components/Ai'
 import { AppShell } from './components/AppShell'
 import { Configuracion } from './components/Configuracion'
 import { Contactos } from './components/Contactos'
@@ -20,6 +21,7 @@ import { sections } from './sections'
 // Sections with a screen of their own; the rest show a placeholder.
 const pantallas: Record<string, ReactElement> = {
   '/': <Inicio />,
+  '/ai': <Ai />,
   '/configuracion': <Configuracion />,
   '/contactos': <Contactos />,
   '/cotizaciones': <Cotizaciones />,

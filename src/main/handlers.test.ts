@@ -33,6 +33,9 @@ beforeEach(() => {
     elegirHdd: vi.fn(async () => undefined),
     abrirCarpeta: vi.fn(async () => ''),
     imprimirPdf: vi.fn(async () => new TextEncoder().encode('%PDF')),
+    ejecutarUso: vi.fn(async () => {
+      throw new Error('no está instalado')
+    }),
     ahora: () => '2026-09-16T10:00:00.000Z'
   }
   h = crearHandlers(opciones)
@@ -123,6 +126,29 @@ describe('Lab', () => {
     expect((await h.lab.buscar('BOLET')).map((a) => [a.carpeta, a.nombre])).toEqual([['Newsletter', 'boletin.md']])
     expect(await h.lab.vistaPrevia('Newsletter/boletin.md')).toEqual({ texto: '# Boletín', recortado: false })
     expect(() => h.lab.vistaPrevia('../Vault/dmm.db')).toThrow(/fuera de Lab/)
+  })
+})
+
+describe('AI', () => {
+  it('reads usage through the runner it is given, and totals this month from it', async () => {
+    vi.mocked(opciones.ejecutarUso!).mockImplementation(async (fuente) =>
+      fuente === 'rtk'
+        ? JSON.stringify({ daily: [{ date: '2026-09-15', saved_tokens: 40 }] })
+        : JSON.stringify({
+            projects: {
+              '-Users-dmm-Desktop-DMM-OS-Proyectos-Aura': [
+                { date: '2026-09-15', modelBreakdowns: [{ modelName: 'claude-opus-5', inputTokens: 60, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, cost: 0.5 }] },
+                { date: '2026-08-31', modelBreakdowns: [{ modelName: 'claude-opus-5', inputTokens: 900, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, cost: 9 }] }
+              ]
+            }
+          })
+    )
+    expect(await h.ai.leerUso()).toEqual({ ultimoEscaneo: '2026-09-16T10:00:00.000Z', avisos: [] })
+    expect(await h.ai.resumen('mes')).toMatchObject({ tokens: 60, tokensAhorrados: 40, costoApiUsd: 50, ahorro: 0.4 })
+  })
+
+  it('names a source that cannot be read', async () => {
+    expect((await h.ai.leerUso()).avisos).toEqual(['CC Usage: no está instalado', 'RTK: no está instalado'])
   })
 })
 
