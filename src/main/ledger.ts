@@ -10,3 +10,9 @@ export function alDia(db: Db, hoy: string): void {
   expirarCotizaciones(db, hoy)
   generarPeriodos(db, hoy.slice(0, 7))
 }
+
+/** The db to work with for `hoy`, brought Al día first. */
+export function dbAlDia(db: Db, hoy: string): Db {
+  alDia(db, hoy)
+  return db
+}
