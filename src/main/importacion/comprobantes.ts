@@ -1,6 +1,7 @@
 import { and, eq, isNull, or, sql } from 'drizzle-orm'
 import { leerCfdi, type Cfdi } from '../cfdi'
 import type { Db } from '../db'
+import { montos } from '../dinero'
 import { proponer } from '../sugerencias'
 import { contactos, costos, cotizaciones, ingresos, proyectos } from '../db/schema'
 
@@ -25,19 +26,16 @@ export interface ResultadoImportacion {
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 
 /**
- * The amounts as the app records them: MXN centavos, IVA and retenciones apart, original currency as
- * optional detail. Only MXN and USD are recorded; another currency keeps its MXN amounts
- * and loses only the label.
+ * The amounts as the invoice states them, built by the money module, which checks the total balances.
+ * Only MXN and USD are recorded; another currency keeps its MXN amounts and loses only the label.
  */
-function montos(cfdi: Cfdi) {
-  return {
-    subtotal: cfdi.subtotal,
+function montosDe(cfdi: Cfdi) {
+  return montos(cfdi.subtotal, {
     iva: cfdi.iva,
     retenciones: cfdi.retenciones,
     total: cfdi.total,
-    montoOriginal: cfdi.moneda === 'USD' ? cfdi.montoOriginal : null,
-    monedaOriginal: cfdi.moneda === 'USD' ? ('USD' as const) : null
-  }
+    montoOriginal: cfdi.moneda === 'USD' ? cfdi.montoOriginal : null
+  })
 }
 
 /**
@@ -123,7 +121,7 @@ function registrarIngreso(tx: Tx, cfdi: Cfdi, contactoId: number | undefined): n
       categoria: 'factura',
       estado: 'pagado',
       estadoFacturacion: 'facturado',
-      ...montos(cfdi),
+      ...montosDe(cfdi),
       contactoId: contactoId ?? null,
       fechaRegistro: cfdi.fecha,
       fechaPago: cfdi.fecha,
@@ -142,7 +140,7 @@ function registrarCosto(tx: Tx, cfdi: Cfdi): number {
       nombre: cfdi.descripcion,
       categoria: 'unico',
       estado: 'pagado',
-      ...montos(cfdi),
+      ...montosDe(cfdi),
       proveedor: cfdi.emisor.nombre,
       fecha: cfdi.fecha,
       fechaPago: cfdi.fecha,
