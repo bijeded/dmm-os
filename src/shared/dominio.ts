@@ -527,6 +527,29 @@ export interface ResumenAi extends LecturaUso {
   costoApiMxn: number | null
   /** The most recent pesos per USD recorded in the app. */
   tipoCambio: number | null
+  /** The period's Suscripciones, newest first. */
+  suscripciones: FilaSuscripcion[]
+  /** Their subtotals added up. */
+  suscripcionesTotal: number
+}
+
+export const NOMBRES_ORIGEN_SUSCRIPCION = { cfdi: 'CFDI recibido', manual: 'Manual' } as const
+export type OrigenSuscripcion = keyof typeof NOMBRES_ORIGEN_SUSCRIPCION
+
+/**
+ * A Costo from an AI vendor: from a definición marked Suscripción de IA, or from the proveedor
+ * of one. The same record Finanzas shows, never a copy.
+ */
+export interface FilaSuscripcion {
+  /** The Costo's id. */
+  id: number
+  proveedor: string | null
+  /** The Costo's name, e.g. Claude Max. */
+  plan: string
+  fecha: string
+  /** Subtotal, centavos. */
+  monto: number
+  origen: OrigenSuscripcion
 }
 
 /** A span of days, `YYYY-MM-DD` both ends included. */

@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { leerUso, resumenAi, type EjecutarUso, type Fuente } from './ai'
 import { ajustes, contacto, db, reiniciarDb } from './db/test-db'
 import { costos, cotizaciones, usoTokens } from './db/schema'
+import { resumenFinanzas } from './finanzas'
+import { nuevoCosto } from './movimientos'
+import type { CostoNuevo } from '../shared/dominio'
 
 beforeEach(reiniciarDb)
 
@@ -184,5 +187,71 @@ describe('resumenAi', () => {
       .values({ nombre: 'Claude Pro', categoria: 'mensual', fecha: '2026-09-18', subtotal: 36_800, iva: 0, total: 36_800, montoOriginal: 2_000, monedaOriginal: 'USD' })
       .run()
     expect(resumenAi(db, ajustes, 'todo', HOY)).toMatchObject({ costoApiUsd: 1_385, tipoCambio: 18.4, costoApiMxn: Math.round(1_385 * 18.4) })
+  })
+})
+
+describe('Suscripciones', () => {
+  const nuevo = (cambios: Partial<CostoNuevo>) =>
+    nuevoCosto(
+      db,
+      { nombre: 'Hosting', proveedor: 'Hostinger', referencia: null, categoria: 'unico', proyectoId: null, fecha: '2026-09-10', subtotal: 20_000, conIva: false, parcialidades: null, suscripcionIa: false, pagado: true, ...cambios },
+      HOY
+    )
+
+  /** A Costo as the Facturas run leaves a received CFDI. */
+  const recibido = (proveedor: string, fecha: string, subtotal: number, estado: 'pagado' | 'cancelado' = 'pagado') => {
+    const iva = Math.round(subtotal * 0.16)
+    return db
+      .insert(costos)
+      .values({ nombre: `CFDI ${proveedor}`, categoria: 'unico', estado, proveedor, fecha, fechaPago: fecha, subtotal, iva, total: subtotal + iva, cfdiUuid: `${proveedor}-${fecha}` })
+      .returning()
+      .get()
+  }
+
+  beforeEach(() => {
+    // Claude Max entered by hand and marked Suscripción de IA: August and September so far.
+    nuevo({ nombre: 'Claude Max', proveedor: 'Anthropic', categoria: 'mensual', fecha: '2026-08-05', subtotal: 170_000, suscripcionIa: true })
+    // Not from an AI vendor.
+    nuevo({ nombre: 'Figma', proveedor: 'Figma', categoria: 'mensual', fecha: '2026-08-07', subtotal: 30_000 })
+    nuevo({})
+    recibido('Hostinger', '2026-09-11', 10_000)
+  })
+
+  it('lists a Costo marked Suscripción de IA as Manual', () => {
+    expect(resumenAi(db, ajustes, 'mes', HOY).suscripciones).toEqual([
+      { id: expect.any(Number), proveedor: 'Anthropic', plan: 'Claude Max', fecha: '2026-09-05', monto: 170_000, origen: 'manual' }
+    ])
+  })
+
+  it('lists a received CFDI from the proveedor of a marked definición as CFDI recibido', () => {
+    const cfdi = recibido('ANTHROPIC', '2026-09-18', 36_000)
+    expect(resumenAi(db, ajustes, 'mes', HOY).suscripciones).toEqual([
+      { id: cfdi.id, proveedor: 'ANTHROPIC', plan: 'CFDI ANTHROPIC', fecha: '2026-09-18', monto: 36_000, origen: 'cfdi' },
+      expect.objectContaining({ plan: 'Claude Max', origen: 'manual' })
+    ])
+  })
+
+  it('leaves cancelled Costos out', () => {
+    recibido('Anthropic', '2026-09-19', 99_000, 'cancelado')
+    expect(resumenAi(db, ajustes, 'mes', HOY).suscripciones.map((s) => s.plan)).toEqual(['Claude Max'])
+  })
+
+  it('totals the rows it lists, for Este mes and Todo el tiempo', () => {
+    recibido('Anthropic', '2026-09-18', 36_000)
+    const mes = resumenAi(db, ajustes, 'mes', HOY)
+    expect(mes.suscripciones.map((s) => s.fecha)).toEqual(['2026-09-18', '2026-09-05'])
+    expect(mes.suscripcionesTotal).toBe(36_000 + 170_000)
+    const todo = resumenAi(db, ajustes, 'todo', HOY)
+    expect(todo.suscripciones.map((s) => s.fecha)).toEqual(['2026-09-18', '2026-09-05', '2026-08-05'])
+    expect(todo.suscripcionesTotal).toBe(36_000 + 170_000 + 170_000)
+  })
+
+  it('shows the same Costos Finanzas does, and leaves its totals as they were', () => {
+    recibido('Anthropic', '2026-09-18', 36_000)
+    const antes = resumenFinanzas(db, 'todo', HOY, 30)
+    const { suscripciones } = resumenAi(db, ajustes, 'todo', HOY)
+    expect(resumenFinanzas(db, 'todo', HOY, 30)).toEqual(antes)
+    const enFinanzas = antes.costos.map((c) => c.id)
+    for (const { id } of suscripciones) expect(enFinanzas.filter((f) => f === id)).toHaveLength(1)
   })
 })

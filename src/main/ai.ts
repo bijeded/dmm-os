@@ -2,12 +2,14 @@ import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { promisify } from 'node:util'
-import { and, eq, gte, isNotNull, lte, ne, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, isNotNull, lte, ne, sql } from 'drizzle-orm'
 import type { Ajustes, Db } from './db'
-import { ahorroTokens, costos, cotizaciones, ingresos, usoTokens } from './db/schema'
+import { ahorroTokens, costos, cotizaciones, definicionesCosto, ingresos, usoTokens } from './db/schema'
 import { convertir } from './dinero'
 import { rangos } from './finanzas'
-import type { LecturaUso, PeriodoAi, ResumenAi } from '../shared/dominio'
+import { alDia } from './ledger'
+import { clave } from './nombres'
+import type { FilaSuscripcion, LecturaUso, PeriodoAi, Rango, ResumenAi } from '../shared/dominio'
 
 /**
  * AI: token usage imported from CC Usage (tokens and approximate API cost) and RTK (tokens
@@ -205,8 +207,35 @@ function tipoCambioReciente(db: Db): number | null {
   return Math.round(tasa * 10_000) / 10_000
 }
 
-/** The AI section's figures for `periodo`: Este mes runs, as in Finanzas, from the 1st to `hoy`. */
+/**
+ * Suscripciones: the Costos from a definición marked Suscripción de IA, or with the proveedor of
+ * one (which catches received CFDIs from the same vendor). Read straight from Costos, as Finanzas
+ * reads them, never copied; cancelled ones don't count. Newest first.
+ */
+function suscripciones(db: Db, rango: Rango): FilaSuscripcion[] {
+  const marcadas = db
+    .select({ id: definicionesCosto.id, proveedor: definicionesCosto.proveedor })
+    .from(definicionesCosto)
+    .where(eq(definicionesCosto.suscripcionIa, true))
+    .all()
+  const definiciones = new Set(marcadas.map((d) => d.id))
+  const proveedores = new Set(marcadas.map((d) => clave(d.proveedor ?? '')).filter(Boolean))
+  return db
+    .select()
+    .from(costos)
+    .where(and(ne(costos.estado, 'cancelado'), gte(costos.fecha, rango.desde), lte(costos.fecha, rango.hasta)))
+    .orderBy(desc(costos.fecha), desc(costos.id))
+    .all()
+    .filter((c) => (c.definicionId !== null && definiciones.has(c.definicionId)) || (c.proveedor !== null && proveedores.has(clave(c.proveedor))))
+    .map((c) => ({ id: c.id, proveedor: c.proveedor, plan: c.nombre, fecha: c.fecha, monto: c.subtotal, origen: c.cfdiUuid ? 'cfdi' : 'manual' }))
+}
+
+/**
+ * The AI section's figures for `periodo`: Este mes runs, as in Finanzas, from the 1st to `hoy`.
+ * Money is read Al día, so this month's Suscripciones exist.
+ */
 export function resumenAi(db: Db, ajustes: Ajustes, periodo: PeriodoAi, hoy: string): ResumenAi {
+  alDia(db, hoy)
   const { desde, hasta } = rangos('mes', hoy).rango
   const enPeriodo = (dia: typeof usoTokens.dia | typeof ahorroTokens.dia) => (periodo === 'mes' ? and(gte(dia, desde), lte(dia, hasta)) : undefined)
   const uso = db
@@ -223,6 +252,8 @@ export function resumenAi(db: Db, ajustes: Ajustes, periodo: PeriodoAi, hoy: str
     .where(enPeriodo(ahorroTokens.dia))
     .get()!
   const tipoCambio = tipoCambioReciente(db)
+  // Todo el tiempo ends today too, as in Finanzas.
+  const filas = suscripciones(db, { desde: periodo === 'mes' ? desde : '', hasta })
   return {
     periodo,
     tokens: uso.tokens,
@@ -231,6 +262,8 @@ export function resumenAi(db: Db, ajustes: Ajustes, periodo: PeriodoAi, hoy: str
     costoApiUsd: uso.costoUsd,
     costoApiMxn: tipoCambio === null ? null : convertir(uso.costoUsd, 'USD', 'MXN', tipoCambio),
     tipoCambio,
+    suscripciones: filas,
+    suscripcionesTotal: filas.reduce((s, f) => s + f.monto, 0),
     ...ultimaLectura(ajustes)
   }
 }
