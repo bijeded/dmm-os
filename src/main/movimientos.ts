@@ -1,52 +1,15 @@
 import { eq } from 'drizzle-orm'
 import type { Db } from './db'
 import { costos, definicionesCosto, ingresos, proyectos, vigenciasPrecio } from './db/schema'
-import { monedaDe, montos, tasaDe } from './dinero'
+import { monedaDe, montos, reembolso, tasaDe } from './dinero'
 import { exigirCosto, type ContextoCosto } from './ciclo-costo'
-import { exigirIngreso, MENSAJE_REEMBOLSO_EXCEDIDO, restante, type ContextoIngreso } from './ciclo-ingreso'
+import { exigirIngreso, restante, type ContextoIngreso } from './ciclo-ingreso'
 import { transaccionConPeriodos } from './ledger'
 import { exigirCentavos } from '../shared/montos'
 import type { CostoNuevo, IngresoNuevo } from '../shared/dominio'
 
 // Movimientos: Ingresos and Costos entered, paid, cancelled, deleted, refunded or stopped. Which of
 // those each one allows now is its lifecycle's (ciclo-ingreso, ciclo-costo), as the Finanzas rows show.
-
-/**
- * Reembolso: a negative Ingreso linked to the original, dated when the money went back. A USD
- * Ingreso is refunded in USD too (`montoOriginal`), so a USD Cotización counts it against what
- * was paid.
- */
-function registrarReembolso(
-  db: Db,
-  ingresoId: number,
-  r: { subtotal: number; iva: number; retenciones: number; fecha: string; montoOriginal?: number }
-) {
-  const original = db.select().from(ingresos).where(eq(ingresos.id, ingresoId)).get()
-  if (!original) throw new Error(`ingreso ${ingresoId} no existe`)
-  const usd = monedaDe(original) === 'USD'
-  if (usd && r.montoOriginal === undefined) throw new Error('Un reembolso de un ingreso en USD necesita el monto en USD')
-  return db
-    .insert(ingresos)
-    .values({
-      categoria: original.categoria,
-      estado: 'pagado',
-      estadoFacturacion: original.estadoFacturacion,
-      subtotal: -Math.abs(r.subtotal),
-      iva: -Math.abs(r.iva),
-      retenciones: -Math.abs(r.retenciones),
-      total: -(Math.abs(r.subtotal) + Math.abs(r.iva) - Math.abs(r.retenciones)),
-      montoOriginal: usd ? -Math.abs(r.montoOriginal!) : null,
-      monedaOriginal: usd ? ('USD' as const) : null,
-      proyectoId: original.proyectoId,
-      cotizacionId: original.cotizacionId,
-      contactoId: original.contactoId,
-      fechaRegistro: r.fecha,
-      fechaPago: r.fecha,
-      reembolsoDeId: original.id
-    })
-    .returning()
-    .get()
-}
 
 function exigirFecha(fecha: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) throw new Error('La fecha no es válida')
@@ -176,23 +139,30 @@ export function borrarIngreso(db: Db, id: number) {
 }
 
 /**
- * Reembolso of `monto` (the total, in the Ingreso's own currency) against a paid Ingreso, dated
- * today, never more than what is left of it. A USD one converts at the Ingreso's own rate; IVA and
- * retenciones are in the Ingreso's proportion; giving back all that is left takes the exact remainders.
+ * Reembolso of `monto` (the total, in the Ingreso's own currency) against a paid Ingreso: a negative
+ * Ingreso linked to it, dated today, with the amounts the money module's Reembolso rule gives.
  */
 export function reembolsar(db: Db, id: number, monto: number, hoy: string) {
   exigirCentavos(monto)
   const { i, ctx } = ingresoConContexto(db, id)
   exigirIngreso('reembolsar', i, ctx)
-  const tasa = monedaDe(i) === 'USD' ? tasaDe(i) : 1
-  if (tasa === null) throw new Error('El ingreso en USD no tiene su monto en USD')
-  const queda = restante(i, ctx.reembolsos)
-  if (monto > queda.original) throw new Error(MENSAJE_REEMBOLSO_EXCEDIDO)
-  const todo = monto === queda.original
-  const total = todo ? queda.total : Math.min(queda.total, Math.round(monto * tasa))
-  const iva = todo ? queda.iva : Math.min(queda.iva, Math.round((total * i.iva) / i.total))
-  const retenciones = todo ? queda.retenciones : Math.min(queda.retenciones, Math.round((total * i.retenciones) / i.total))
-  registrarReembolso(db, id, { subtotal: total - iva + retenciones, iva, retenciones, fecha: hoy, montoOriginal: queda.moneda === 'USD' ? monto : undefined })
+  const tasaUsd = tasaDe(i)
+  if (monedaDe(i) === 'USD' && tasaUsd === null) throw new Error('El ingreso en USD no tiene su monto en USD')
+  db
+    .insert(ingresos)
+    .values({
+      ...reembolso(monto, { de: i, queda: restante(i, ctx.reembolsos), tasaUsd }),
+      categoria: i.categoria,
+      estado: 'pagado',
+      estadoFacturacion: i.estadoFacturacion,
+      proyectoId: i.proyectoId,
+      cotizacionId: i.cotizacionId,
+      contactoId: i.contactoId,
+      fechaRegistro: hoy,
+      fechaPago: hoy,
+      reembolsoDeId: i.id
+    })
+    .run()
 }
 
 export function pagarCosto(db: Db, id: number, hoy: string) {

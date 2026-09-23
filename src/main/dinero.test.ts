@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { monto } from '../shared/formato'
-import { convertir, monedaDe, montoEn, montos, repartir, tasaDe } from './dinero'
+import { convertir, MENSAJE_REEMBOLSO_EXCEDIDO, monedaDe, montoEn, montos, reembolso, repartir, tasaDe } from './dinero'
 
 const enPesos = { total: 1800, montoOriginal: null, monedaOriginal: null }
 const enUsd = { total: 1800, montoOriginal: 100, monedaOriginal: 'USD' as const }
@@ -55,6 +55,48 @@ describe('dinero', () => {
       total: 196_100,
       montoOriginal: 10_600,
       monedaOriginal: 'USD'
+    })
+  })
+
+  describe('reembolso', () => {
+    const conIva = { total: 11_600, iva: 1600, retenciones: 0 }
+    const cfdi = { total: 95_333, iva: 16_000, retenciones: 20_667 }
+
+    it('gives back a part with IVA in the Ingreso’s proportion, as negative amounts', () => {
+      expect(reembolso(5800, { de: conIva, queda: { ...conIva, original: 11_600 }, tasaUsd: null })).toEqual({
+        subtotal: -5000,
+        iva: -800,
+        retenciones: 0,
+        total: -5800,
+        montoOriginal: null,
+        monedaOriginal: null
+      })
+    })
+
+    it('gives back retenciones of an imported CFDI in proportion, and the exact remainders at the end', () => {
+      const parcial = reembolso(30_000, { de: cfdi, queda: { ...cfdi, original: 95_333 }, tasaUsd: null })
+      expect(parcial).toEqual({ subtotal: -31_469, iva: -5035, retenciones: -6504, total: -30_000, montoOriginal: null, monedaOriginal: null })
+      const queda = { total: 65_333, iva: 10_965, retenciones: 14_163, original: 65_333 }
+      const final = reembolso(65_333, { de: cfdi, queda, tasaUsd: null })
+      expect(final).toEqual({ subtotal: -68_531, iva: -10_965, retenciones: -14_163, total: -65_333, montoOriginal: null, monedaOriginal: null })
+    })
+
+    it('takes a USD Ingreso’s amount in USD, converts at its own rate and keeps the USD original', () => {
+      const usd = { total: 170_000, iva: 0, retenciones: 0 }
+      expect(reembolso(1000, { de: usd, queda: { ...usd, original: 10_000 }, tasaUsd: 17 })).toEqual({
+        subtotal: -17_000,
+        iva: 0,
+        retenciones: 0,
+        total: -17_000,
+        montoOriginal: -1000,
+        monedaOriginal: 'USD'
+      })
+    })
+
+    it('refuses more than what is left, in the Ingreso’s own currency', () => {
+      expect(() => reembolso(3001, { de: conIva, queda: { ...conIva, total: 3000, iva: 414, original: 3000 }, tasaUsd: null })).toThrow(MENSAJE_REEMBOLSO_EXCEDIDO)
+      const usd = { total: 170_000, iva: 0, retenciones: 0 }
+      expect(() => reembolso(10_001, { de: usd, queda: { ...usd, original: 10_000 }, tasaUsd: 17 })).toThrow(MENSAJE_REEMBOLSO_EXCEDIDO)
     })
   })
 
