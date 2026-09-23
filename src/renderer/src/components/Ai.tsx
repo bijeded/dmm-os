@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import {
   NOMBRES_ORIGEN_SUSCRIPCION,
+  NOMBRES_TIPO_AGENTE_SKILL,
   NOMBRES_PERIODO_FINANZAS,
   PERIODOS_AI,
+  type AgenteOSkill,
   type FilaSuscripcion,
   type PeriodoAi,
   type ResumenAi
@@ -103,7 +105,46 @@ export function Ai() {
           <p className="m-0 text-[12px] text-on-surface-muted">Mismo registro que Finanzas → Costos.</p>
         </Seccion>
       )}
+
+      <AgentesYSkills />
     </>
+  )
+}
+
+/** The agents and skills in `AI/`, read-only: where each is used, and its file. */
+function AgentesYSkills() {
+  const api = window.dmm.ai
+  const [items, setItems] = useState<AgenteOSkill[] | null>(null)
+  const { error, ocupado, correr } = useAccion()
+
+  useEffect(() => {
+    correr(async () => setItems(await api.agentesYSkills()))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read once
+  }, [])
+
+  return (
+    <Seccion id="ai-agentes" titulo="Agentes y Skills">
+      <p className="m-0 text-[12px] text-on-surface-muted">Solo lectura</p>
+      <Aviso error={error} />
+      {items && items.length === 0 && <p className="m-0 text-[13px] text-on-surface-muted">Ningún agente ni skill en AI/.</p>}
+      {items && items.length > 0 && (
+        <ul aria-label="Agentes y Skills" className="m-0 flex list-none flex-col gap-2 p-0">
+          {items.map((a) => (
+            <li key={a.archivo} className="flex flex-wrap items-center gap-3 rounded-control border border-border p-3">
+              <span className="rounded-control border border-border-strong px-2 py-0.5 font-mono text-[11px] text-on-surface-muted">{NOMBRES_TIPO_AGENTE_SKILL[a.tipo]}</span>
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="font-mono text-[13px] text-on-surface">{a.nombre}</span>
+                {a.descripcion && <span className="line-clamp-2 text-[12px] text-on-surface-muted">{a.descripcion}</span>}
+                <span className="text-[12px] text-on-surface-muted">Usado en: {a.usadoEn.length > 0 ? a.usadoEn.join(', ') : 'en prueba'}</span>
+              </div>
+              <Button variant="secondary" disabled={ocupado} onClick={() => correr(() => api.abrir(a.archivo))}>
+                Ver archivo
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Seccion>
   )
 }
 

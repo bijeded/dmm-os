@@ -43,6 +43,7 @@ import {
 import { agregarTarea, borrarTarea, completarTarea, listarTareas } from './tareas'
 import { escanearCarpetas, importarFacturas, marcarHddNoDisponible } from './importacion'
 import { ejecutarCli, leerUso, resumenAi, type EjecutarUso } from './ai'
+import { agentesYSkills, rutaAgenteOSkill } from './agentes-skills'
 import { archivosLab, buscarLab, carpetasLab, rutaEnLab, vistaPreviaLab } from './lab'
 import { alDia } from './ledger'
 import { leerRutas } from './rutas'
@@ -222,7 +223,12 @@ export function crearHandlers({
     },
     ai: {
       resumen: (periodo) => resumenAi(conexion.db, conexion.ajustes, periodo, hoy()),
-      leerUso: () => leerUso(conexion.db, conexion.ajustes, info.dmmOsRoot, ejecutarUso, ahora())
+      leerUso: () => leerUso(conexion.db, conexion.ajustes, info.dmmOsRoot, ejecutarUso, ahora()),
+      agentesYSkills: () => agentesYSkills(conexion.db, info.dmmOsRoot),
+      abrir: async (archivo) => {
+        const error = await abrirCarpeta(rutaAgenteOSkill(info.dmmOsRoot, archivo))
+        if (error) throw new Error(error)
+      }
     }
   }
 }

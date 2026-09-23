@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import type { FilaSuscripcion, PeriodoAi, ResumenAi } from '../../../shared/dominio'
+import type { AgenteOSkill, FilaSuscripcion, PeriodoAi, ResumenAi } from '../../../shared/dominio'
 import type { DmmApi } from '../../../shared/contrato'
 import { dia, monto } from '../../../shared/formato'
 import { fecha } from './Seccion'
@@ -30,17 +30,27 @@ const resumen = (periodo: PeriodoAi, cambios: Partial<ResumenAi> = {}): ResumenA
   ...cambios
 })
 
+const AGENTES: AgenteOSkill[] = [
+  { tipo: 'agente', nombre: 'code-reviewer', descripcion: 'Revisa cambios antes de publicarlos.', archivo: 'agents/code-reviewer.md', usadoEn: ['Aura', 'Netdeckr'] },
+  { tipo: 'skill', nombre: 'design-md-planner', descripcion: null, archivo: 'skills/design-md-planner/SKILL.md', usadoEn: ['Netdeckr'] },
+  { tipo: 'skill', nombre: 'newsletter-writer', descripcion: 'Escribe el boletín.', archivo: 'skills/newsletter-writer/SKILL.md', usadoEn: [] }
+]
+
 let api: DmmApi['ai']
 
 const montar = (ai: Partial<DmmApi['ai']> = {}) => {
   api = {
     resumen: vi.fn(async (periodo: PeriodoAi) => resumen(periodo)),
     leerUso: vi.fn(async () => ({ ultimoEscaneo: ESCANEO, avisos: [] })),
+    agentesYSkills: vi.fn(async () => AGENTES),
+    abrir: vi.fn(async () => {}),
     ...ai
   }
   window.dmm = { ai: api } as unknown as DmmApi
   render(<Ai />)
 }
+
+const agente = (nombre: string) => within(screen.getByRole('list', { name: 'Agentes y Skills' })).getByText(nombre).closest('li') as HTMLElement
 
 const tarjeta = (label: RegExp) => within(screen.getByRole('list', { name: 'Resumen' })).getByText(label).closest('li') as HTMLElement
 
@@ -135,5 +145,41 @@ describe('AI', () => {
   it('says why the figures could not be read', async () => {
     montar({ resumen: vi.fn(async () => Promise.reject(new Error('disco lleno'))) })
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('disco lleno'))
+  })
+
+  it('lists the agents and skills with their type, description and the Proyectos that use them', async () => {
+    montar()
+    const lista = await screen.findByRole('list', { name: 'Agentes y Skills' })
+    expect(within(lista).getAllByRole('listitem')).toHaveLength(3)
+    expect(agente('code-reviewer').textContent).toContain('agente')
+    expect(agente('code-reviewer').textContent).toContain('Revisa cambios antes de publicarlos.')
+    expect(agente('code-reviewer').textContent).toContain('Usado en: Aura, Netdeckr')
+    expect(agente('design-md-planner').textContent).toContain('skill')
+    expect(agente('design-md-planner').textContent).toContain('Usado en: Netdeckr')
+  })
+
+  it('marks an item no Proyecto uses as en prueba', async () => {
+    montar()
+    await screen.findByRole('list', { name: 'Agentes y Skills' })
+    expect(agente('newsletter-writer').textContent).toContain('Usado en: en prueba')
+  })
+
+  it('opens an agent’s or skill’s file', async () => {
+    montar()
+    await screen.findByRole('list', { name: 'Agentes y Skills' })
+    fireEvent.click(within(agente('newsletter-writer')).getByRole('button', { name: 'Ver archivo' }))
+    await waitFor(() => expect(api.abrir).toHaveBeenCalledWith('skills/newsletter-writer/SKILL.md'))
+  })
+
+  it('says why Agentes y Skills could not be read, and still shows the cards', async () => {
+    montar({ agentesYSkills: vi.fn(async () => Promise.reject(new Error('No se encontró la carpeta AI/'))) })
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('No se encontró la carpeta AI/'))
+    expect(screen.queryByRole('list', { name: 'Agentes y Skills' })).toBeNull()
+    expect((await screen.findByText('15.7 M'))).toBeTruthy()
+  })
+
+  it('says when AI/ has no agents or skills', async () => {
+    montar({ agentesYSkills: vi.fn(async () => []) })
+    expect(await screen.findByText('Ningún agente ni skill en AI/.')).toBeTruthy()
   })
 })
