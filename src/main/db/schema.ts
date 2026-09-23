@@ -334,6 +334,8 @@ export const costos = sqliteTable(
       onDelete: 'restrict'
     }),
     cfdiUuid: text('cfdi_uuid'),
+    // Suscripción de IA on a one-off Costo; a recurring one carries it on its definición.
+    suscripcionIa: integer('suscripcion_ia', { mode: 'boolean' }).notNull().default(false),
     notas: text('notas'),
     creadoEn: creadoEn()
   },

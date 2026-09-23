@@ -207,26 +207,42 @@ function tipoCambioReciente(db: Db): number | null {
   return Math.round(tasa * 10_000) / 10_000
 }
 
+/** A proveedor's words, compared as `clave` compares names: `ANTHROPIC, PBC` is `anthropic pbc`. */
+const palabras = (proveedor: string | null) => clave(proveedor ?? '').split(' ').filter(Boolean)
+
 /**
- * Suscripciones: the Costos from a definición marked Suscripción de IA, or with the proveedor of
- * one (which catches received CFDIs from the same vendor). Read straight from Costos, as Finanzas
- * reads them, never copied; cancelled ones don't count. Newest first.
+ * Whether `proveedor` is the vendor named `marcado`, or its legal name: `OPENAI OPCO LLC` is
+ * OpenAI, `ANTHROPOLOGIE SA` is not Anthropic.
+ */
+const esDelProveedor = (marcado: string[], proveedor: string[]) => marcado.every((p, i) => proveedor[i] === p)
+
+/**
+ * Suscripciones: the Costos marked Suscripción de IA (a recurring one through its definición), or
+ * from the proveedor of a marked one, under its own name or its legal name (which catches received
+ * CFDIs from the same vendor). Read straight from Costos, as Finanzas reads them, never copied;
+ * cancelled ones don't count. Newest first.
  */
 function suscripciones(db: Db, rango: Rango): FilaSuscripcion[] {
-  const marcadas = db
+  const definiciones = db
     .select({ id: definicionesCosto.id, proveedor: definicionesCosto.proveedor })
     .from(definicionesCosto)
     .where(eq(definicionesCosto.suscripcionIa, true))
     .all()
-  const definiciones = new Set(marcadas.map((d) => d.id))
-  const proveedores = new Set(marcadas.map((d) => clave(d.proveedor ?? '')).filter(Boolean))
+  const marcadas = new Set(definiciones.map((d) => d.id))
+  const unicos = db.select({ proveedor: costos.proveedor }).from(costos).where(eq(costos.suscripcionIa, true)).all()
+  const proveedores = [...definiciones, ...unicos].map((m) => palabras(m.proveedor)).filter((p) => p.length > 0)
   return db
     .select()
     .from(costos)
     .where(and(ne(costos.estado, 'cancelado'), gte(costos.fecha, rango.desde), lte(costos.fecha, rango.hasta)))
     .orderBy(desc(costos.fecha), desc(costos.id))
     .all()
-    .filter((c) => (c.definicionId !== null && definiciones.has(c.definicionId)) || (c.proveedor !== null && proveedores.has(clave(c.proveedor))))
+    .filter(
+      (c) =>
+        c.suscripcionIa ||
+        (c.definicionId !== null && marcadas.has(c.definicionId)) ||
+        proveedores.some((p) => esDelProveedor(p, palabras(c.proveedor)))
+    )
     .map((c) => ({ id: c.id, proveedor: c.proveedor, plan: c.nombre, fecha: c.fecha, monto: c.subtotal, origen: c.cfdiUuid ? 'cfdi' : 'manual' }))
 }
 
