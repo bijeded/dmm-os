@@ -1,4 +1,5 @@
 import { XMLParser } from 'fast-xml-parser'
+import { TASA_IVA } from '../shared/montos'
 
 /** `I` ingreso, `E` egreso (nota de crédito), `P` pago, `N` nómina, `T` traslado. */
 export const TIPOS_CFDI = ['I', 'E', 'P', 'N', 'T'] as const
@@ -56,7 +57,7 @@ function hijo(padre: unknown, nombre: string): Nodo | undefined {
 
 /** IVA is 0 or 16% of the subtotal to within a centavo; anything else is returned as a percent. */
 function tasaInusual(subtotal: number, iva: number): number | null {
-  if (iva === 0 || Math.abs(iva - subtotal * 0.16) <= 1) return null
+  if (iva === 0 || Math.abs(iva - subtotal * TASA_IVA) <= 1) return null
   // IVA on a zero subtotal has no rate, and is as unusual as it gets.
   return subtotal === 0 ? 100 : Math.round((iva / subtotal) * 10_000) / 100
 }
