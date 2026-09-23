@@ -1,18 +1,11 @@
-import { and, eq, lte } from 'drizzle-orm'
 import type { Db } from './db'
+import { calendarioPeriodos, type PeriodoCosto } from './db/calendario'
 import { coberturaCostos } from './db/cobertura'
-import { fechaEnPeriodo, sumarAnios, sumarDias, sumarMeses } from '../shared/fechas'
+import { sumarAnios, sumarDias, sumarMeses } from '../shared/fechas'
 import { monedaDe } from './dinero'
-import { accionesCosto, origenCosto, type Costo, type Definicion } from './ciclo-costo'
+import { accionesCosto, origenCosto, type Costo } from './ciclo-costo'
 import { accionesIngreso, origenIngreso, reembolsableIngreso, restante, type Ingreso } from './ciclo-ingreso'
-import {
-  contactos,
-  costos,
-  definicionesCosto,
-  ingresos,
-  proyectos,
-  vigenciasPrecio
-} from './db/schema'
+import { contactos, costos, definicionesCosto, ingresos, proyectos } from './db/schema'
 import type { CifrasFinanzas, FilaCosto, FilaIngreso, PagoProximo, PeriodoFinanzas, PuntoFinanzas, Rango, ResumenFinanzas } from '../shared/dominio'
 
 /** Days after which an unpaid invoice is Cobranza vencida, unless configured otherwise. */
@@ -131,38 +124,17 @@ function serie(periodo: PeriodoFinanzas, todosIngresos: Ingreso[], todosCostos: 
 }
 
 /**
- * The next period of each series still running that is not generated yet, within the horizon.
- * A monthly series stops with its closed Proyecto unless it came from a Cotización, as in
- * `generarPeriodos`.
+ * The Periodo schedule's next period of each Costo series that is not generated yet, within the
+ * horizon. One with no Vigencia de precio yet shows nothing.
  */
-function siguientesPeriodos(db: Db, defs: Definicion[], periodoActual: string, hoy: string, hasta: string): PagoProximo[] {
-  const cerrados = new Set(
-    db
-      .select({ id: proyectos.id, estado: proyectos.estado })
-      .from(proyectos)
-      .all()
-      .filter((p) => p.estado === 'completado' || p.estado === 'cancelado')
-      .map((p) => p.id)
+function siguientesPeriodos(db: Db, periodoActual: string, hoy: string, hasta: string): PagoProximo[] {
+  const siguiente = new Map<number, PeriodoCosto>()
+  for (const p of calendarioPeriodos(db, hasta.slice(0, 7)).costos) {
+    if (p.periodo > periodoActual && !siguiente.has(p.definicion.id)) siguiente.set(p.definicion.id, p)
+  }
+  return [...siguiente.values()].flatMap(({ definicion: d, fecha, precio }) =>
+    precio && fecha >= hoy && fecha <= hasta ? [{ fecha, nombre: d.nombre, proveedor: d.proveedor, categoria: d.tipo, total: precio.total }] : []
   )
-  return defs.flatMap((d) => {
-    if (d.tipo === 'mensual' && d.cotizacionId === null && d.proyectoId !== null && cerrados.has(d.proyectoId)) return []
-    const cada = d.tipo === 'anual' ? 12 : 1
-    let k = 0
-    let p = d.periodoInicio
-    for (; p <= periodoActual; p = sumarMeses(p, cada)) k++
-    if (d.periodoFin !== null && p > d.periodoFin) return []
-    if (d.numeroParcialidades !== null && k >= d.numeroParcialidades) return []
-    const fecha = fechaEnPeriodo(p, d.diaDelMes)
-    if (fecha < hoy || fecha > hasta) return []
-    const vigencia = db
-      .select()
-      .from(vigenciasPrecio)
-      .where(and(eq(vigenciasPrecio.definicionCostoId, d.id), lte(vigenciasPrecio.desde, p)))
-      .orderBy(vigenciasPrecio.desde)
-      .all()
-      .at(-1)
-    return vigencia ? [{ fecha, nombre: d.nombre, proveedor: d.proveedor, categoria: d.tipo, total: vigencia.total }] : []
-  })
 }
 
 /**
@@ -238,7 +210,7 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     ...pendientesCosto
       .filter((c) => c.fecha >= hoy && c.fecha <= horizonte)
       .map((c) => ({ fecha: c.fecha, nombre: c.nombre, proveedor: c.proveedor, categoria: c.categoria, total: c.total })),
-    ...siguientesPeriodos(db, defs, periodoActual, hoy, horizonte)
+    ...siguientesPeriodos(db, periodoActual, hoy, horizonte)
   ].sort(porFecha((p) => p.fecha))
 
   const actual = cifras(todosIngresos, todosCostos, rango, sinDatos)
