@@ -9,6 +9,7 @@ import { FichaContacto } from './components/FichaContacto'
 import { FichaProyecto } from './components/FichaProyecto'
 import { Finanzas } from './components/Finanzas'
 import { Inicio } from './components/Inicio'
+import { Lab } from './components/Lab'
 import { NuevaCotizacion } from './components/NuevaCotizacion'
 import { NuevoCosto, NuevoIngreso } from './components/NuevoMovimiento'
 import { NuevoProyecto } from './components/NuevoProyecto'
@@ -23,6 +24,7 @@ const pantallas: Record<string, ReactElement> = {
   '/contactos': <Contactos />,
   '/cotizaciones': <Cotizaciones />,
   '/finanzas': <Finanzas />,
+  '/lab': <Lab />,
   '/proyectos': <Proyectos />
 }
 

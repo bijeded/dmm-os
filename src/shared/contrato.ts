@@ -1,5 +1,7 @@
 import type {
+  ArchivoLab,
   CarpetaAbrible,
+  CarpetaLab,
   CoberturaAnual,
   ConceptoCatalogo,
   ConceptoNuevo,
@@ -167,6 +169,15 @@ export const contrato = {
   inicio: {
     /** This month, Proyectos en curso, open Cotizaciones and Tareas, in one read. */
     resumen: canal<[], ResumenInicio>()
+  },
+  /** Read-only view of `Lab/`. Paths are relative to `Lab/`; anything outside it is refused. */
+  lab: {
+    /** Every subfolder, read per call, with its file count. Refused with why when `Lab/` can't be read. */
+    carpetas: canal<[], CarpetaLab[]>(),
+    /** One folder's files, newest first. */
+    archivos: canal<[carpeta: string], ArchivoLab[]>(),
+    /** Opens a file in its default app, or a folder in Finder. */
+    abrir: canal<[ruta: string], void>()
   }
 }
 
