@@ -41,6 +41,23 @@ describe('dinero', () => {
     expect(montos(100, { iva: 16, retenciones: 10, tasaUsd: 18 })).toEqual({ subtotal: 1800, iva: 288, retenciones: 180, total: 1908, montoOriginal: 106, monedaOriginal: 'USD' })
   })
 
+  it('takes a given total that balances, and refuses one that does not', () => {
+    expect(montos(100_000, { iva: 16_000, retenciones: 20_667, total: 95_333 })).toMatchObject({ total: 95_333 })
+    expect(() => montos(100_000, { iva: 16_000, retenciones: 20_667, total: 116_000 })).toThrow()
+    expect(() => montos(100, { iva: 16, tasaUsd: 18, total: 115 })).toThrow()
+  })
+
+  it('keeps a given USD original for amounts already in pesos', () => {
+    expect(montos(185_000, { iva: 29_600, retenciones: 18_500, total: 196_100, montoOriginal: 10_600 })).toEqual({
+      subtotal: 185_000,
+      iva: 29_600,
+      retenciones: 18_500,
+      total: 196_100,
+      montoOriginal: 10_600,
+      monedaOriginal: 'USD'
+    })
+  })
+
   it('splits an amount into parts that add up exactly, the remainder on the first', () => {
     expect(repartir(10_000, 3)).toEqual([3334, 3333, 3333])
     expect(repartir(1600, 3)).toEqual([534, 533, 533])

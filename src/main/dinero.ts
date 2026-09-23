@@ -43,21 +43,34 @@ export interface MontosRegistrados {
  * The one constructor for recorded amounts. `iva` is whether 16% IVA applies on `subtotal`, or the
  * IVA itself; the total is subtotal + IVA − retenciones. With `tasaUsd` the inputs are USD cents:
  * each part converts at the rate and their USD total is kept as the original, which Cobros compares
- * against. Without one they are centavos.
+ * against. Without one they are centavos, and `montoOriginal` is the USD total they were already
+ * converted from, if any (a CFDI converts each part at its own TipoCambio). A given `total`, in the
+ * inputs' units, is only checked: it must balance with them, or the amounts are refused. Each part
+ * converts on its own, so the recorded total is the sum of converted parts, not the converted sum.
  */
 export function montos(
   subtotal: number,
-  { iva, retenciones = 0, tasaUsd = null }: { iva: boolean | number; retenciones?: number; tasaUsd?: number | null }
+  {
+    iva,
+    retenciones = 0,
+    total,
+    tasaUsd = null,
+    montoOriginal = null
+  }: { iva: boolean | number; retenciones?: number; total?: number; tasaUsd?: number | null; montoOriginal?: number | null }
 ): MontosRegistrados {
   const impuesto = typeof iva === 'number' ? iva : ivaDe(subtotal, iva)
+  const suma = subtotal + impuesto - retenciones
+  if (total !== undefined && total !== suma)
+    throw new Error(`El total ${total} no cuadra con subtotal + IVA − retenciones (${suma})`)
   const mxn = (n: number) => (tasaUsd === null ? n : convertir(n, 'USD', 'MXN', tasaUsd))
+  const original = tasaUsd === null ? montoOriginal : suma
   return {
     subtotal: mxn(subtotal),
     iva: mxn(impuesto),
     retenciones: mxn(retenciones),
     total: mxn(subtotal) + mxn(impuesto) - mxn(retenciones),
-    montoOriginal: tasaUsd === null ? null : subtotal + impuesto - retenciones,
-    monedaOriginal: tasaUsd === null ? null : 'USD'
+    montoOriginal: original,
+    monedaOriginal: original === null ? null : 'USD'
   }
 }
 
