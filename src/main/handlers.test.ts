@@ -1,16 +1,17 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { eq } from 'drizzle-orm'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDatabase, type Conexion } from './db'
 import { contactos, costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, vigenciasPrecio } from './db/schema'
 import { MENSAJE_SIN_PAGAR } from './ciclo-proyecto'
+import { MENSAJE_REEMBOLSO_EXCEDIDO } from './dinero'
 import { crearHandlers, type HandlersOptions } from './handlers'
 import { MENSAJE_MONTO } from '../shared/montos'
 import { cfdiXml } from './test-cfdi'
 import type { DmmHandlers } from '../shared/contrato'
-import { ESTADOS_PROYECTO, type AccionCosto, type AccionCotizacion, type AccionIngreso, type AccionProyecto, type FichaCotizacion, type FichaProyecto, type FilaCosto, type FilaIngreso } from '../shared/dominio'
+import { ESTADOS_PROYECTO, type AccionCosto, type AccionCotizacion, type AccionIngreso, type AccionProyecto, type CategoriaCosto, type FichaCotizacion, type FichaProyecto, type FilaCosto, type FilaIngreso } from '../shared/dominio'
 
 const migrationsFolder = resolve(import.meta.dirname, '../../drizzle')
 
@@ -407,69 +408,227 @@ describe('finanzas', () => {
     await expect(Promise.resolve().then(() => h.finanzas.nuevoIngreso({ ...nuevo, subtotal: 0 }))).rejects.toThrow(MENSAJE_MONTO)
     await expect(Promise.resolve().then(() => h.finanzas.nuevoIngreso({ ...nuevo, subtotal: 1.5 }))).rejects.toThrow(MENSAJE_MONTO)
   })
+})
 
-  /** Runs `accion` on the row and checks it succeeds exactly when the row offered it. */
-  async function ofreceLoQueAcepta<A extends string>(acciones: readonly A[], preparar: () => Promise<{ id: number; acciones: A[] }>, hacer: (a: A, id: number) => unknown) {
-    for (const accion of acciones) {
-      const fila = await preparar()
-      const resultado = await Promise.resolve()
-        .then(() => hacer(accion, fila.id))
-        .then(
-          () => true,
-          () => false
-        )
-      expect([accion, resultado]).toEqual([accion, fila.acciones.includes(accion)])
+/**
+ * Offered = accepted: every Ingreso and Costo kind, seeded once through the handlers. Each row's
+ * actions come from Finanzas' summary; each action then runs through its command on a fresh copy
+ * of the seeded data, and succeeds exactly when the row offered it, else is refused with its message.
+ */
+describe('Finanzas offers on each row exactly the actions its command accepts', () => {
+  const RECHAZOS_INGRESO: Record<AccionIngreso, string> = {
+    pagar: 'Solo se marca pagado un ingreso pendiente',
+    cancelar: 'Solo se cancela un ingreso pendiente',
+    borrar: 'Este ingreso tiene registros vinculados; cancélalo en lugar de borrarlo',
+    reembolsar: 'Solo se reembolsa un ingreso pagado'
+  }
+  const RECHAZOS_COSTO: Record<AccionCosto, string> = {
+    pagar: 'Solo se marca pagado un costo pendiente',
+    cancelar: 'Solo se cancela un costo pendiente',
+    borrar: 'Este costo tiene registros vinculados; cancélalo en lugar de borrarlo',
+    detener: 'Este costo no pertenece a una serie que se pueda detener'
+  }
+
+  /** Each seeded row, the actions it offers, and a refusal that differs from its action's usual one. */
+  type Caso<A extends string> = [nombre: string, acciones: A[], opciones?: { fueraDelResumen?: true; rechazos?: Partial<Record<A, string>> }]
+  const INGRESOS: Caso<AccionIngreso>[] = [
+    ['pendiente', ['pagar', 'cancelar', 'borrar']],
+    ['pagado', ['borrar', 'reembolsar']],
+    // Finanzas lists no cancelled Ingreso; its command still accepts only what the lifecycle allows.
+    ['cancelado', ['borrar'], { fueraDelResumen: true }],
+    ['con un Reembolso', ['reembolsar']],
+    ['Reembolso parcial', ['borrar']],
+    ['reembolsado del todo', [], { rechazos: { reembolsar: MENSAJE_REEMBOLSO_EXCEDIDO } }],
+    ['Reembolso total', ['borrar']],
+    ['USD pagado y reembolsado en parte', ['reembolsar']],
+    ['Reembolso en USD', ['borrar']],
+    ['de un CFDI', ['reembolsar']],
+    ['de un Periodo', ['pagar', 'cancelar']],
+    ['de un Periodo cancelado', [], { fueraDelResumen: true }]
+  ]
+  const COSTOS: Caso<AccionCosto>[] = [
+    ['único pendiente', ['pagar', 'cancelar', 'borrar']],
+    ['único pagado', ['borrar']],
+    ['único cancelado', ['borrar'], { fueraDelResumen: true }],
+    ['de una Cotización', ['pagar', 'cancelar']],
+    ['mensual', ['pagar', 'cancelar', 'detener']],
+    ['mensual detenido', ['pagar', 'cancelar']],
+    ['MSI', ['pagar', 'cancelar']],
+    ['anual', ['pagar', 'cancelar', 'detener']]
+  ]
+
+  const hacerIngreso = (hh: DmmHandlers, a: AccionIngreso, id: number) =>
+    a === 'reembolsar' ? hh.finanzas.reembolsar(id, 1) : hh.finanzas[`${a}Ingreso` as const](id)
+  const hacerCosto = (hh: DmmHandlers, a: AccionCosto, id: number) => hh.finanzas[`${a}Costo` as const](id)
+
+  /** Every seeded row by its name in the table, through the handlers as the owner would. */
+  async function sembrar(): Promise<{ ingresos: Record<string, number>; costos: Record<string, number> }> {
+    const ultimo = <T extends { id: number }>(filas: T[]) => filas.reduce((a, b) => (a.id > b.id ? a : b)).id
+    const ultimoIngreso = () => ultimo(conexion.db.select().from(ingresos).all())
+    const ultimoCosto = () => ultimo(conexion.db.select().from(costos).all())
+    const i: Record<string, number> = {}
+    const c: Record<string, number> = {}
+
+    // A monthly Cotización accepted in August, with an estimated one-time Costo: its August Periodo is cancelled.
+    reloj('2026-08-16')
+    const { id: contactoId } = conexion.db.insert(contactos).values({ nombre: 'Café Luna' }).returning().get()
+    const { id: cotizacionId } = await h.cotizaciones.guardar({
+      contactoId,
+      nombre: 'Mantenimiento',
+      categoria: 'website',
+      fecha: '2026-08-16',
+      validezDias: 30,
+      moneda: 'MXN',
+      partidas: [{ concepto: 'Mantenimiento', categoria: 'website', cantidad: 1, precio: 100_000 }],
+      conIva: false,
+      facturacion: 'mensual',
+      parcialidades: null,
+      stack: null,
+      terminos: null,
+      notas: null,
+      costosEstimados: [{ concepto: 'Hosting', monto: 50_000, categoria: 'unico', parcialidades: null }]
+    })
+    await h.cotizaciones.enviar(cotizacionId)
+    await h.cotizaciones.aceptar(cotizacionId)
+    c['de una Cotización'] = ultimoCosto()
+    reloj('2026-09-16')
+    await h.finanzas.resumen('todo')
+    const periodos = conexion.db.select().from(ingresos).all().filter((x) => x.definicionId !== null)
+    i['de un Periodo cancelado'] = periodos.find((x) => x.periodo === '2026-08')!.id
+    i['de un Periodo'] = periodos.find((x) => x.periodo === '2026-09')!.id
+    await h.finanzas.cancelarIngreso(i['de un Periodo cancelado'])
+
+    const ingreso = async (pagado: boolean) => {
+      await h.finanzas.nuevoIngreso({ categoria: 'sin_factura', facturado: false, contactoId: null, proyectoId: null, fecha: '2026-09-16', subtotal: 1000, conIva: false, pagado, notas: null })
+      return ultimoIngreso()
+    }
+    i['pendiente'] = await ingreso(false)
+    i['pagado'] = await ingreso(true)
+    i['cancelado'] = await ingreso(false)
+    await h.finanzas.cancelarIngreso(i['cancelado'])
+    i['con un Reembolso'] = await ingreso(true)
+    await h.finanzas.reembolsar(i['con un Reembolso'], 400)
+    i['Reembolso parcial'] = ultimoIngreso()
+    i['reembolsado del todo'] = await ingreso(true)
+    await h.finanzas.reembolsar(i['reembolsado del todo'], 1000)
+    i['Reembolso total'] = ultimoIngreso()
+
+    mkdirSync(join(root, 'Facturas', 'Emitidas', '2026'), { recursive: true })
+    const mxn = '11111111-0000-4444-8888-99AABBCCDDEE'
+    const usd = '22222222-0000-4444-8888-99AABBCCDDEE'
+    writeFileSync(join(root, 'Facturas', 'Emitidas', '2026', 'mxn.xml'), cfdiXml({ uuid: mxn, fecha: '2026-09-01' }))
+    writeFileSync(join(root, 'Facturas', 'Emitidas', '2026', 'usd.xml'), cfdiXml({ uuid: usd, fecha: '2026-09-01', moneda: 'USD', tipoCambio: '17.50' }))
+    await h.importacion.facturas()
+    const deCfdi = (uuid: string) => conexion.db.select().from(ingresos).where(eq(ingresos.cfdiUuid, uuid.toLowerCase())).get()!.id
+    i['de un CFDI'] = deCfdi(mxn)
+    i['USD pagado y reembolsado en parte'] = deCfdi(usd)
+    await h.finanzas.reembolsar(i['USD pagado y reembolsado en parte'], 5_000)
+    i['Reembolso en USD'] = ultimoIngreso()
+
+    const costo = async (categoria: CategoriaCosto, pagado = false) => {
+      await h.finanzas.nuevoCosto({ nombre: `Costo ${categoria}`, proveedor: null, referencia: null, categoria, proyectoId: null, fecha: '2026-09-01', subtotal: 1000, conIva: false, parcialidades: categoria === 'msi' ? 3 : null, suscripcionIa: false, pagado })
+      await h.finanzas.resumen('todo')
+      return ultimoCosto()
+    }
+    c['único pendiente'] = await costo('unico')
+    c['único pagado'] = await costo('unico', true)
+    c['único cancelado'] = await costo('unico')
+    await h.finanzas.cancelarCosto(c['único cancelado'])
+    c['mensual'] = await costo('mensual')
+    c['mensual detenido'] = await costo('mensual')
+    await h.finanzas.detenerCosto(c['mensual detenido'])
+    c['MSI'] = await costo('msi')
+    c['anual'] = await costo('anual')
+    return { ingresos: i, costos: c }
+  }
+
+  let mundo: { archivo: string; ids: Awaited<ReturnType<typeof sembrar>> } | undefined
+  const abiertas: Conexion[] = []
+  afterEach(() => abiertas.splice(0).forEach((c) => c.close()))
+
+  /** The seeded rows' ids, seeding them the first time. */
+  async function ids() {
+    if (!mundo) {
+      const ids = await sembrar()
+      const archivo = join(mkdtempSync(join(tmpdir(), 'dmm-mundo-')), 'mundo.db')
+      conexion.copiarA(archivo)
+      mundo = { archivo, ids }
+    }
+    return mundo.ids
+  }
+
+  /** Handlers on hoy, over a fresh copy of the seeded data. */
+  function copia(): DmmHandlers {
+    const archivo = join(mkdtempSync(join(tmpdir(), 'dmm-copia-')), 'copia.db')
+    copyFileSync(mundo!.archivo, archivo)
+    const c = createDatabase(migrationsFolder).abrir(archivo)
+    abiertas.push(c)
+    return crearHandlers({ ...opciones, conexion: c })
+  }
+
+  const filas = async () => {
+    const r = await copia().finanzas.resumen('todo')
+    return {
+      ingresos: new Map([...r.cobrado, ...r.cobranza, ...r.ingresos].map((f) => [f.id, f])),
+      costos: new Map([...r.costosPendientes, ...r.costos].map((f) => [f.id, f]))
     }
   }
 
-  const ingreso = async (pagado: boolean) => {
-    await h.finanzas.nuevoIngreso({ categoria: 'sin_factura', facturado: false, contactoId: null, proyectoId: null, fecha: '2026-09-16', subtotal: 1000, conIva: false, pagado, notas: null })
-    return (await h.finanzas.resumen('mes')).ingresos.reduce((a, b) => (a.id > b.id ? a : b))
+  /** The error each action ends in on a fresh copy, `null` when it succeeds. */
+  async function resultados<A extends string>(acciones: readonly A[], hacer: (hh: DmmHandlers, a: A) => unknown) {
+    const r: Partial<Record<A, string | null>> = {}
+    for (const a of acciones)
+      r[a] = await Promise.resolve()
+        .then(() => hacer(copia(), a))
+        .then(
+          () => null,
+          (e: Error) => e.message
+        )
+    return r
   }
-  const filaIngreso = async (id: number) => (await h.finanzas.resumen('mes')).ingresos.find((i) => i.id === id)!
-  const hacerIngreso = (a: AccionIngreso, id: number) =>
-    a === 'reembolsar' ? h.finanzas.reembolsar(id, 1) : h.finanzas[`${a}Ingreso` as const](id)
-  const accionesIngreso = ['pagar', 'cancelar', 'borrar', 'reembolsar'] as const
 
-  it.each([
-    ['pendiente', () => ingreso(false)],
-    ['pagado', () => ingreso(true)],
-    [
-      'reembolsado del todo',
-      async () => {
-        const { id } = await ingreso(true)
-        await h.finanzas.reembolsar(id, 1000)
-        return filaIngreso(id)
-      }
-    ]
-  ] as const)('offers on a %s Ingreso exactly the actions it accepts', async (_, preparar) => {
-    await ofreceLoQueAcepta(accionesIngreso, preparar, hacerIngreso)
+  it('shows every seeded row but the cancelled ones, and no other', async () => {
+    const { ingresos: i, costos: c } = await ids()
+    const { ingresos: fi, costos: fc } = await filas()
+    const enResumen = <A extends string>(casos: Caso<A>[], ids: Record<string, number>) =>
+      casos.filter(([, , o]) => !o?.fueraDelResumen).map(([n]) => ids[n]).sort((a, b) => a - b)
+    expect([...fi.keys()].sort((a, b) => a - b)).toEqual(enResumen(INGRESOS, i))
+    expect([...fc.keys()].sort((a, b) => a - b)).toEqual(enResumen(COSTOS, c))
   })
 
-  let n = 0
-  const costo = async (categoria: 'unico' | 'mensual' | 'msi', pagado = false) => {
-    const nombre = `C${++n}`
-    await h.finanzas.nuevoCosto({ nombre, proveedor: null, referencia: null, categoria, proyectoId: null, fecha: '2026-09-01', subtotal: 1000, conIva: false, parcialidades: categoria === 'msi' ? 3 : null, suscripcionIa: false, pagado })
-    return (await h.finanzas.resumen('mes')).costos.find((c) => c.nombre === nombre)!
-  }
-  const accionesCosto = ['pagar', 'cancelar', 'borrar', 'detener'] as const
-  const hacerCosto = (a: AccionCosto, id: number) => h.finanzas[`${a}Costo` as const](id)
+  it.each(INGRESOS)('an Ingreso %s', async (nombre, acciones, o) => {
+    const id = (await ids()).ingresos[nombre]
+    const fila = (await filas()).ingresos.get(id)
+    expect(fila?.acciones).toEqual(o?.fueraDelResumen ? undefined : acciones)
+    const todas = Object.keys(RECHAZOS_INGRESO) as AccionIngreso[]
+    expect(await resultados(todas, (hh, a) => hacerIngreso(hh, a, id))).toEqual(
+      Object.fromEntries(todas.map((a) => [a, acciones.includes(a) ? null : (o?.rechazos?.[a] ?? RECHAZOS_INGRESO[a])]))
+    )
+  })
 
-  it.each([
-    ['pendiente', () => costo('unico')],
-    ['pagado', () => costo('unico', true)],
-    ['mensual', () => costo('mensual')],
-    ['MSI', () => costo('msi')],
-    [
-      'mensual detenido',
-      async () => {
-        const { id, nombre } = await costo('mensual')
-        await h.finanzas.detenerCosto(id)
-        return (await h.finanzas.resumen('mes')).costos.find((c) => c.nombre === nombre)!
-      }
-    ]
-  ] as const)('offers on a %s Costo exactly the actions it accepts', async (_, preparar) => {
-    await ofreceLoQueAcepta(accionesCosto, preparar, hacerCosto)
+  it.each(COSTOS)('a Costo %s', async (nombre, acciones, o) => {
+    const id = (await ids()).costos[nombre]
+    const fila = (await filas()).costos.get(id)
+    expect(fila?.acciones).toEqual(o?.fueraDelResumen ? undefined : acciones)
+    const todas = Object.keys(RECHAZOS_COSTO) as AccionCosto[]
+    expect(await resultados(todas, (hh, a) => hacerCosto(hh, a, id))).toEqual(
+      Object.fromEntries(todas.map((a) => [a, acciones.includes(a) ? null : (o?.rechazos?.[a] ?? RECHAZOS_COSTO[a])]))
+    )
+  })
+
+  it('refunds exactly what the row shows is left, and not one centavo more', async () => {
+    const id = (await ids()).ingresos['USD pagado y reembolsado en parte']
+    const { reembolsable } = (await filas()).ingresos.get(id)!
+    expect(reembolsable).toBe(116_000 - 5_000)
+    const reembolsar = (monto: number) =>
+      Promise.resolve()
+        .then(() => copia().finanzas.reembolsar(id, monto))
+        .then(
+          () => null,
+          (e: Error) => e.message
+        )
+    expect(await reembolsar(reembolsable)).toBeNull()
+    expect(await reembolsar(reembolsable + 1)).toBe(MENSAJE_REEMBOLSO_EXCEDIDO)
   })
 })
 

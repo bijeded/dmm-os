@@ -4,9 +4,9 @@ import { coberturaCostos } from './db/cobertura'
 import { sumarAnios, sumarDias, sumarMeses } from '../shared/fechas'
 import { monedaDe } from './dinero'
 import { fechaIngreso } from './ledger'
-import { accionesCosto, origenCosto, type Costo } from './ciclo-costo'
-import { accionesIngreso, origenIngreso, reembolsableIngreso, restante, type Ingreso } from './ciclo-ingreso'
-import { contactos, costos, definicionesCosto, ingresos, proyectos } from './db/schema'
+import { accionesCostos, origenCosto, type Costo } from './ciclo-costo'
+import { accionesIngresos, origenIngreso, type Ingreso } from './ciclo-ingreso'
+import { contactos, costos, ingresos, proyectos } from './db/schema'
 import type { CifrasFinanzas, FilaCosto, FilaIngreso, PagoProximo, PeriodoFinanzas, PuntoFinanzas, Rango, ResumenFinanzas } from '../shared/dominio'
 
 /** Days after which an unpaid invoice is Cobranza vencida, unless configured otherwise. */
@@ -145,8 +145,6 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
 
   const todosIngresos = db.select().from(ingresos).all()
   const todosCostos = db.select().from(costos).all()
-  const defs = db.select().from(definicionesCosto).all()
-  const definicion = new Map(defs.map((d) => [d.id, d]))
   const nombreContacto = new Map(db.select({ id: contactos.id, nombre: contactos.nombre }).from(contactos).all().map((c) => [c.id, c.nombre]))
   const nombreProyecto = new Map(db.select({ id: proyectos.id, nombre: proyectos.nombre }).from(proyectos).all().map((p) => [p.id, p.nombre]))
 
@@ -158,8 +156,8 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
   const sinDatos = new Set(coberturaCostos(db, desde, anioDe(hoy)).filter((c) => c.sinDatos).map((c) => c.anio))
   const aniosSinDatos = (span: Rango | null) => (span ? [...sinDatos].filter((anio) => anio >= anioDe(span.desde) && anio <= anioDe(span.hasta)) : [])
 
-  const reembolsosDe = new Map<number, Ingreso[]>()
-  for (const i of todosIngresos) if (i.reembolsoDeId !== null) reembolsosDe.set(i.reembolsoDeId, [...(reembolsosDe.get(i.reembolsoDeId) ?? []), i])
+  const porIngreso = accionesIngresos(db, todosIngresos)
+  const porCosto = accionesCostos(db, todosCostos, hoy)
   const limiteVencida = sumarDias(hoy, -diasVencida)
   const filaIngreso = (i: Ingreso): FilaIngreso => ({
     id: i.id,
@@ -176,10 +174,10 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     origen: origenIngreso(i),
     vencida: i.estado === 'pendiente' && i.estadoFacturacion === 'facturado' && i.fechaRegistro !== null && i.fechaRegistro < limiteVencida,
     moneda: monedaDe(i),
-    reembolsable: reembolsableIngreso(i) ? restante(i, reembolsosDe.get(i.id) ?? []).original : 0,
+    reembolsable: porIngreso.get(i.id)!.reembolsable,
     reembolsoDeId: i.reembolsoDeId,
     notas: i.notas,
-    acciones: accionesIngreso(i, { reembolsos: reembolsosDe.get(i.id) ?? [] })
+    acciones: porIngreso.get(i.id)!.acciones
   })
   const filaCosto = (c: Costo): FilaCosto => ({
     id: c.id,
@@ -195,10 +193,7 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     retenciones: c.retenciones,
     total: c.total,
     origen: origenCosto(c),
-    acciones: accionesCosto(c, {
-      definicion: c.definicionId === null ? undefined : definicion.get(c.definicionId),
-      periodoActual
-    })
+    acciones: porCosto.get(c.id)!
   })
 
   const porFecha = <T>(f: (x: T) => string | null) => (a: T, b: T) => (f(a) ?? '').localeCompare(f(b) ?? '')
