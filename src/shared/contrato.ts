@@ -16,17 +16,20 @@ import type {
   FichaCotizacion,
   FichaProyecto,
   IngresoNuevo,
+  LecturaUso,
   ListaContactos,
   ListaCotizaciones,
   ListaProyectos,
   ListaTareas,
   LogCarpetas,
   LogImportacion,
+  PeriodoAi,
   PeriodoFinanzas,
   ProyectoNuevo,
   Respaldo,
   RespuestaSugerencia,
   ResultadoRestaurar,
+  ResumenAi,
   ResumenFinanzas,
   ResumenInicio,
   Rutas,
@@ -184,6 +187,13 @@ export const contrato = {
     vistaPrevia: canal<[ruta: string], VistaPreviaLab | null>(),
     /** Opens a file in its default app, or a folder in Finder. */
     abrir: canal<[ruta: string], void>()
+  },
+  /** Token usage imported from CC Usage and RTK, and what it would cost. */
+  ai: {
+    /** The figures for the period, from the usage last read. */
+    resumen: canal<[periodo: PeriodoAi], ResumenAi>(),
+    /** Re-reads CC Usage and RTK; safe to run again. A source that can't be read is named, the other still read. */
+    leerUso: canal<[], LecturaUso>()
   }
 }
 

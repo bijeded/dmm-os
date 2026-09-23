@@ -26,8 +26,8 @@ import {
   type CostoEstimado
 } from '../../shared/dominio'
 
-// Money is stored as integer centavos (MXN). Periods are 'YYYY-MM'. Dates are 'YYYY-MM-DD'.
-// File locations are relative paths (docs/adr/0001).
+// Money is stored as integer centavos (MXN); a USD amount, where one is kept, as integer USD cents.
+// Periods are 'YYYY-MM'. Dates are 'YYYY-MM-DD'. File locations are relative paths (docs/adr/0001).
 
 export const categorias = CATEGORIAS
 
@@ -361,6 +361,39 @@ export const asignacionesCosto = sqliteTable(
   },
   (t) => [uniqueIndex('asignaciones_costo_proyecto_unique').on(t.costoId, t.proyectoId)]
 )
+
+/**
+ * Token usage imported from CC Usage, one row per day, folder, provider and model. `carpeta` is
+ * the working directory as Claude Code names it (every character but letters and digits as `-`),
+ * relative to the DMM OS root (`Proyectos-Aura`); one outside the root keeps its whole name,
+ * starting with `-`. It is linked to a Proyecto when read, never here, so no key. A re-read
+ * replaces the rows of each day and folder it covers.
+ */
+export const usoTokens = sqliteTable(
+  'uso_tokens',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    /** `YYYY-MM-DD` */
+    dia: text('dia').notNull(),
+    carpeta: text('carpeta').notNull(),
+    proveedor: text('proveedor').notNull(),
+    modelo: text('modelo').notNull(),
+    tokensEntrada: integer('tokens_entrada').notNull(),
+    tokensSalida: integer('tokens_salida').notNull(),
+    tokensCacheEscritura: integer('tokens_cache_escritura').notNull(),
+    tokensCacheLectura: integer('tokens_cache_lectura').notNull(),
+    /** What the usage would cost through the API, in USD cents; approximate. */
+    costoUsd: integer('costo_usd').notNull()
+  },
+  (t) => [uniqueIndex('uso_tokens_unique').on(t.dia, t.carpeta, t.proveedor, t.modelo)]
+)
+
+/** Tokens RTK saved each day, imported from `rtk gain`. A re-read replaces the days it covers. */
+export const ahorroTokens = sqliteTable('ahorro_tokens', {
+  /** `YYYY-MM-DD` */
+  dia: text('dia').primaryKey(),
+  tokens: integer('tokens').notNull()
+})
 
 /**
  * What a guess changed, so rejecting its Sugerencia restores exactly that. `notas` holds the

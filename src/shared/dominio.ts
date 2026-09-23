@@ -500,6 +500,35 @@ export const NOMBRES_PERIODO_FINANZAS: Record<PeriodoFinanzas, string> = {
   todo: 'Todo el tiempo'
 }
 
+/** The periods the AI section reads: the same idea as Finanzas, fewer of them. */
+export const PERIODOS_AI = ['mes', 'todo'] as const satisfies readonly PeriodoFinanzas[]
+export type PeriodoAi = (typeof PERIODOS_AI)[number]
+
+/** How the last read of token usage went: when usage was last read, and why a source could not be. */
+export interface LecturaUso {
+  /** ISO timestamp of the last read that brought usage from either source; `null` before any. */
+  ultimoEscaneo: string | null
+  /** One readable message per source (CC Usage, RTK) that is missing or failed on the last read. */
+  avisos: string[]
+}
+
+/** The AI section's figures for a period. Money: centavos, and USD cents for the API cost. */
+export interface ResumenAi extends LecturaUso {
+  periodo: PeriodoAi
+  /** Input, output and cache tokens, as CC Usage counts them. */
+  tokens: number
+  /** Tokens RTK saved. */
+  tokensAhorrados: number
+  /** Saved ÷ (used + saved); `null` with neither. */
+  ahorro: number | null
+  /** What the usage would cost through the API. */
+  costoApiUsd: number
+  /** The same at `tipoCambio`; `null` when the app has no tipo de cambio recorded. */
+  costoApiMxn: number | null
+  /** The most recent pesos per USD recorded in the app. */
+  tipoCambio: number | null
+}
+
 /** A span of days, `YYYY-MM-DD` both ends included. */
 export interface Rango {
   desde: string

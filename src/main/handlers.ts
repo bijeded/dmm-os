@@ -42,6 +42,7 @@ import {
 } from './proyectos'
 import { agregarTarea, borrarTarea, completarTarea, listarTareas } from './tareas'
 import { escanearCarpetas, importarFacturas, marcarHddNoDisponible } from './importacion'
+import { ejecutarCli, leerUso, resumenAi, type EjecutarUso } from './ai'
 import { archivosLab, buscarLab, carpetasLab, rutaEnLab, vistaPreviaLab } from './lab'
 import { alDia } from './ledger'
 import { leerRutas } from './rutas'
@@ -60,6 +61,8 @@ export interface HandlersOptions {
   /** Answers with why the folder could not be opened, or '' when it was. */
   abrirCarpeta: (path: string) => Promise<string>
   imprimirPdf: ImprimirPdf
+  /** Runs CC Usage or RTK; tests pass fixture output. */
+  ejecutarUso?: EjecutarUso
   ahora?: () => string
 }
 
@@ -72,6 +75,7 @@ export function crearHandlers({
   elegirHdd,
   abrirCarpeta,
   imprimirPdf,
+  ejecutarUso = ejecutarCli,
   ahora = () => new Date().toISOString()
 }: HandlersOptions): DmmHandlers {
   // The local calendar day, which is what a quote is accepted on.
@@ -215,6 +219,10 @@ export function crearHandlers({
         const error = await abrirCarpeta(rutaEnLab(info.dmmOsRoot, ruta))
         if (error) throw new Error(error)
       }
+    },
+    ai: {
+      resumen: (periodo) => resumenAi(conexion.db, conexion.ajustes, periodo, hoy()),
+      leerUso: () => leerUso(conexion.db, conexion.ajustes, info.dmmOsRoot, ejecutarUso, ahora())
     }
   }
 }

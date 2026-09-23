@@ -1,13 +1,15 @@
 import { resolve } from 'node:path'
-import { createDatabase, type Db } from './index'
+import { createDatabase, type Ajustes, type Db } from './index'
 import { contactos, cotizaciones, proyectos } from './schema'
 
 const migrationsFolder = resolve(import.meta.dirname, '../../../drizzle')
 /** A fresh in-memory database per test; call from `beforeEach`. Tests read it through the live `db` binding. */
 export let db: Db
+/** The settings of the same database. */
+export let ajustes: Ajustes
 
 export function reiniciarDb() {
-  db = createDatabase(migrationsFolder).abrir(':memory:').db
+  ;({ db, ajustes } = createDatabase(migrationsFolder).abrir(':memory:'))
 }
 
 export function contacto(nombre = 'Estudio Ocho') {
