@@ -150,6 +150,20 @@ describe('AI', () => {
   it('names a source that cannot be read', async () => {
     expect((await h.ai.leerUso()).avisos).toEqual(['CC Usage: no está instalado', 'RTK: no está instalado'])
   })
+
+  it('lists the agents in AI/ on disk and opens their file under the DMM OS root', async () => {
+    mkdirSync(join(root, 'AI', 'agents'), { recursive: true })
+    writeFileSync(join(root, 'AI', 'agents', 'code-reviewer.md'), '---\nname: code-reviewer\n---\n')
+    expect((await h.ai.agentesYSkills()).map((a) => [a.tipo, a.nombre, a.usadoEn])).toEqual([['agente', 'code-reviewer', []]])
+    await h.ai.abrir('agents/code-reviewer.md')
+    expect(opciones.abrirCarpeta).toHaveBeenCalledWith(join(root, 'AI', 'agents', 'code-reviewer.md'))
+  })
+
+  it('refuses to open anything that is not an agent or skill', async () => {
+    mkdirSync(join(root, 'AI'))
+    await expect(h.ai.abrir('../Vault/dmm.db')).rejects.toThrow(/no es un agente ni un skill/)
+    expect(opciones.abrirCarpeta).not.toHaveBeenCalled()
+  })
 })
 
 describe('Sugerencias de importación', () => {

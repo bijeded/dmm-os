@@ -65,6 +65,19 @@ function ubicarEntre(root: string, todas: (typeof ubicacionesArchivo.$inferSelec
 const visible = ({ estado, ruta, abrible }: CarpetaProyecto): CarpetaProyecto => ({ estado, ruta, abrible })
 const carpeta = (db: Db, root: string, id: number): CarpetaProyecto => visible(ubicar(db, root, id))
 
+/** Every Proyecto whose folder is on disk under the DMM OS root, with that folder. */
+export function carpetasDeProyectos(db: Db, root: string): { nombre: string; absoluta: string }[] {
+  const ubicaciones = db.select().from(ubicacionesArchivo).all()
+  return db
+    .select({ id: proyectos.id, nombre: proyectos.nombre })
+    .from(proyectos)
+    .all()
+    .flatMap(({ id, nombre }) => {
+      const { absoluta } = ubicarEntre(root, ubicaciones.filter((u) => u.proyectoId === id))
+      return absoluta ? [{ nombre, absoluta }] : []
+    })
+}
+
 /** The folder to reveal in Finder; refused when it cannot be reached. */
 export function carpetaAbrible(db: Db, root: string, id: number): string {
   const c = ubicar(db, root, id)

@@ -1,4 +1,5 @@
 import type {
+  AgenteOSkill,
   ArchivoEnLab,
   ArchivoLab,
   CarpetaAbrible,
@@ -193,7 +194,11 @@ export const contrato = {
     /** The figures for the period, from the usage last read. */
     resumen: canal<[periodo: PeriodoAi], ResumenAi>(),
     /** Re-reads CC Usage and RTK; safe to run again. A source that can't be read is named, the other still read. */
-    leerUso: canal<[], LecturaUso>()
+    leerUso: canal<[], LecturaUso>(),
+    /** The agents and skills in `AI/`, read per call, each with the Proyectos that hold a copy. Read-only. */
+    agentesYSkills: canal<[], AgenteOSkill[]>(),
+    /** Opens an agent's or skill's file (relative to `AI/`) in its default app; anything else is refused. */
+    abrir: canal<[archivo: string], void>()
   }
 }
 

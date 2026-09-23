@@ -552,6 +552,21 @@ export interface FilaSuscripcion {
   origen: OrigenSuscripcion
 }
 
+export const NOMBRES_TIPO_AGENTE_SKILL = { agente: 'agente', skill: 'skill' } as const
+export type TipoAgenteSkill = keyof typeof NOMBRES_TIPO_AGENTE_SKILL
+
+/** An agent or skill kept in `AI/`, and the Proyectos that hold a copy of it. */
+export interface AgenteOSkill {
+  tipo: TipoAgenteSkill
+  /** From its frontmatter; its file or folder name when that has none. */
+  nombre: string
+  descripcion: string | null
+  /** Its file, relative to `AI/`: `agents/code-reviewer.md`, `skills/newsletter-writer/SKILL.md`. */
+  archivo: string
+  /** The names of the Proyectos with a copy, by name; empty while it is en prueba. */
+  usadoEn: string[]
+}
+
 /** A span of days, `YYYY-MM-DD` both ends included. */
 export interface Rango {
   desde: string
