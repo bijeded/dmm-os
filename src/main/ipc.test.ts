@@ -178,6 +178,7 @@ describe('IPC contract', () => {
     await api.ai.resumen('todo')
     expect(h.ai.resumen).toHaveBeenCalledWith('todo')
 
+    expect(await api.ai.agentesYSkills()).toEqual([])
     await api.ai.abrir('agents/code-reviewer.md')
     expect(h.ai.abrir).toHaveBeenCalledWith('agents/code-reviewer.md')
   })

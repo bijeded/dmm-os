@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -49,6 +49,19 @@ describe('Agentes y Skills', () => {
     })
   })
 
+  it('lists an agent or skill that is a link to a file or folder kept elsewhere', () => {
+    archivo('Recursos/agents/traductor.md', frontmatter('name: traductor'))
+    archivo('Recursos/skills/cotizador/SKILL.md', frontmatter('name: cotizador'))
+    symlinkSync(join(root, 'Recursos/agents/traductor.md'), join(root, 'AI/agents/traductor.md'))
+    symlinkSync(join(root, 'Recursos/skills/cotizador'), join(root, 'AI/skills/cotizador'))
+    expect(agentesYSkills(db, root).map((a) => a.nombre)).toEqual(['code-reviewer', 'traductor', 'cotizador', 'newsletter-writer'])
+  })
+
+  it('reads the frontmatter when its closing line has trailing spaces', () => {
+    archivo('AI/agents/code-reviewer.md', '---\nname: code-reviewer\n---  \n\ndescription: del cuerpo\n')
+    expect(agentesYSkills(db, root)[0].descripcion).toBeNull()
+  })
+
   it('reads AI/Agents and AI/Skills as Finder names them', () => {
     root = mkdtempSync(join(tmpdir(), 'dmm-ai-'))
     archivo('AI/Agents/code-reviewer.md', frontmatter('name: code-reviewer'))
@@ -80,6 +93,8 @@ describe('Agentes y Skills', () => {
   it('leaves an item no Proyecto has a copy of en prueba', () => {
     proyecto('Netdeckr', 'Proyectos/Netdeckr')
     archivo('Proyectos/Netdeckr/.claude/agents/code-reviewer.md')
+    // A folder with the skill's name but no SKILL.md is not a copy.
+    archivo('Proyectos/Netdeckr/.claude/skills/newsletter-writer/notas.md')
     expect(agentesYSkills(db, root).find((a) => a.tipo === 'skill')?.usadoEn).toEqual([])
   })
 

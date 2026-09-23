@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, type Dirent } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync, type Dirent } from 'node:fs'
 import { join, posix } from 'node:path'
 import type { Db } from './db'
 import { carpetasDeProyectos } from './proyectos'
@@ -17,7 +17,7 @@ const SKILL = 'SKILL.md'
 /** Where a copy of each kind lives under a `.claude/` folder. */
 const COPIA: Record<TipoAgenteSkill, (nombre: string) => string> = {
   agente: (nombre) => join('agents', `${nombre}.md`),
-  skill: (nombre) => join('skills', nombre)
+  skill: (nombre) => join('skills', nombre, SKILL)
 }
 
 /** Every agent, then every skill, each by name. Refused with why when `AI/` can't be read. */
@@ -48,24 +48,34 @@ function listar(root: string): (Omit<AgenteOSkill, 'usadoEn'> & { carpeta: strin
   }
   const agentes = (dir: string) =>
     (entradas(join(root, AI, dir)) ?? [])
-      .filter((e) => e.isFile() && e.name.endsWith('.md'))
+      .filter((e) => e.name.endsWith('.md') && es(join(root, AI, dir, e.name), 'archivo'))
       .map((e) => leer('agente', e.name.slice(0, -'.md'.length), posix.join(dir, e.name)))
   const skills = (dir: string) =>
     (entradas(join(root, AI, dir)) ?? [])
-      .filter((e) => e.isDirectory() && (entradas(join(root, AI, dir, e.name)) ?? []).some((f) => f.isFile() && f.name === SKILL))
+      .filter((e) => es(join(root, AI, dir, e.name, SKILL), 'archivo'))
       .map((e) => leer('skill', e.name, posix.join(dir, e.name, SKILL)))
-  return [...ai.filter(esCarpeta('agents')).flatMap((c) => agentes(c.name)), ...ai.filter(esCarpeta('skills')).flatMap((c) => skills(c.name))].sort(
+  return [...ai.filter(nombrada('agents')).flatMap((c) => agentes(c.name)), ...ai.filter(nombrada('skills')).flatMap((c) => skills(c.name))].sort(
     (a, b) => a.tipo.localeCompare(b.tipo) || a.nombre.localeCompare(b.nombre, 'es')
   )
 }
 
 /** `AI/Agents` on disk is `agents`: Finder names folders with a capital. */
-const esCarpeta = (nombre: string) => (e: Dirent) => e.isDirectory() && e.name.toLowerCase() === nombre
+const nombrada = (nombre: string) => (e: Dirent) => e.isDirectory() && e.name.toLowerCase() === nombre
+
+/** Whether `ruta` is a file or a folder, links followed: an agent or skill kept elsewhere may be linked into `AI/`. */
+function es(ruta: string, tipo: 'archivo' | 'carpeta'): boolean {
+  try {
+    const s = statSync(ruta)
+    return tipo === 'archivo' ? s.isFile() : s.isDirectory()
+  } catch {
+    return false
+  }
+}
 
 /** The folders directly in a Proyecto folder; none when it can't be read. */
 function subcarpetas(carpeta: string): string[] {
   try {
-    return (entradas(carpeta) ?? []).filter((e) => e.isDirectory()).map((e) => join(carpeta, e.name))
+    return (entradas(carpeta) ?? []).map((e) => join(carpeta, e.name)).filter((c) => es(c, 'carpeta'))
   } catch {
     return []
   }
@@ -78,7 +88,7 @@ function subcarpetas(carpeta: string): string[] {
 function frontmatter(texto: string): Record<string, string> {
   const lineas = texto.split(/\r?\n/)
   if (lineas[0]?.trim() !== '---') return {}
-  const fin = lineas.indexOf('---', 1)
+  const fin = lineas.findIndex((l, i) => i > 0 && l.trim() === '---')
   const cuerpo = lineas.slice(1, fin === -1 ? undefined : fin)
   const campos: Record<string, string> = {}
   for (let i = 0; i < cuerpo.length; i++) {
