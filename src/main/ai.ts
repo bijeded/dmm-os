@@ -322,7 +322,7 @@ function enlazarUso(ubicaciones: Ubicacion[]): (carpeta: string) => number | nul
 
 type ProyectoAi = { p: typeof proyectos.$inferSelect; contacto: string | null }
 
-/** The AI Proyectos, with their Contacto's name, by name. */
+/** The Proyectos AI, with their Contacto's name, by name. */
 const deAi = (db: Db): ProyectoAi[] =>
   db
     .select({ p: proyectos, contacto: contactos.nombre })
@@ -333,7 +333,7 @@ const deAi = (db: Db): ProyectoAi[] =>
     .sort((a, b) => a.p.nombre.localeCompare(b.p.nombre, 'es'))
 
 /**
- * The AI Proyectos, each with the period's usage at or under its folder and its `costoReal`, and
+ * The Proyectos AI, each with the period's usage at or under its folder and its `costoReal`, and
  * the usage no Proyecto's folder holds. Linked here, when read, so a moved or renamed folder
  * re-links. API cost is also given in pesos at `tipoCambio`, as the Costo API aprox. card gives it.
  */
@@ -398,7 +398,7 @@ function proyectosAi(
   }
 }
 
-/** What the usage is linked with: the recorded folders, which Proyecto a usage folder is, and the AI Proyectos. */
+/** What the usage is linked with: the recorded folders, which Proyecto a usage folder is, and the Proyectos AI. */
 interface Enlace {
   ubicaciones: Ubicacion[]
   enlazar: (carpeta: string) => number | null
@@ -425,23 +425,23 @@ function mayorResto(total: number, pesos: number[]): number[] {
 }
 
 /**
- * Whether `p` was open during month `mes`: started on or before its end (or with no start date),
- * and not completed or cancelled before it began. A closed one with no end date recorded
+ * Abierto en el mes: whether `p` started on or before the end of `mes` (or has no start date),
+ * and was not completed or cancelled before it began. A closed one with no end date recorded
  * (imported history) is taken as closed before.
  */
-function abiertoEn(p: ProyectoAi['p'], mes: string) {
+function abiertoEnElMes(p: ProyectoAi['p'], mes: string) {
   if (p.fechaInicio !== null && p.fechaInicio > `${mes}-31`) return false
   if (p.estado !== 'completado' && p.estado !== 'cancelado') return true
   return p.fechaFin !== null && p.fechaFin >= `${mes}-01`
 }
 
 /**
- * Month `mes`'s Asignación de costo of `total`: by tokens across the AI Proyectos with usage in
- * it; with none, evenly across those open during it; with none of those, all Sin asignar.
+ * Month `mes`'s Asignación de costo of `total`: by tokens across the Proyectos AI with usage in
+ * it; with none, evenly across those Abiertos en el mes; with none of those, all Sin asignar.
  */
 function asignar(mes: string, total: number, tokens: Map<number, number>, ai: ProyectoAi[]): AsignacionCosto {
   const conUso = ai.filter(({ p }) => (tokens.get(p.id) ?? 0) > 0)
-  const abiertos = ai.filter(({ p }) => abiertoEn(p, mes))
+  const abiertos = ai.filter(({ p }) => abiertoEnElMes(p, mes))
   const criterio = conUso.length > 0 ? 'tokens' : abiertos.length > 0 ? 'partes_iguales' : 'sin_proyectos'
   const entre = criterio === 'tokens' ? conUso : abiertos
   const pesos = entre.map(({ p }) => (criterio === 'tokens' ? tokens.get(p.id)! : 1))
@@ -458,7 +458,7 @@ function asignar(mes: string, total: number, tokens: Map<number, number>, ai: Pr
 
 /**
  * Asignación de costo, worked out when read and never stored as Costos: this month's, and each
- * AI Proyecto's Costo real over `rango`, which is what it was assigned in each month plus the
+ * Proyecto AI's Costo real over `rango`, which is what it was assigned in each month plus the
  * Costos linked to it. A month's pool is its rows in `filas` (the period's Suscripciones), so
  * this month's runs to `hoy`, as Este mes does. A Suscripción linked to a Proyecto counts in the
  * pool only, never twice.
@@ -504,7 +504,7 @@ function asignaciones(db: Db, { enlazar, ai }: Enlace, rango: Rango, filas: Fila
 }
 
 /**
- * The AI Proyectos' income in `rango`, in subtotals as Finanzas KPIs are. Ingreso proyectos AI:
+ * The income of the Proyectos AI in `rango`, in subtotals as Finanzas KPIs are. Ingreso proyectos AI:
  * the accepted Cotizaciones of those started in it, a USD one in pesos at its own rate (else the
  * most recent recorded; one with no start date counts in Todo el tiempo only. Ingreso AI: their
  * Ingresos paid in it, a Reembolso counting against the period it was given back in.

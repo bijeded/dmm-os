@@ -136,7 +136,7 @@ export function Ai() {
       )}
 
       {resumen && (
-        <Seccion id="ai-proyectos" titulo="AI Proyectos">
+        <Seccion id="ai-proyectos" titulo="Proyectos AI">
           <ProyectosAi filas={resumen.proyectos} sinProyecto={resumen.sinProyecto} />
         </Seccion>
       )}
@@ -268,7 +268,7 @@ const USOS_TOKENS = { con_uso: 'Con uso', sin_uso: 'Sin uso' } as const
 const costoApi = (u: UsoTokens) => (u.costoApiMxn === null ? monto(u.costoUsd, 'USD') : pesos(u.costoApiMxn))
 
 /**
- * The AI Proyectos in the order main gives (by name), with the period's usage in their folders,
+ * The Proyectos AI in the order main gives (by name), with the period's usage in their folders,
  * filterable. Usage in no Proyecto's folder closes the list as Sin proyecto while nothing is
  * filtered. A row opens its Proyecto; Abrir reveals its folder.
  */
@@ -479,12 +479,12 @@ function TablaSuscripciones({ filas }: { filas: FilaSuscripcion[] }) {
 
 const NOTAS_CRITERIO: Record<CriterioAsignacion, string> = {
   tokens: 'Por uso de tokens.',
-  partes_iguales: 'Sin datos de uso este mes: partes iguales entre los proyectos AI abiertos.',
-  sin_proyectos: 'Ningún proyecto AI abierto este mes: todo queda sin asignar.'
+  partes_iguales: 'Sin datos de uso: partes iguales entre los proyectos AI abiertos en el mes.',
+  sin_proyectos: 'Ningún proyecto AI abierto en el mes: todo queda sin asignar.'
 }
 
 /**
- * This month's Suscripciones split across AI Proyectos, as main works it out when read. Sin
+ * This month's Suscripciones split across Proyectos AI, as main works it out when read. Sin
  * asignar is only noted, never spread.
  */
 function TablaAsignacion({ asignacion }: { asignacion: AsignacionCosto }) {

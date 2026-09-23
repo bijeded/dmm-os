@@ -119,14 +119,14 @@ const montar = (ai: Partial<DmmApi['ai']> = {}) => {
   render(<RouterProvider router={router} />)
 }
 
-/** The AI Proyectos table's rows, each as its cells' text. */
+/** The Proyectos AI table's rows, each as its cells' text. */
 const filasProyectos = () =>
-  within(screen.getByRole('table', { name: 'AI Proyectos' }))
+  within(screen.getByRole('table', { name: 'Proyectos AI' }))
     .getAllByRole('row')
     .slice(1)
     .map((f) => within(f).getAllByRole('cell').map((c) => c.textContent))
 
-const filaProyecto = (nombre: string) => within(screen.getByRole('table', { name: 'AI Proyectos' })).getByText(nombre).closest('tr') as HTMLElement
+const filaProyecto = (nombre: string) => within(screen.getByRole('table', { name: 'Proyectos AI' })).getByText(nombre).closest('tr') as HTMLElement
 
 const agente = (nombre: string) => within(screen.getByRole('list', { name: 'Agentes y Skills' })).getByText(nombre).closest('li') as HTMLElement
 
@@ -296,7 +296,7 @@ describe('AI', () => {
 })
 
 describe('Ingreso cards', () => {
-  it('shows what AI Proyectos were quoted and what AI income was collected, for each period', async () => {
+  it('shows what Proyectos AI were quoted and what AI income was collected, for each period', async () => {
     montar()
     await screen.findByText('15.7 M')
     expect(tarjeta(/Ingreso proyectos AI/).textContent).toContain('$58,000.00')
@@ -310,10 +310,10 @@ describe('Ingreso cards', () => {
   })
 })
 
-describe('AI Proyectos', () => {
-  it('lists the AI Proyectos in the order given, with models, tokens and API cost', async () => {
+describe('Proyectos AI', () => {
+  it('lists the Proyectos AI in the order given, with models, tokens and API cost', async () => {
     montar()
-    await screen.findByRole('table', { name: 'AI Proyectos' })
+    await screen.findByRole('table', { name: 'Proyectos AI' })
     expect(filasProyectos()).toEqual([
       ['Aura', 'PRY-001', 'Hotel Aura', 'sonnet, opus', '9.1 M', '$980.00', '$550.00', 'Completado', 'Archivado'],
       ['Chatbot Terra', 'PRY-004', 'Grupo Terra · Terra Norte', '—', '0', '$0.00', '$0.00', 'Pausado', 'No disponible'],
@@ -324,7 +324,7 @@ describe('AI Proyectos', () => {
 
   it('shows the period’s usage', async () => {
     montar()
-    await screen.findByRole('table', { name: 'AI Proyectos' })
+    await screen.findByRole('table', { name: 'Proyectos AI' })
     fireEvent.click(screen.getByRole('button', { name: 'Todo el tiempo' }))
     await screen.findByText('48.2 M')
     expect(filaProyecto('Aura').textContent).toContain('haiku, sonnet, opus')
@@ -335,7 +335,7 @@ describe('AI Proyectos', () => {
 
   it('shows the API cost in USD when the app has no tipo de cambio', async () => {
     montar()
-    await screen.findByRole('table', { name: 'AI Proyectos' })
+    await screen.findByRole('table', { name: 'Proyectos AI' })
     fireEvent.click(screen.getByRole('button', { name: 'Todo el tiempo' }))
     await screen.findByText('48.2 M')
     expect(filaProyecto('Aura').textContent).toContain(monto(250_000, 'USD'))
@@ -347,7 +347,7 @@ describe('AI Proyectos', () => {
 
   it('filters by cliente, including Personal', async () => {
     montar()
-    await screen.findByRole('table', { name: 'AI Proyectos' })
+    await screen.findByRole('table', { name: 'Proyectos AI' })
     elegir('Cliente', '24')
     expect(nombres()).toEqual(['Chatbot Terra'])
     elegir('Cliente', 'personal')
@@ -356,7 +356,7 @@ describe('AI Proyectos', () => {
 
   it('filters by referencia, año, categoría, token usage and estado', async () => {
     montar()
-    await screen.findByRole('table', { name: 'AI Proyectos' })
+    await screen.findByRole('table', { name: 'Proyectos AI' })
     fireEvent.change(screen.getByPlaceholderText('Buscar ref., proyecto AI…'), { target: { value: 'pry-004' } })
     expect(nombres()).toEqual(['Chatbot Terra'])
     fireEvent.change(screen.getByPlaceholderText('Buscar ref., proyecto AI…'), { target: { value: '' } })
@@ -377,16 +377,16 @@ describe('AI Proyectos', () => {
     expect(nombres()).toEqual(['Aura'])
   })
 
-  it('says when no AI Proyecto matches', async () => {
+  it('says when no Proyecto AI matches', async () => {
     montar()
-    await screen.findByRole('table', { name: 'AI Proyectos' })
+    await screen.findByRole('table', { name: 'Proyectos AI' })
     elegir('Estado', 'cancelado')
     expect(screen.getByText('Ningún proyecto AI coincide.')).toBeTruthy()
   })
 
   it('opens the Proyecto record from its row', async () => {
     montar()
-    await screen.findByRole('table', { name: 'AI Proyectos' })
+    await screen.findByRole('table', { name: 'Proyectos AI' })
     fireEvent.click(filaProyecto('Netdeckr'))
     await screen.findByText('Ficha del proyecto')
     expect(router.state.location.pathname).toBe('/proyectos/3')
@@ -394,7 +394,7 @@ describe('AI Proyectos', () => {
 
   it('opens an available folder through the API, and shows Archivado and No disponible as they are', async () => {
     montar()
-    await screen.findByRole('table', { name: 'AI Proyectos' })
+    await screen.findByRole('table', { name: 'Proyectos AI' })
     fireEvent.click(within(filaProyecto('Netdeckr')).getByRole('button', { name: 'Abrir' }))
     await waitFor(() => expect(abrirCarpeta).toHaveBeenCalledWith(3))
     expect(router.state.location.pathname).toBe('/ai')
@@ -404,16 +404,16 @@ describe('AI Proyectos', () => {
 
   it('says why a folder could not be opened', async () => {
     montar()
-    await screen.findByRole('table', { name: 'AI Proyectos' })
+    await screen.findByRole('table', { name: 'Proyectos AI' })
     vi.mocked(abrirCarpeta).mockRejectedValueOnce(new Error('La carpeta está No disponible'))
     fireEvent.click(within(filaProyecto('Netdeckr')).getByRole('button', { name: 'Abrir' }))
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('La carpeta está No disponible'))
   })
 
-  it('says when there are no AI Proyectos', async () => {
+  it('says when there are no Proyectos AI', async () => {
     montar({ resumen: vi.fn(async (p: PeriodoAi) => resumen(p, { proyectos: [], sinProyecto: { tokens: 0, costoUsd: 0, costoApiMxn: null } })) })
     expect(await screen.findByText('Ningún proyecto en la categoría AI.')).toBeTruthy()
-    expect(screen.queryByRole('table', { name: 'AI Proyectos' })).toBeNull()
+    expect(screen.queryByRole('table', { name: 'Proyectos AI' })).toBeNull()
   })
 })
 
@@ -452,14 +452,14 @@ describe('Asignación de costo', () => {
       ['Netdeckr', '—', '50%', '$270.00'],
       ['Sin asignar', '—', '—', '$0.00']
     ])
-    expect(screen.getByText('Sin datos de uso este mes: partes iguales entre los proyectos AI abiertos.')).toBeTruthy()
+    expect(screen.getByText('Sin datos de uso: partes iguales entre los proyectos AI abiertos en el mes.')).toBeTruthy()
   })
 
-  it('leaves the whole pool Sin asignar when there are no AI Proyectos', async () => {
+  it('leaves the whole pool Sin asignar when there are no Proyectos AI', async () => {
     conAsignacion({ criterio: 'sin_proyectos', filas: [], sinAsignar: 54_000 })
     await screen.findByRole('table', { name: /Asignación de costo/ })
     expect(filasAsignacion()).toEqual([['Sin asignar', '—', '—', '$540.00']])
-    expect(screen.getByText('Ningún proyecto AI abierto este mes: todo queda sin asignar.')).toBeTruthy()
+    expect(screen.getByText('Ningún proyecto AI abierto en el mes: todo queda sin asignar.')).toBeTruthy()
   })
 
   it('keeps showing this month’s split in Todo el tiempo', async () => {
