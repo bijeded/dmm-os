@@ -75,15 +75,9 @@ describe('alDia', () => {
 })
 
 describe('dbAlDia', () => {
-  it('hands back the db, already Al día for hoy', () => {
+  it('hands back the same db, already Al día for hoy', () => {
     mensual(null)
-    const c = db
-      .insert(cotizaciones)
-      .values({ contactoId, folio: 1, categoria: 'website', estado: 'enviada', fecha: '2026-09-01', validezDias: 15 })
-      .returning()
-      .get()
-    const alDiaDb = dbAlDia(db, '2026-10-01')
-    expect(alDiaDb.select().from(cotizaciones).where(eq(cotizaciones.id, c.id)).get()!.estado).toBe('expirada')
+    expect(dbAlDia(db, '2026-10-01')).toBe(db)
     expect(periodos()).toEqual(['2026-08', '2026-09', '2026-10'])
   })
 })

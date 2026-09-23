@@ -81,10 +81,10 @@ export function crearHandlers({
 }: HandlersOptions): DmmHandlers {
   // The local calendar day, which is what a quote is accepted on.
   const hoy = () => diaLocal(new Date(ahora()))
-  // Every read of Ingresos or Cotizaciones gets its db from the ledger, Al día as Finanzas is: an
-  // expired quote turns its Contacto from hot lead back to cold, and a Contacto's totals include
-  // this month's Periodos.
-  const ledger = () => dbAlDia(conexion.db, hoy())
+  // Reads of Ingresos or Cotizaciones, and completing a Proyecto, work on an Al día db, as Finanzas
+  // does: an expired quote turns its Contacto from hot lead back to cold, and a Contacto's totals
+  // include this month's Periodos.
+  const alDiaDb = () => dbAlDia(conexion.db, hoy())
 
   // The external HDD is organised like the main root, and is usually disconnected. Its path is
   // read per call, so plugging the drive in needs no restart; when it is absent its Proyectos
@@ -144,11 +144,11 @@ export function crearHandlers({
       }
     },
     contactos: {
-      listar: () => listarContactos(ledger()),
-      ficha: (id) => fichaContacto(ledger(), info.dmmOsRoot, id),
+      listar: () => listarContactos(alDiaDb()),
+      ficha: (id) => fichaContacto(alDiaDb(), info.dmmOsRoot, id),
       guardar: (contacto) => guardarContacto(conexion.db, contacto),
       borrar: (id) => borrarContacto(conexion.db, id),
-      csv: () => contactosCsv(ledger())
+      csv: () => contactosCsv(alDiaDb())
     },
     catalogo: {
       listar: () => listarCatalogo(conexion.db),
@@ -156,8 +156,8 @@ export function crearHandlers({
       borrar: (id) => borrarConcepto(conexion.db, id)
     },
     cotizaciones: {
-      listar: () => listarCotizaciones(ledger()),
-      ficha: (id) => fichaCotizacion(ledger(), id),
+      listar: () => listarCotizaciones(alDiaDb()),
+      ficha: (id) => fichaCotizacion(alDiaDb(), id),
       guardar: (cotizacion) => guardarCotizacion(conexion.db, cotizacion),
       enviar: (id) => enviarCotizacion(conexion.db, info.dmmOsRoot, id, imprimirPdf),
       aceptar: (id, tipoCambio) => aceptarCotizacion(conexion.db, info.dmmOsRoot, id, hoy(), tipoCambio),
@@ -172,12 +172,12 @@ export function crearHandlers({
       }
     },
     proyectos: {
-      listar: () => listarProyectos(ledger(), info.dmmOsRoot),
-      ficha: (id) => fichaProyecto(ledger(), info.dmmOsRoot, id),
+      listar: () => listarProyectos(alDiaDb(), info.dmmOsRoot),
+      ficha: (id) => fichaProyecto(alDiaDb(), info.dmmOsRoot, id),
       guardar: (proyecto) => guardarProyecto(conexion.db, info.dmmOsRoot, proyecto, hoy()),
       pausar: (id) => pausarProyecto(conexion.db, info.dmmOsRoot, id),
       reanudar: (id) => reanudarProyecto(conexion.db, info.dmmOsRoot, id),
-      completar: (id) => completarProyecto(ledger(), info.dmmOsRoot, id, hoy()),
+      completar: (id) => completarProyecto(alDiaDb(), info.dmmOsRoot, id, hoy()),
       cancelar: (id) => cancelarProyecto(conexion.db, info.dmmOsRoot, id, hoy()),
       borrar: (id) => borrarProyecto(conexion.db, id),
       abrirCarpeta: async (id) => {
