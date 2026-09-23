@@ -347,23 +347,6 @@ export const costos = sqliteTable(
   ]
 )
 
-// Share of an AI subscription Costo attributed to a Proyecto; the Costo is never duplicated.
-export const asignacionesCosto = sqliteTable(
-  'asignaciones_costo',
-  {
-    id: integer('id').primaryKey({ autoIncrement: true }),
-    costoId: integer('costo_id')
-      .notNull()
-      .references(() => costos.id, { onDelete: 'cascade' }),
-    proyectoId: integer('proyecto_id')
-      .notNull()
-      .references(() => proyectos.id, { onDelete: 'restrict' }),
-    tokens: integer('tokens'),
-    monto: integer('monto').notNull()
-  },
-  (t) => [uniqueIndex('asignaciones_costo_proyecto_unique').on(t.costoId, t.proyectoId)]
-)
-
 /**
  * Token usage imported from CC Usage, one row per day, folder, provider and model. `carpeta` is
  * the working directory as Claude Code names it (every character but letters and digits as `-`),

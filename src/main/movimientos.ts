@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import type { Db } from './db'
-import { asignacionesCosto, costos, definicionesCosto, ingresos, proyectos, vigenciasPrecio } from './db/schema'
+import { costos, definicionesCosto, ingresos, proyectos, vigenciasPrecio } from './db/schema'
 import { monedaDe, tasaDe } from './dinero'
 import { exigirCosto, type ContextoCosto } from './ciclo-costo'
 import { exigirIngreso, MENSAJE_REEMBOLSO_EXCEDIDO, restante, type ContextoIngreso } from './ciclo-ingreso'
@@ -81,8 +81,7 @@ function leerCosto(db: Db, id: number) {
 function costoConContexto(db: Db, id: number, hoy: string): { c: ReturnType<typeof leerCosto>; ctx: ContextoCosto } {
   const c = leerCosto(db, id)
   const definicion = c.definicionId === null ? undefined : db.select().from(definicionesCosto).where(eq(definicionesCosto.id, c.definicionId)).get()
-  const asignado = db.select({ id: asignacionesCosto.id }).from(asignacionesCosto).where(eq(asignacionesCosto.costoId, id)).get() !== undefined
-  return { c, ctx: { definicion, periodoActual: hoy.slice(0, 7), asignado } }
+  return { c, ctx: { definicion, periodoActual: hoy.slice(0, 7) } }
 }
 
 /** A hand-entered Ingreso; given a Proyecto, its Contacto is the Proyecto's. */

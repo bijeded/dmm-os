@@ -26,7 +26,7 @@ describe('el ciclo de un Ingreso', () => {
 
 const costo = (c: Partial<Costo> = {}) => ({ id: 1, estado: 'pendiente', cfdiUuid: null, definicionId: null, cotizacionId: null, ...c }) as Costo
 const serie = (d: Partial<Definicion>) => ({ id: 7, tipo: 'mensual', periodoFin: null, ...d }) as Definicion
-const ctx = { definicion: undefined, periodoActual: '2026-09', asignado: false }
+const ctx = { definicion: undefined, periodoActual: '2026-09' }
 
 describe('el ciclo de un Costo', () => {
   it('stops a series only while it runs and is not MSI', () => {
@@ -37,8 +37,7 @@ describe('el ciclo de un Costo', () => {
     expect(() => exigirCosto('detener', costo(), ctx)).toThrow(/detener/)
   })
 
-  it('deletes only a hand-entered one-time Costo nothing is attributed from', () => {
+  it('deletes a hand-entered one-time Costo', () => {
     expect(accionesCosto(costo({ estado: 'cancelado' }), ctx)).toEqual(['borrar'])
-    expect(accionesCosto(costo(), { ...ctx, asignado: true })).toEqual(['pagar', 'cancelar'])
   })
 })

@@ -1,0 +1,1 @@
+DROP TABLE `asignaciones_costo`;

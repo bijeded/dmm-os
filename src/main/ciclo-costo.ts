@@ -10,8 +10,6 @@ export interface ContextoCosto {
   definicion: Definicion | undefined
   /** `YYYY-MM` of today. */
   periodoActual: string
-  /** Whether any of it is attributed to a Proyecto. */
-  asignado: boolean
 }
 
 export const origenCosto = (c: Costo): FilaCosto['origen'] => (c.cfdiUuid !== null ? 'cfdi' : c.definicionId !== null ? 'recurrente' : 'manual')
@@ -23,9 +21,9 @@ function rechazo(accion: AccionCosto, c: Costo, ctx: ContextoCosto): string | nu
       return c.estado === 'pendiente' ? null : 'Solo se marca pagado un costo pendiente'
     case 'cancelar':
       return c.estado === 'pendiente' ? null : 'Solo se cancela un costo pendiente'
-    // Borrar vs cancelar: only a hand-entered one-time Costo nothing is attributed from.
+    // Borrar vs cancelar: only a hand-entered one-time Costo not from a Cotización.
     case 'borrar':
-      return origenCosto(c) === 'manual' && c.cotizacionId === null && !ctx.asignado
+      return origenCosto(c) === 'manual' && c.cotizacionId === null
         ? null
         : 'Este costo tiene registros vinculados; cancélalo en lugar de borrarlo'
     // A monthly or annual series can be stopped while it still runs; MSI is already committed.

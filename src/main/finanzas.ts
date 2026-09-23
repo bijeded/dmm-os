@@ -7,7 +7,6 @@ import { alDia } from './ledger'
 import { accionesCosto, origenCosto, type Costo, type Definicion } from './ciclo-costo'
 import { accionesIngreso, origenIngreso, reembolsableIngreso, restante, type Ingreso } from './ciclo-ingreso'
 import {
-  asignacionesCosto,
   contactos,
   costos,
   definicionesCosto,
@@ -191,7 +190,6 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
   const sinDatos = new Set(coberturaCostos(db, desde, anioDe(hoy)).filter((c) => c.sinDatos).map((c) => c.anio))
   const aniosSinDatos = (span: Rango | null) => (span ? [...sinDatos].filter((anio) => anio >= anioDe(span.desde) && anio <= anioDe(span.hasta)) : [])
 
-  const asignados = new Set(db.select({ costoId: asignacionesCosto.costoId }).from(asignacionesCosto).all().map((a) => a.costoId))
   const reembolsosDe = new Map<number, Ingreso[]>()
   for (const i of todosIngresos) if (i.reembolsoDeId !== null) reembolsosDe.set(i.reembolsoDeId, [...(reembolsosDe.get(i.reembolsoDeId) ?? []), i])
   const limiteVencida = sumarDias(hoy, -diasVencida)
@@ -231,8 +229,7 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     origen: origenCosto(c),
     acciones: accionesCosto(c, {
       definicion: c.definicionId === null ? undefined : definicion.get(c.definicionId),
-      periodoActual,
-      asignado: asignados.has(c.id)
+      periodoActual
     })
   })
 
