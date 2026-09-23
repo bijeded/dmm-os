@@ -110,11 +110,30 @@ Something the importer guessed that waits in Logs for a one-time accept/reject. 
 A run that brings existing files into the app: the folder scan (Cotizaciones PDFs, Clientes and Proyectos folders) or the Facturas run (CFDI XML). Each file imports in one transaction, and a Sugerencia de importación is asked only once. A rejected Sugerencia undoes exactly what its guess changed.
 Imported history is exempt from the lifecycle guards: a Proyecto may import as completed without being fully paid, and a Cotización accepted by import creates no Ingresos or Costos (invoiced income arrives through the Facturas run; uninvoiced Ingresos, which carry no IVA, are entered by hand in Finanzas). See ADR-0002.
 
+**Proyecto AI**:
+A Proyecto in the `ai` categoría, client or personal.
+_Avoid_: AI Proyecto
+
+**Abierto en el mes**:
+A Proyecto started by the month's end (or with no start date) and not completed or cancelled before the month began. Paused ones count.
+_Avoid_: active, open
+
+**Suscripciones**:
+The Costos marked Suscripción de IA, plus any Costo from the same proveedor under its own or legal name (as a received CFDI carries it). The same records Finanzas shows, never copied.
+
 **Asignación de costo**:
-The share of an AI subscription Costo attributed to a Proyecto in a month, by token usage (even split if no data). The Costo itself is never duplicated.
+A month's Suscripciones split across Proyectos AI: by token usage among those that used any, otherwise evenly among those Abiertos en el mes. With no such Proyecto the whole amount is Sin asignar; derived when read and never stored, so the Costos are never duplicated.
+
+**Sin asignar**:
+The part of a month's Suscripciones no Proyecto AI takes: all of it when there is none. Only noted, never spread.
+_Avoid_: Sin proyecto (that is usage, not money)
+
+**Sin proyecto**:
+Token usage from a folder that is no Proyecto's. Counts in AI totals, never in an Asignación de costo.
+_Avoid_: Sin asignar (that is money, not usage)
 
 **Costo real**:
-What an AI Proyecto cost in a period: its Asignación de costo plus the Costos linked to it, pending ones included. "Real" sets it against the approximate API cost; unlike Ingreso real, it does not mean paid.
+What a Proyecto AI cost in a period: its Asignación de costo plus the Costos linked to it, pending ones included. "Real" sets it against the approximate API cost; unlike Ingreso real, it does not mean paid.
 _Avoid_: costo pagado
 
 **Cancelación con pagos**:
