@@ -533,11 +533,11 @@ export interface ResumenAi extends LecturaUso {
   suscripciones: FilaSuscripcion[]
   /** Their subtotals added up. */
   suscripcionesTotal: number
-  /** Subtotal, in pesos, of the accepted Cotizaciones of AI Proyectos started in the period. */
+  /** Subtotal, in pesos, of the accepted Cotizaciones of Proyectos AI started in the period. */
   ingresoProyectos: number
-  /** Subtotal of the paid Ingresos of AI Proyectos in the period, net of Reembolsos. */
+  /** Subtotal of the paid Ingresos of Proyectos AI in the period, net of Reembolsos. */
   ingresoAi: number
-  /** The AI Proyectos by name, each with the period's usage in its folder. */
+  /** The Proyectos AI by name, each with the period's usage in its folder. */
   proyectos: FilaProyectoAi[]
   /** The period's usage in folders that are no Proyecto's. */
   sinProyecto: UsoTokens
@@ -546,8 +546,8 @@ export interface ResumenAi extends LecturaUso {
 }
 
 /**
- * How a month's Suscripciones are split across AI Proyectos: by tokens among those with usage in
- * it, else evenly among those open during it, else not at all.
+ * How a month's Suscripciones are split across Proyectos AI: by tokens among those with usage in
+ * it, else evenly among those Abiertos en el mes, else not at all.
  */
 export type CriterioAsignacion = 'tokens' | 'partes_iguales' | 'sin_proyectos'
 
@@ -561,7 +561,7 @@ export interface AsignacionCosto {
   /** The subtotal of the month's Suscripciones. */
   total: number
   criterio: CriterioAsignacion
-  /** The AI Proyectos it is split across, by name. */
+  /** The Proyectos AI it is split across, by name. */
   filas: FilaAsignacion[]
   /** What no Proyecto takes: the whole pool when there is none. */
   sinAsignar: number

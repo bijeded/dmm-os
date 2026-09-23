@@ -321,7 +321,7 @@ describe('Suscripciones', () => {
   })
 })
 
-/** An AI Proyecto; with `ruta`, its folder is recorded there. Without a Contacto it is personal. */
+/** A Proyecto AI; with `ruta`, its folder is recorded there. Without a Contacto it is personal. */
 function proyectoAi(
   nombre: string,
   {
@@ -359,7 +359,7 @@ const cotizacionAceptada = (contactoId: number, subtotal: number, { tipoCambio, 
     .returning()
     .get()
 
-describe('AI Proyectos', () => {
+describe('Proyectos AI', () => {
   let aura: typeof proyectos.$inferSelect
   let netdeckr: typeof proyectos.$inferSelect
 
@@ -375,7 +375,7 @@ describe('AI Proyectos', () => {
 
   const fila = (nombre: string, periodo: 'mes' | 'todo' = 'todo') => resumenAi(db, ajustes, DISCO, periodo, HOY).proyectos.find((p) => p.nombre === nombre)!
 
-  it('lists only AI Proyectos, by name ascending', () => {
+  it('lists only Proyectos AI, by name ascending', () => {
     expect(resumenAi(db, ajustes, DISCO, 'todo', HOY).proyectos.map((p) => p.nombre)).toEqual(['Aura', 'Chatbot Terra', 'Netdeckr'])
   })
 
@@ -452,7 +452,7 @@ describe('AI Proyectos', () => {
 })
 
 describe('Ingreso cards', () => {
-  /** An Ingreso of an AI Proyecto, paid on `fecha` unless `pendiente`. */
+  /** An Ingreso of a Proyecto AI, paid on `fecha` unless `pendiente`. */
   const ingreso = (proyectoId: number, fecha: string, subtotal: number, estado: 'pagado' | 'pendiente' = 'pagado') =>
     db
       .insert(ingresos)
@@ -479,7 +479,7 @@ describe('Ingreso cards', () => {
     ingreso(tienda.id, '2026-09-06', 9_900_000)
   })
 
-  it('Ingreso proyectos AI adds up the accepted Cotizaciones of AI Proyectos started in the period, in pesos', () => {
+  it('Ingreso proyectos AI adds up the accepted Cotizaciones of Proyectos AI started in the period, in pesos', () => {
     expect(resumenAi(db, ajustes, DISCO, 'mes', HOY).ingresoProyectos).toBe(1_850_000)
     expect(resumenAi(db, ajustes, DISCO, 'todo', HOY).ingresoProyectos).toBe(5_800_000 + 1_850_000)
   })
@@ -495,7 +495,7 @@ describe('Ingreso cards', () => {
     expect(resumenAi(db, ajustes, DISCO, 'mes', HOY).ingresoProyectos).toBe(0)
   })
 
-  it('Ingreso AI adds up the paid Ingresos of AI Proyectos in the period, net of Reembolsos', () => {
+  it('Ingreso AI adds up the paid Ingresos of Proyectos AI in the period, net of Reembolsos', () => {
     ingreso(aura.id, '2026-05-02', 2_900_000)
     const septiembre = ingreso(aura.id, '2026-09-02', 1_000_000)
     ingreso(terra.id, '2026-09-10', 800_000)
@@ -537,7 +537,7 @@ describe('Asignación de costo', () => {
 
   beforeEach(suscripcion)
 
-  it('splits the month’s Suscripciones across AI Proyectos by their tokens, rounding so the rows add up to the pool', async () => {
+  it('splits the month’s Suscripciones across Proyectos AI by their tokens, rounding so the rows add up to the pool', async () => {
     const aura = proyectoAi('Aura', { contactoId: contacto('Hotel Aura').id, ruta: 'Proyectos/Aura' })
     const netdeckr = proyectoAi('Netdeckr', { ruta: 'Proyectos/Netdeckr' })
     await usoDelMes({ [AURA]: 9_100, [NETDECKR]: 6_600 })
@@ -554,14 +554,14 @@ describe('Asignación de costo', () => {
     })
   })
 
-  it('leaves out AI Proyectos with no usage while another has some', async () => {
+  it('leaves out Proyectos AI with no usage while another has some', async () => {
     proyectoAi('Aura', { ruta: 'Proyectos/Aura' })
     proyectoAi('Netdeckr', { ruta: 'Proyectos/Netdeckr' })
     await usoDelMes({ [NETDECKR]: 500 })
     expect(asignacion().filas.map((f) => [f.nombre, f.monto])).toEqual([['Netdeckr', 36_000]])
   })
 
-  it('gives the whole pool to the only AI Proyecto (Aura, April 2026)', async () => {
+  it('gives the whole pool to the only Proyecto AI (Aura, April 2026)', async () => {
     const aura = proyectoAi('Aura', { fechaInicio: '2026-04-10', ruta: 'Proyectos/Aura' })
     await leer({ ccusage: ccusage({ [AURA]: [diaCc('2026-04-12', [{ modelo: 'claude-opus-5', entrada: 800 }])] }) })
     expect(asignacion('2026-04-22')).toEqual({
@@ -573,12 +573,12 @@ describe('Asignación de costo', () => {
     })
   })
 
-  it('splits evenly across the AI Proyectos open during the month when none has usage in it', () => {
+  it('splits evenly across the Proyectos AI Abiertos en el mes when none has usage in it', () => {
     proyectoAi('Aura', { fechaInicio: '2026-04-10' })
     proyectoAi('Netdeckr', { fechaInicio: '2026-09-20', estado: 'pausado' })
     proyectoAi('Voz', { fechaInicio: '2026-05-01', estado: 'completado' })
     db.update(proyectos).set({ fechaFin: '2026-08-31' }).where(eq(proyectos.nombre, 'Voz')).run()
-    // Completed this month: still open during it.
+    // Completed this month: still Abierto en el mes.
     proyectoAi('Chatbot Terra', { fechaInicio: '2026-06-01', estado: 'completado' })
     db.update(proyectos).set({ fechaFin: '2026-09-02' }).where(eq(proyectos.nombre, 'Chatbot Terra')).run()
     // Starts next month.
@@ -608,8 +608,8 @@ describe('Asignación de costo', () => {
     expect(b.filas.reduce((s, f) => s + f.monto, 0) + b.sinAsignar).toBe(46_001)
   })
 
-  it('leaves the whole pool Sin asignar when there is no AI Proyecto', async () => {
-    // Usage in a folder, but no AI Proyecto to give it to.
+  it('leaves the whole pool Sin asignar when there is no Proyecto AI', async () => {
+    // Usage in a folder, but no Proyecto AI to give it to.
     db.insert(proyectos).values({ nombre: 'Tienda', contactoId: contacto().id, categoria: 'ecommerce', fechaInicio: '2026-01-10' }).run()
     await usoDelMes({ [AURA]: 900 })
     expect(asignacion()).toEqual({ mes: '2026-09', total: 36_000, criterio: 'sin_proyectos', filas: [], sinAsignar: 36_000 })
@@ -656,7 +656,7 @@ describe('Asignación de costo', () => {
       // September: 36,000 × 10,030 ÷ 11,030 = 32,736.17 and × 1,000 ÷ 11,030 = 3,263.83.
       expect(costoReal('Aura', 'mes')).toBe(32_736 + 5_000)
       expect(costoReal('Netdeckr', 'mes')).toBe(3_264)
-      // April to July Aura was the only AI Proyecto open, with no usage; August it was the only one with usage.
+      // April to July Aura was the only Proyecto AI Abierto en el mes, with no usage; August it was the only one with usage.
       expect(costoReal('Aura', 'todo')).toBe(4 * 36_000 + 36_000 + 32_736 + 5_000 + 7_000)
       expect(costoReal('Netdeckr', 'todo')).toBe(3_264)
     })
