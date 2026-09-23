@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, vigenciasPrecio } from './db/schema'
 import { contacto, db, proyecto, reiniciarDb } from './db/test-db'
-import { alDia } from './ledger'
+import { alDia, dbAlDia } from './ledger'
 
 let contactoId: number
 
@@ -71,5 +71,13 @@ describe('alDia', () => {
     expect(estado()).toBe('enviada')
     alDia(db, '2026-09-17')
     expect(db.select().from(cotizaciones).where(eq(cotizaciones.id, c.id)).get()!.estado).toBe('expirada')
+  })
+})
+
+describe('dbAlDia', () => {
+  it('hands back the same db, already Al día for hoy', () => {
+    mensual(null)
+    expect(dbAlDia(db, '2026-10-01')).toBe(db)
+    expect(periodos()).toEqual(['2026-08', '2026-09', '2026-10'])
   })
 })
