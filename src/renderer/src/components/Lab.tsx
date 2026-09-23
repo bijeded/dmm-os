@@ -21,19 +21,20 @@ export function Lab() {
   const [archivos, setArchivos] = useState<ArchivoLab[] | null>(null)
   const { error, ocupado, correr } = useAccion()
 
-  // Picking a folder reads its files; the first one is picked on arrival.
-  const leerArchivos = async (nombre: string) => {
-    setCarpeta(nombre)
+  // Lab is re-read on every pick, so a folder added on disk shows up without leaving the screen.
+  // The first folder is picked on arrival.
+  const leer = async (nombre?: string) => {
+    const c = await api.carpetas()
+    setCarpetas(c)
+    const elegida = nombre ?? c[0]?.nombre
+    if (!elegida) return
+    setCarpeta(elegida)
     setArchivos(null)
-    setArchivos(await api.archivos(nombre))
+    setArchivos(await api.archivos(elegida))
   }
 
   useEffect(() => {
-    correr(async () => {
-      const c = await api.carpetas()
-      setCarpetas(c)
-      if (c[0]) await leerArchivos(c[0].nombre)
-    })
+    correr(() => leer())
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   }, [])
 
@@ -55,13 +56,15 @@ export function Lab() {
                   type="button"
                   aria-current={c.nombre === carpeta ? 'true' : undefined}
                   disabled={ocupado}
-                  onClick={() => correr(() => leerArchivos(c.nombre))}
+                  onClick={() => correr(() => leer(c.nombre))}
                   className={`flex w-full cursor-pointer items-center justify-between rounded-control px-3 py-2 text-left text-[13px] ${
                     c.nombre === carpeta ? 'bg-surface-raised text-on-surface' : 'text-on-surface-muted hover:bg-surface-hover'
                   }`}
                 >
                   <span>{c.nombre}</span>
-                  <span className="font-mono text-[12px]">{c.archivos}</span>
+                  <span className="font-mono text-[12px]" title={c.archivos === null ? 'No se pudo leer' : undefined}>
+                    {c.archivos ?? '—'}
+                  </span>
                 </button>
               </li>
             ))}

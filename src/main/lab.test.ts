@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -43,6 +43,18 @@ describe('las carpetas de Lab', () => {
     expect(() => carpetasLab(mkdtempSync(join(tmpdir(), 'dmm-sin-lab-')))).toThrow(/No se encontró la carpeta Lab/)
   })
 
+  it.skipIf(process.getuid?.() === 0)('still lists the others when one folder cannot be read', () => {
+    chmodSync(join(lab, 'Design Systems'), 0o000)
+    try {
+      expect(carpetasLab(root)).toEqual([
+        { nombre: 'Benchmarks', archivos: 3 },
+        { nombre: 'Design Systems', archivos: null }
+      ])
+    } finally {
+      chmodSync(join(lab, 'Design Systems'), 0o755)
+    }
+  })
+
   it.skipIf(process.getuid?.() === 0)('says so when Lab/ cannot be read', () => {
     chmodSync(lab, 0o000)
     try {
@@ -70,12 +82,28 @@ describe('los archivos de una carpeta de Lab', () => {
     expect(() => archivosLab(root, '..')).toThrow(/fuera de Lab/)
     expect(() => archivosLab(root, '../Proyectos')).toThrow(/fuera de Lab/)
   })
+
+  it('reads only the folders Lab lists', () => {
+    mkdirSync(join(lab, 'Benchmarks', 'viejos'))
+    mkdirSync(join(lab, '.oculta'))
+    for (const carpeta of ['Benchmarks/viejos', 'Benchmarks/../Design Systems', '.oculta']) {
+      expect(() => archivosLab(root, carpeta), carpeta).toThrow(/no es una carpeta de Lab/)
+    }
+  })
 })
 
 describe('abrir en Lab', () => {
   it('resolves a folder or a file inside Lab/', () => {
     expect(rutaEnLab(root, 'Benchmarks')).toBe(join(lab, 'Benchmarks'))
     expect(rutaEnLab(root, 'Benchmarks/benchmark-landing-hoteles.md')).toBe(join(lab, 'Benchmarks', 'benchmark-landing-hoteles.md'))
+  })
+
+  it('refuses a link that leads outside Lab/', () => {
+    mkdirSync(join(root, 'Vault'))
+    writeFileSync(join(root, 'Vault', 'dmm.db'), '')
+    symlinkSync(join(root, 'Vault'), join(lab, 'fuga'))
+    expect(() => rutaEnLab(root, 'fuga/dmm.db')).toThrow(/fuera de Lab/)
+    expect(() => archivosLab(root, 'fuga')).toThrow(/fuera de Lab/)
   })
 
   it('refuses paths outside Lab/', () => {

@@ -123,7 +123,8 @@ export type CarpetaAbrible = 'raiz' | 'entrada' | 'facturas'
 /** A subfolder of `Lab/`, where Claude Desktop output lands, and how many files it holds. */
 export interface CarpetaLab {
   nombre: string
-  archivos: number
+  /** `null` when the folder can't be read. */
+  archivos: number | null
 }
 
 /** A file in a Lab folder. `tipo` comes from its extension (`MD`, `PDF`), '' when it has none. */
