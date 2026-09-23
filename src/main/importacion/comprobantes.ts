@@ -46,17 +46,18 @@ function montosDe(cfdi: Cfdi) {
  * total, was edited by hand and is left alone.
  */
 function releerSiImportado(db: Tx, cfdi: Cfdi): boolean {
-  const neto = cfdi.iva - cfdi.retenciones
+  const { subtotal, iva, retenciones, total } = montosDe(cfdi)
+  const neto = iva - retenciones
   const corregir = (tabla: typeof ingresos | typeof costos) => {
     const fila = db.select({ id: tabla.id }).from(tabla).where(eq(tabla.cfdiUuid, cfdi.uuid)).get()
     if (fila === undefined) return false
     db.update(tabla)
-      .set({ iva: cfdi.iva, retenciones: cfdi.retenciones })
+      .set({ iva, retenciones })
       .where(
         and(
           eq(tabla.id, fila.id),
-          eq(tabla.subtotal, cfdi.subtotal),
-          eq(tabla.total, cfdi.total),
+          eq(tabla.subtotal, subtotal),
+          eq(tabla.total, total),
           or(
             and(eq(tabla.iva, neto), eq(tabla.retenciones, 0)),
             and(eq(tabla.iva, 0), eq(tabla.retenciones, -neto))

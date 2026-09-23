@@ -44,7 +44,9 @@ export interface MontosRegistrados {
  * IVA itself; the total is subtotal + IVA − retenciones. With `tasaUsd` the inputs are USD cents:
  * each part converts at the rate and their USD total is kept as the original, which Cobros compares
  * against. Without one they are centavos, and `montoOriginal` is the USD total they were already
- * converted from, if any. A given `total` must balance with the inputs, or the amounts are refused.
+ * converted from, if any (a CFDI converts each part at its own TipoCambio). A given `total`, in the
+ * inputs' units, is only checked: it must balance with them, or the amounts are refused. Each part
+ * converts on its own, so the recorded total is the sum of converted parts, not the converted sum.
  */
 export function montos(
   subtotal: number,
