@@ -2,15 +2,19 @@ import type { Db } from './db'
 import { expirarCotizaciones } from './cotizar'
 import { generarPeriodos } from './db/periodos'
 
-// The ledger as of hoy (Al día): every read and command over Ingresos, Costos, Cotizaciones or
-// Proyectos goes through here, so what they see has expired Cotizaciones marked and Periodos
-// generated up to this month, and a definition they write has its Periodos before they return.
+// The ledger Al día: brought up to hoy before money is read. Sent Cotizaciones past their validity
+// become expiradas, then every Periodo generado due this month exists. Idempotent; reading twice
+// changes nothing. dbAlDia is the only way in: every handler over Ingresos, Costos, Cotizaciones or
+// Proyectos gets its db from it, so none can see a stale state (the handler tests pin this for every
+// entry). The importer alone writes through the connection, since imported history is exempt
+// (ADR-0002); the next call through here brings what it wrote Al día. A command that writes a
+// definition does so in transaccionConPeriodos, so its Periodos exist before it returns.
 
 /** A transaction, which reads and writes exactly like the database itself. */
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 
-/** Brings the ledger Al día: expires Cotizaciones, then generates Periodos up to `hoy`'s month. Idempotent. */
-export function alDia(db: Db, hoy: string): void {
+/** Brings the ledger Al día: expires Cotizaciones, then generates Periodos up to `hoy`'s month. */
+function alDia(db: Db, hoy: string): void {
   expirarCotizaciones(db, hoy)
   generarPeriodos(db, hoy.slice(0, 7))
 }
