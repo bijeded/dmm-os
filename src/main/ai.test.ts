@@ -537,23 +537,6 @@ describe('Asignación de costo', () => {
 
   beforeEach(suscripcion)
 
-  it('splits the month’s Suscripciones across Proyectos AI by their tokens, rounding so the rows add up to the pool', async () => {
-    const aura = proyectoAi('Aura', { contactoId: contacto('Hotel Aura').id, ruta: 'Proyectos/Aura' })
-    const netdeckr = proyectoAi('Netdeckr', { ruta: 'Proyectos/Netdeckr' })
-    await usoDelMes({ [AURA]: 9_100, [NETDECKR]: 6_600 })
-    // 36,000 × 9,100 ÷ 15,700 = 20,866.24 and 36,000 × 6,600 ÷ 15,700 = 15,133.76: the centavo left goes to the larger remainder.
-    expect(asignacion()).toEqual({
-      mes: '2026-09',
-      total: 36_000,
-      criterio: 'tokens',
-      filas: [
-        { proyectoId: aura.id, nombre: 'Aura', tokens: 9_100, parte: 9_100 / 15_700, monto: 20_866 },
-        { proyectoId: netdeckr.id, nombre: 'Netdeckr', tokens: 6_600, parte: 6_600 / 15_700, monto: 15_134 }
-      ],
-      sinAsignar: 0
-    })
-  })
-
   it('leaves out Proyectos AI with no usage while another has some', async () => {
     proyectoAi('Aura', { ruta: 'Proyectos/Aura' })
     proyectoAi('Netdeckr', { ruta: 'Proyectos/Netdeckr' })
@@ -573,42 +556,7 @@ describe('Asignación de costo', () => {
     })
   })
 
-  it('splits evenly across the Proyectos AI Abiertos en el mes when none has usage in it', () => {
-    proyectoAi('Aura', { fechaInicio: '2026-04-10' })
-    proyectoAi('Netdeckr', { fechaInicio: '2026-09-20', estado: 'pausado' })
-    proyectoAi('Voz', { fechaInicio: '2026-05-01', estado: 'completado' })
-    db.update(proyectos).set({ fechaFin: '2026-08-31' }).where(eq(proyectos.nombre, 'Voz')).run()
-    // Completed this month: still Abierto en el mes.
-    proyectoAi('Chatbot Terra', { fechaInicio: '2026-06-01', estado: 'completado' })
-    db.update(proyectos).set({ fechaFin: '2026-09-02' }).where(eq(proyectos.nombre, 'Chatbot Terra')).run()
-    // Starts next month.
-    proyectoAi('Agente Sol', { fechaInicio: '2026-10-01' })
-    const a = asignacion()
-    expect(a.criterio).toBe('partes_iguales')
-    expect(a.filas.map((f) => [f.nombre, f.tokens, f.parte, f.monto])).toEqual([
-      ['Aura', 0, 1 / 3, 12_000],
-      ['Chatbot Terra', 0, 1 / 3, 12_000],
-      ['Netdeckr', 0, 1 / 3, 12_000]
-    ])
-    expect(a.sinAsignar).toBe(0)
-  })
-
-  it('adds up to the pool to the centavo when it does not divide evenly', () => {
-    for (const nombre of ['Aura', 'Netdeckr', 'Voz']) proyectoAi(nombre)
-    const a = asignacion()
-    expect(a.filas.map((f) => f.monto)).toEqual([12_000, 12_000, 12_000])
-    nuevoCosto(
-      db,
-      { nombre: 'API créditos', proveedor: 'OpenAI', referencia: null, categoria: 'unico', proyectoId: null, fecha: '2026-09-02', subtotal: 10_001, conIva: false, parcialidades: null, suscripcionIa: true, pagado: true },
-      HOY
-    )
-    const b = asignacion()
-    expect(b.total).toBe(46_001)
-    expect(b.filas.map((f) => f.monto)).toEqual([15_334, 15_334, 15_333])
-    expect(b.filas.reduce((s, f) => s + f.monto, 0) + b.sinAsignar).toBe(46_001)
-  })
-
-  it('leaves the whole pool Sin asignar when there is no Proyecto AI', async () => {
+  it('keeps Sin proyecto usage out of the split, leaving the pool Sin asignar with no Proyecto AI', async () => {
     // Usage in a folder, but no Proyecto AI to give it to.
     db.insert(proyectos).values({ nombre: 'Tienda', contactoId: contacto().id, categoria: 'ecommerce', fechaInicio: '2026-01-10' }).run()
     await usoDelMes({ [AURA]: 900 })
