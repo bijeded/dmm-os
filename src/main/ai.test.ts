@@ -231,6 +231,27 @@ describe('Suscripciones', () => {
     ])
   })
 
+  it('lists a one-off Costo marked Suscripción de IA as Manual', () => {
+    nuevo({ nombre: 'ChatGPT Plus', proveedor: 'OpenAI', fecha: '2026-09-12', subtotal: 40_000, suscripcionIa: true })
+    expect(resumenAi(db, ajustes, 'mes', HOY).suscripciones).toEqual([
+      { id: expect.any(Number), proveedor: 'OpenAI', plan: 'ChatGPT Plus', fecha: '2026-09-12', monto: 40_000, origen: 'manual' },
+      expect.objectContaining({ plan: 'Claude Max' })
+    ])
+  })
+
+  it('matches a received CFDI by the vendor’s legal name', () => {
+    nuevo({ nombre: 'ChatGPT Plus', proveedor: 'OpenAI', fecha: '2026-08-12', subtotal: 40_000, suscripcionIa: true })
+    recibido('ANTHROPIC, PBC', '2026-09-18', 36_000)
+    recibido('OPENAI OPCO LLC', '2026-09-15', 40_000)
+    // Starts with the same letters, but is another company.
+    recibido('ANTHROPOLOGIE SA DE CV', '2026-09-16', 50_000)
+    expect(resumenAi(db, ajustes, 'mes', HOY).suscripciones.map((s) => [s.proveedor, s.origen])).toEqual([
+      ['ANTHROPIC, PBC', 'cfdi'],
+      ['OPENAI OPCO LLC', 'cfdi'],
+      ['Anthropic', 'manual']
+    ])
+  })
+
   it('leaves cancelled Costos out', () => {
     recibido('Anthropic', '2026-09-19', 99_000, 'cancelado')
     expect(resumenAi(db, ajustes, 'mes', HOY).suscripciones.map((s) => s.plan)).toEqual(['Claude Max'])

@@ -1,0 +1,1 @@
+ALTER TABLE `costos` ADD `suscripcion_ia` integer DEFAULT false NOT NULL;

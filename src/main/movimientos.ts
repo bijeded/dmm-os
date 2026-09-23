@@ -138,7 +138,8 @@ export function nuevoCosto(db: Db, n: CostoNuevo, hoy: string) {
         referencia: n.referencia?.trim() || null,
         fecha: n.fecha,
         fechaPago: pagado ? n.fecha : null,
-        proyectoId: n.proyectoId
+        proyectoId: n.proyectoId,
+        suscripcionIa: n.suscripcionIa
       })
       .run()
     return
