@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react'
-import { NOMBRES_PERIODO_FINANZAS, PERIODOS_AI, type PeriodoAi, type ResumenAi } from '../../../shared/dominio'
-import { monto, pesos } from '../../../shared/formato'
-import { Aviso, Cifra, fecha, useAccion } from './Seccion'
+import {
+  NOMBRES_ORIGEN_SUSCRIPCION,
+  NOMBRES_PERIODO_FINANZAS,
+  PERIODOS_AI,
+  type FilaSuscripcion,
+  type PeriodoAi,
+  type ResumenAi
+} from '../../../shared/dominio'
+import { dia, monto, pesos } from '../../../shared/formato'
+import { Aviso, Cifra, fecha, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
-import { tituloCls } from './estilos'
+import { celdaCls, etiquetaCls, tituloCls } from './estilos'
 
 /** A token count as the cards show it: `15.7 M`, `840.0 K`, `312`. */
 const tokens = (n: number) => {
@@ -85,8 +92,55 @@ export function Ai() {
             valor={resumen.costoApiMxn === null ? monto(resumen.costoApiUsd, 'USD') : pesos(resumen.costoApiMxn)}
             detalle={[resumen.costoApiMxn === null ? 'sin tipo de cambio registrado' : `≈ ${monto(resumen.costoApiUsd, 'USD')}`]}
           />
+          <Cifra label="Suscripciones" valor={pesos(resumen.suscripcionesTotal)} detalle={[...new Set(resumen.suscripciones.map((s) => s.plan))]} />
         </ul>
       )}
+
+      {resumen && (
+        <Seccion id="ai-suscripciones" titulo="Suscripciones">
+          <p className="m-0 text-[12px] text-on-surface-muted">Vista filtrada de Costos · proveedor AI</p>
+          <TablaSuscripciones filas={resumen.suscripciones} />
+          <p className="m-0 text-[12px] text-on-surface-muted">Mismo registro que Finanzas → Costos.</p>
+        </Seccion>
+      )}
     </>
+  )
+}
+
+function TablaSuscripciones({ filas }: { filas: FilaSuscripcion[] }) {
+  if (filas.length === 0) return <p className="m-0 text-[13px] text-on-surface-muted">Ninguna suscripción en el periodo.</p>
+  return (
+    <table aria-labelledby="ai-suscripciones" className="tbl w-full border-collapse text-[13px]">
+      <thead>
+        <tr className={etiquetaCls}>
+          <th className={celdaCls}>Proveedor</th>
+          <th className={celdaCls}>Plan</th>
+          <th className={celdaCls}>Fecha</th>
+          <th className={`${celdaCls} text-right`}>Monto</th>
+          <th className={celdaCls}>Origen</th>
+        </tr>
+      </thead>
+      <tbody>
+        {filas.map((s) => (
+          <tr key={s.id}>
+            <td data-label="Proveedor" className={celdaCls}>
+              {s.proveedor ?? '—'}
+            </td>
+            <td data-label="Plan" className={celdaCls}>
+              {s.plan}
+            </td>
+            <td data-label="Fecha" className={`${celdaCls} font-mono text-[12px]`}>
+              {dia(s.fecha)}
+            </td>
+            <td data-label="Monto" className={`${celdaCls} text-right font-mono text-[12px]`}>
+              {pesos(s.monto)}
+            </td>
+            <td data-label="Origen" className={celdaCls}>
+              {NOMBRES_ORIGEN_SUSCRIPCION[s.origen]}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }

@@ -1,13 +1,19 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import type { PeriodoAi, ResumenAi } from '../../../shared/dominio'
+import type { FilaSuscripcion, PeriodoAi, ResumenAi } from '../../../shared/dominio'
 import type { DmmApi } from '../../../shared/contrato'
-import { monto } from '../../../shared/formato'
+import { dia, monto } from '../../../shared/formato'
 import { fecha } from './Seccion'
 import { Ai } from './Ai'
 
 const ESCANEO = '2026-09-12T15:14:00.000Z'
+
+const SUSCRIPCIONES_MES: FilaSuscripcion[] = [
+  { id: 7, proveedor: 'Anthropic', plan: 'Claude Pro', fecha: '2026-09-18', monto: 36_000, origen: 'cfdi' },
+  { id: 5, proveedor: 'OpenAI', plan: 'API créditos', fecha: '2026-09-02', monto: 18_000, origen: 'manual' }
+]
+const SUSCRIPCION_AGOSTO: FilaSuscripcion = { id: 3, proveedor: 'Anthropic', plan: 'Claude Pro', fecha: '2026-08-18', monto: 36_000, origen: 'cfdi' }
 
 const resumen = (periodo: PeriodoAi, cambios: Partial<ResumenAi> = {}): ResumenAi => ({
   periodo,
@@ -17,6 +23,8 @@ const resumen = (periodo: PeriodoAi, cambios: Partial<ResumenAi> = {}): ResumenA
   costoApiUsd: periodo === 'mes' ? 9_400 : 31_050,
   costoApiMxn: periodo === 'mes' ? 172_960 : 571_320,
   tipoCambio: 18.4,
+  suscripciones: periodo === 'mes' ? SUSCRIPCIONES_MES : [...SUSCRIPCIONES_MES, SUSCRIPCION_AGOSTO],
+  suscripcionesTotal: periodo === 'mes' ? 54_000 : 90_000,
   ultimoEscaneo: ESCANEO,
   avisos: [],
   ...cambios
@@ -34,7 +42,7 @@ const montar = (ai: Partial<DmmApi['ai']> = {}) => {
   render(<Ai />)
 }
 
-const tarjeta = (label: RegExp) => screen.getByText(label).closest('li') as HTMLElement
+const tarjeta = (label: RegExp) => within(screen.getByRole('list', { name: 'Resumen' })).getByText(label).closest('li') as HTMLElement
 
 afterEach(cleanup)
 
@@ -92,6 +100,36 @@ describe('AI', () => {
     const avisos = await screen.findByRole('list', { name: 'Avisos de lectura' })
     expect(within(avisos).getByText('CC Usage: no está instalado (no se encontró `ccusage`)')).toBeTruthy()
     expect(tarjeta(/Tokens totales/).textContent).toContain('15.7 M')
+  })
+
+  it('lists the period’s Suscripciones with their origin, and totals them on the card', async () => {
+    montar()
+    const tabla = await screen.findByRole('table', { name: 'Suscripciones' })
+    const filas = within(tabla)
+      .getAllByRole('row')
+      .slice(1)
+      .map((f) => within(f).getAllByRole('cell').map((c) => c.textContent))
+    expect(filas).toEqual([
+      ['Anthropic', 'Claude Pro', dia('2026-09-18'), '$360.00', 'CFDI recibido'],
+      ['OpenAI', 'API créditos', dia('2026-09-02'), '$180.00', 'Manual']
+    ])
+    expect(tarjeta(/^Suscripciones$/).textContent).toContain('$540.00')
+  })
+
+  it('switches Suscripciones and their total to Todo el tiempo', async () => {
+    montar()
+    await screen.findByRole('table', { name: 'Suscripciones' })
+    fireEvent.click(screen.getByRole('button', { name: 'Todo el tiempo' }))
+    await screen.findByText(dia('2026-08-18'))
+    expect(within(screen.getByRole('table', { name: 'Suscripciones' })).getAllByRole('row')).toHaveLength(4)
+    expect(tarjeta(/^Suscripciones$/).textContent).toContain('$900.00')
+  })
+
+  it('says when the period has no Suscripciones', async () => {
+    montar({ resumen: vi.fn(async (p: PeriodoAi) => resumen(p, { suscripciones: [], suscripcionesTotal: 0 })) })
+    expect(await screen.findByText('Ninguna suscripción en el periodo.')).toBeTruthy()
+    expect(screen.queryByRole('table', { name: 'Suscripciones' })).toBeNull()
+    expect(tarjeta(/^Suscripciones$/).textContent).toContain('$0.00')
   })
 
   it('says why the figures could not be read', async () => {
