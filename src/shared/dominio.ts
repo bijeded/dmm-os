@@ -539,8 +539,8 @@ export interface ResumenAi extends LecturaUso {
 export interface UsoModelo {
   /** Who makes it: `claude`, `openai`. */
   proveedor: string
-  /** The family, e.g. haiku, sonnet, opus, fable. */
-  modelo: string
+  /** The model's family, e.g. haiku, sonnet, opus, fable. */
+  familia: string
   /** Input, output and cache tokens. */
   tokens: number
   /** USD cents it would cost through the API. */

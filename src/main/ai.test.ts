@@ -198,14 +198,14 @@ describe('Tokens por modelo', () => {
 
   it('lists every model ever seen by its family, with zero in a period it was not used', () => {
     expect(resumenAi(db, ajustes, 'todo', HOY).modelos).toEqual([
-      { proveedor: 'claude', modelo: 'haiku', tokens: 30, costoUsd: 0 },
-      { proveedor: 'claude', modelo: 'sonnet', tokens: 1_000, costoUsd: 125 },
-      { proveedor: 'claude', modelo: 'opus', tokens: 10_000 + 1_000, costoUsd: 1_050 + 210 }
+      { proveedor: 'claude', familia: 'haiku', tokens: 30, costoUsd: 0 },
+      { proveedor: 'claude', familia: 'sonnet', tokens: 1_000, costoUsd: 125 },
+      { proveedor: 'claude', familia: 'opus', tokens: 10_000 + 1_000, costoUsd: 1_050 + 210 }
     ])
     expect(resumenAi(db, ajustes, 'mes', HOY).modelos).toEqual([
-      { proveedor: 'claude', modelo: 'haiku', tokens: 30, costoUsd: 0 },
-      { proveedor: 'claude', modelo: 'sonnet', tokens: 0, costoUsd: 0 },
-      { proveedor: 'claude', modelo: 'opus', tokens: 11_000, costoUsd: 1_260 }
+      { proveedor: 'claude', familia: 'haiku', tokens: 30, costoUsd: 0 },
+      { proveedor: 'claude', familia: 'sonnet', tokens: 0, costoUsd: 0 },
+      { proveedor: 'claude', familia: 'opus', tokens: 11_000, costoUsd: 1_260 }
     ])
   })
 
@@ -214,11 +214,11 @@ describe('Tokens por modelo', () => {
     uso('claude', 'claude-3-5-sonnet-20241022', '2026-09-10', 500, 40)
     uso('claude', 'claude-fable-5-1', '2026-09-11', 700, 90)
     expect(resumenAi(db, ajustes, 'mes', HOY).modelos).toEqual([
-      { proveedor: 'claude', modelo: 'haiku', tokens: 30, costoUsd: 0 },
-      { proveedor: 'claude', modelo: 'sonnet', tokens: 500, costoUsd: 40 },
-      { proveedor: 'claude', modelo: 'opus', tokens: 11_000, costoUsd: 1_260 },
-      { proveedor: 'claude', modelo: 'fable', tokens: 700, costoUsd: 90 },
-      { proveedor: 'openai', modelo: 'gpt', tokens: 400, costoUsd: 30 }
+      { proveedor: 'claude', familia: 'haiku', tokens: 30, costoUsd: 0 },
+      { proveedor: 'claude', familia: 'sonnet', tokens: 500, costoUsd: 40 },
+      { proveedor: 'claude', familia: 'opus', tokens: 11_000, costoUsd: 1_260 },
+      { proveedor: 'claude', familia: 'fable', tokens: 700, costoUsd: 90 },
+      { proveedor: 'openai', familia: 'gpt', tokens: 400, costoUsd: 30 }
     ])
   })
 

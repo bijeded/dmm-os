@@ -148,7 +148,6 @@ function GraficaModelos({ modelos }: { modelos: UsoModelo[] }) {
     const ks = modelos.flatMap((m, k) => (m.proveedor === proveedor ? [x(k)] : []))
     return (ks[0] + ks[ks.length - 1]) / 2
   }
-  const actual = hover === null ? null : modelos[hover]
 
   return (
     <div className="relative">
@@ -162,13 +161,13 @@ function GraficaModelos({ modelos }: { modelos: UsoModelo[] }) {
           </g>
         ))}
         {modelos.map((m, k) => (
-          <g key={`${m.proveedor}·${m.modelo}`}>
+          <g key={`${m.proveedor}·${m.familia}`}>
             <rect x={x(k) - barra / 2} y={y(m.tokens)} width={barra} height={base - y(m.tokens)} rx="3" fill={color(m.proveedor)} opacity={hover === null || hover === k ? 1 : 0.6} />
             <text x={x(k)} y={base + 14} textAnchor="middle" className="fill-on-surface-muted font-mono text-[10px]">
-              {m.modelo}
+              {m.familia}
             </text>
             <rect
-              aria-label={`${m.proveedor} · ${m.modelo}`}
+              aria-label={`${m.proveedor} · ${m.familia}`}
               x={x(k) - paso / 2}
               y={0}
               width={paso}
@@ -185,17 +184,17 @@ function GraficaModelos({ modelos }: { modelos: UsoModelo[] }) {
           </text>
         ))}
       </svg>
-      {hover !== null && actual && (
+      {hover !== null && (
         <div
           role="tooltip"
           className="pointer-events-none absolute top-2 flex flex-col gap-0.5 rounded-control border border-border-strong bg-surface-raised p-2 font-mono text-[11px] text-on-surface shadow"
-          style={{ left: `${(x(hover) / ANCHO) * 100}%`, transform: hover >= modelos.length / 2 ? 'translateX(-110%)' : 'translateX(10%)' }}
+          style={{ left: `${(x(hover) / ANCHO) * 100}%`, transform: hover > modelos.length / 2 ? 'translateX(-105%)' : 'translateX(5%)' }}
         >
           <b>
-            {actual.proveedor} · {actual.modelo}
+            {modelos[hover].proveedor} · {modelos[hover].familia}
           </b>
-          <span>{tokens(actual.tokens)} tokens</span>
-          <span className="text-on-surface-muted">≈ {monto(actual.costoUsd, 'USD')} API</span>
+          <span>{tokens(modelos[hover].tokens)} tokens</span>
+          <span className="text-on-surface-muted">≈ {monto(modelos[hover].costoUsd, 'USD')} API</span>
         </div>
       )}
     </div>

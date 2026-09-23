@@ -246,6 +246,9 @@ function suscripciones(db: Db, rango: Rango): FilaSuscripcion[] {
     .map((c) => ({ id: c.id, proveedor: c.proveedor, plan: c.nombre, fecha: c.fecha, monto: c.subtotal, origen: c.cfdiUuid ? 'cfdi' : 'manual' }))
 }
 
+/** A usage row's input, output and cache tokens. */
+const TOKENS = sql`${usoTokens.tokensEntrada} + ${usoTokens.tokensSalida} + ${usoTokens.tokensCacheEscritura} + ${usoTokens.tokensCacheLectura}`
+
 /** Claude's families, smallest first: the order the chart shows them in. */
 const FAMILIAS_CLAUDE = ['haiku', 'sonnet', 'opus', 'fable']
 
@@ -259,8 +262,8 @@ const familia = (proveedor: string, modelo: string) =>
     .split(/[^a-z0-9]+/)
     .find((p) => p && p !== proveedor && p !== 'claude' && !/^\d/.test(p)) ?? modelo
 
-const rangoFamilia = (modelo: string) => {
-  const k = FAMILIAS_CLAUDE.indexOf(modelo)
+const ordenFamilia = (familia: string) => {
+  const k = FAMILIAS_CLAUDE.indexOf(familia)
   return k === -1 ? FAMILIAS_CLAUDE.length : k
 }
 
@@ -270,27 +273,28 @@ const rangoFamilia = (modelo: string) => {
  * families smallest first, then by name.
  */
 function usoPorModelo(db: Db, enPeriodo: SQL | undefined): UsoModelo[] {
+  const dentro = enPeriodo ?? sql`1`
   const filas = db
     .select({
       proveedor: usoTokens.proveedor,
       modelo: usoTokens.modelo,
-      tokens: sql<number>`coalesce(sum(case when ${enPeriodo ?? sql`1`} then ${usoTokens.tokensEntrada} + ${usoTokens.tokensSalida} + ${usoTokens.tokensCacheEscritura} + ${usoTokens.tokensCacheLectura} else 0 end), 0)`,
-      costoUsd: sql<number>`coalesce(sum(case when ${enPeriodo ?? sql`1`} then ${usoTokens.costoUsd} else 0 end), 0)`
+      tokens: sql<number>`coalesce(sum(case when ${dentro} then ${TOKENS} else 0 end), 0)`,
+      costoUsd: sql<number>`coalesce(sum(case when ${dentro} then ${usoTokens.costoUsd} else 0 end), 0)`
     })
     .from(usoTokens)
     .groupBy(usoTokens.proveedor, usoTokens.modelo)
     .all()
   const modelos = new Map<string, UsoModelo>()
   for (const f of filas) {
-    const modelo = familia(f.proveedor, f.modelo)
-    const k = JSON.stringify([f.proveedor, modelo])
-    const m = modelos.get(k) ?? { proveedor: f.proveedor, modelo, tokens: 0, costoUsd: 0 }
+    const suya = familia(f.proveedor, f.modelo)
+    const k = JSON.stringify([f.proveedor, suya])
+    const m = modelos.get(k) ?? { proveedor: f.proveedor, familia: suya, tokens: 0, costoUsd: 0 }
     m.tokens += f.tokens
     m.costoUsd += f.costoUsd
     modelos.set(k, m)
   }
   return [...modelos.values()].sort(
-    (a, b) => a.proveedor.localeCompare(b.proveedor) || rangoFamilia(a.modelo) - rangoFamilia(b.modelo) || a.modelo.localeCompare(b.modelo)
+    (a, b) => a.proveedor.localeCompare(b.proveedor) || ordenFamilia(a.familia) - ordenFamilia(b.familia) || a.familia.localeCompare(b.familia)
   )
 }
 
@@ -304,7 +308,7 @@ export function resumenAi(db: Db, ajustes: Ajustes, periodo: PeriodoAi, hoy: str
   const enPeriodo = (dia: typeof usoTokens.dia | typeof ahorroTokens.dia) => (periodo === 'mes' ? and(gte(dia, desde), lte(dia, hasta)) : undefined)
   const uso = db
     .select({
-      tokens: sql<number>`coalesce(sum(${usoTokens.tokensEntrada} + ${usoTokens.tokensSalida} + ${usoTokens.tokensCacheEscritura} + ${usoTokens.tokensCacheLectura}), 0)`,
+      tokens: sql<number>`coalesce(sum(${TOKENS}), 0)`,
       costoUsd: sql<number>`coalesce(sum(${usoTokens.costoUsd}), 0)`
     })
     .from(usoTokens)

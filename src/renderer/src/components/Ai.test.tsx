@@ -15,7 +15,7 @@ const SUSCRIPCIONES_MES: FilaSuscripcion[] = [
 ]
 const SUSCRIPCION_AGOSTO: FilaSuscripcion = { id: 3, proveedor: 'Anthropic', plan: 'Claude Pro', fecha: '2026-08-18', monto: 36_000, origen: 'cfdi' }
 
-const modelo = (proveedor: string, nombre: string, tokens: number, costoUsd: number): UsoModelo => ({ proveedor, modelo: nombre, tokens, costoUsd })
+const modelo = (proveedor: string, familia: string, tokens: number, costoUsd: number): UsoModelo => ({ proveedor, familia, tokens, costoUsd })
 
 const MODELOS: Record<PeriodoAi, UsoModelo[]> = {
   mes: [modelo('claude', 'haiku', 900_000, 120), modelo('claude', 'sonnet', 6_400_000, 3_820), modelo('claude', 'opus', 8_400_000, 5_460), modelo('openai', 'gpt', 0, 0)],
