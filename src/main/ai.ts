@@ -7,6 +7,7 @@ import type { Ajustes, Db } from './db'
 import { ahorroTokens, contactos, costos, cotizaciones, definicionesCosto, ingresos, proyectos, ubicacionesArchivo, usoTokens } from './db/schema'
 import { convertir, tasaDe } from './dinero'
 import { rangos } from './finanzas'
+import { fechaIngresoSql } from './ledger'
 import { clave } from './nombres'
 import { carpetaEntre, referenciaProyecto } from './proyectos'
 import type { AsignacionCosto, FilaAsignacion, FilaSuscripcion, LecturaUso, PeriodoAi, Rango, ResumenAi, UsoModelo, UsoTokens } from '../shared/dominio'
@@ -191,7 +192,7 @@ function tipoCambioReciente(db: Db): number | null {
       .where(isNotNull(cotizaciones.tipoCambio))
       .all(),
     ...db
-      .select({ fecha: sql<string | null>`coalesce(${ingresos.fechaPago}, ${ingresos.fechaRegistro})`, ...columnasMonto(ingresos) })
+      .select({ fecha: fechaIngresoSql, ...columnasMonto(ingresos) })
       .from(ingresos)
       .where(usd(ingresos))
       .all()
@@ -551,13 +552,11 @@ function ingresosAi(db: Db, periodo: PeriodoAi, rango: Rango, tipoCambio: number
     const tasa = c.tipoCambio ?? tipoCambio
     return tasa === null ? s : s + convertir(c.subtotal, 'USD', 'MXN', tasa)
   }, 0)
-  // When an Ingreso counts, as in Finanzas: the day it was paid, else the day it was registered.
-  const fechaIngreso = sql`coalesce(${ingresos.fechaPago}, ${ingresos.fechaRegistro})`
   const { ingresoAi } = db
     .select({ ingresoAi: sql<number>`coalesce(sum(${ingresos.subtotal}), 0)` })
     .from(ingresos)
     .innerJoin(proyectos, eq(proyectos.id, ingresos.proyectoId))
-    .where(and(eq(proyectos.categoria, 'ai'), eq(ingresos.estado, 'pagado'), gte(fechaIngreso, rango.desde), lte(fechaIngreso, rango.hasta)))
+    .where(and(eq(proyectos.categoria, 'ai'), eq(ingresos.estado, 'pagado'), gte(fechaIngresoSql, rango.desde), lte(fechaIngresoSql, rango.hasta)))
     .get()!
   return { ingresoProyectos, ingresoAi }
 }

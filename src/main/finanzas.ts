@@ -3,6 +3,7 @@ import { calendarioPeriodos, type PeriodoCosto } from './db/calendario'
 import { coberturaCostos } from './db/cobertura'
 import { sumarAnios, sumarDias, sumarMeses } from '../shared/fechas'
 import { monedaDe } from './dinero'
+import { fechaIngreso } from './ledger'
 import { accionesCosto, origenCosto, type Costo } from './ciclo-costo'
 import { accionesIngreso, origenIngreso, reembolsableIngreso, restante, type Ingreso } from './ciclo-ingreso'
 import { contactos, costos, definicionesCosto, ingresos, proyectos } from './db/schema'
@@ -42,9 +43,6 @@ export function rangos(periodo: PeriodoFinanzas, hoy: string, primero = hoy): { 
   return { rango, anterior: { desde: sumarAnios(desde, -n), hasta: sumarAnios(hoy, -n) } }
 }
 
-
-/** When an Ingreso counts: the day it was paid, else the day it was registered. */
-const fechaIngreso = (i: Ingreso) => i.fechaPago ?? i.fechaRegistro
 
 /** Money that did or will move: cancelled and uncollectible Ingresos, and cancelled Costos, don't count. */
 const cuentaIngreso = (i: Ingreso) => (i.estado === 'pendiente' || i.estado === 'pagado') && fechaIngreso(i) !== null

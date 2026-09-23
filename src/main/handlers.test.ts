@@ -1005,3 +1005,31 @@ describe('the preview is a promise', () => {
     expect(pendientes).toEqual(previsto)
   })
 })
+
+describe('when an Ingreso counts', () => {
+  it('lands on the day it was paid, and a Reembolso on the day it was given back, in Finanzas, AI and the Contacto Ficha', async () => {
+    const contactoId = await h.contactos.guardar({ nombre: 'Hotel Aura', empresa: null, email: null, telefono: null, direccion: null, notas: null })
+    const { id: proyectoId } = await h.proyectos.guardar({ nombre: 'Chatbot', etiqueta: 'cliente', contactoId, clienteFinal: null, categoria: 'ai', fechaInicio: '', fechaEntrega: null, notas: null })
+    const enCadaPantalla = async () => ({
+      finanzas: (await h.finanzas.resumen('mes')).actual.ingresos,
+      ai: (await h.ai.resumen('mes')).ingresoAi,
+      ficha: (await h.contactos.ficha(contactoId)).historial.filter((m) => m.tipo === 'pago').map((m) => [m.fecha, m.monto])
+    })
+
+    reloj('2026-08-20')
+    await h.finanzas.nuevoIngreso({ categoria: 'sin_factura', facturado: false, contactoId: null, proyectoId, fecha: '2026-08-20', subtotal: 1000, conIva: false, pagado: false, notas: null })
+    const { id } = (await h.finanzas.resumen('mes')).ingresos[0]
+
+    reloj('2026-09-16')
+    await h.finanzas.pagarIngreso(id)
+    expect(await enCadaPantalla()).toEqual({ finanzas: 1000, ai: 1000, ficha: [['2026-09-16', 1000]] })
+    reloj('2026-08-31')
+    expect(await enCadaPantalla()).toMatchObject({ finanzas: 0, ai: 0 })
+
+    reloj('2026-10-05')
+    await h.finanzas.reembolsar(id, 400)
+    expect(await enCadaPantalla()).toEqual({ finanzas: -400, ai: -400, ficha: [['2026-10-05', -400], ['2026-09-16', 1000]] })
+    reloj('2026-09-30')
+    expect(await enCadaPantalla()).toMatchObject({ finanzas: 1000, ai: 1000 })
+  })
+})
