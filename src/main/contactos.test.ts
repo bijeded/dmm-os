@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { borrarContacto, contactosCsv, fichaContacto, guardarContacto, listarContactos } from './contactos'
 import { contacto, cotizacionAceptada, db, ingresoBase, proyecto, reiniciarDb } from './db/test-db'
 import { contactos, cotizaciones, ingresos, proyectos } from './db/schema'
@@ -95,6 +95,7 @@ describe('fichaContacto', () => {
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), 'dmm-ficha-'))
   })
+  afterEach(() => rmSync(root, { recursive: true, force: true }))
 
   it('shows the full history, newest first, with its value', () => {
     const c = contacto('Sonríeme')

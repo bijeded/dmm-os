@@ -1,8 +1,8 @@
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, vigenciasPrecio } from './db/schema'
 import { generarPeriodos } from './db/periodos'
 import { contacto, db, reiniciarDb } from './db/test-db'
@@ -31,6 +31,7 @@ beforeEach(() => {
   contactoId = contacto('Clínica Sol').id
   imprimir.mockClear()
 })
+afterEach(() => rmSync(root, { recursive: true, force: true }))
 
 const nueva = (cambios: Partial<CotizacionNueva> = {}): CotizacionNueva => ({
   contactoId,

@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { leerUso, resumenAi, type EjecutarUso, type Fuente } from './ai'
 import { ajustes, contacto, db, reiniciarDb } from './db/test-db'
 import { costos, cotizaciones, ingresos, proyectos, ubicacionesArchivo, usoTokens } from './db/schema'
@@ -18,6 +18,7 @@ const AHORA = '2026-09-22T15:00:00.000Z'
 const ROOT = '/Users/dmm/Desktop/DMM OS'
 /** The DMM OS root on this machine's disk, where Proyecto folders are checked. */
 const DISCO = mkdtempSync(join(tmpdir(), 'dmm-ai-'))
+afterAll(() => rmSync(DISCO, { recursive: true, force: true }))
 const AURA = '-Users-dmm-Desktop-DMM-OS-Proyectos-Aura'
 const NETDECKR = '-Users-dmm-Desktop-DMM-OS-Proyectos-Netdeckr'
 

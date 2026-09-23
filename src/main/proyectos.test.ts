@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { costos, cotizaciones, ingresos, proyectos, ubicacionesArchivo } from './db/schema'
 import { contacto, cotizacionAceptada, db, ingresoBase, proyecto, reiniciarDb } from './db/test-db'
 import { importarCarpetaProyecto } from './importacion/carpetas'
@@ -29,6 +29,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'dmm-proyectos-'))
   contactoId = contacto('Clínica Sol').id
 })
+afterEach(() => rmSync(root, { recursive: true, force: true }))
 
 const nuevo = (cambios: Partial<ProyectoNuevo> = {}): ProyectoNuevo => ({
   nombre: 'Sitio web',
