@@ -26,8 +26,8 @@ import {
   type CostoEstimado
 } from '../../shared/dominio'
 
-// Money is stored as integer centavos (MXN). Periods are 'YYYY-MM'. Dates are 'YYYY-MM-DD'.
-// File locations are relative paths (docs/adr/0001).
+// Money is stored as integer centavos (MXN); a USD amount, where one is kept, as integer USD cents.
+// Periods are 'YYYY-MM'. Dates are 'YYYY-MM-DD'. File locations are relative paths (docs/adr/0001).
 
 export const categorias = CATEGORIAS
 
@@ -364,9 +364,10 @@ export const asignacionesCosto = sqliteTable(
 
 /**
  * Token usage imported from CC Usage, one row per day, folder, provider and model. `carpeta` is
- * the working directory as Claude Code names its project (the path with every other character
- * than letters and digits as `-`); it is linked to a Proyecto when read, never here, so no key.
- * A re-read replaces the rows of the days it covers.
+ * the working directory as Claude Code names it (every character but letters and digits as `-`),
+ * relative to the DMM OS root (`Proyectos-Aura`); one outside the root keeps its whole name,
+ * starting with `-`. It is linked to a Proyecto when read, never here, so no key. A re-read
+ * replaces the rows of each day and folder it covers.
  */
 export const usoTokens = sqliteTable(
   'uso_tokens',

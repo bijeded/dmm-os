@@ -221,8 +221,8 @@ export function crearHandlers({
       }
     },
     ai: {
-      resumen: (periodo) => resumenAi(conexion.db, periodo, hoy()),
-      leerUso: () => leerUso(conexion.db, ejecutarUso, ahora())
+      resumen: (periodo) => resumenAi(conexion.db, conexion.ajustes, periodo, hoy()),
+      leerUso: () => leerUso(conexion.db, conexion.ajustes, info.dmmOsRoot, ejecutarUso, ahora())
     }
   }
 }
