@@ -42,7 +42,7 @@ import {
 } from './proyectos'
 import { agregarTarea, borrarTarea, completarTarea, listarTareas } from './tareas'
 import { escanearCarpetas, importarFacturas, marcarHddNoDisponible } from './importacion'
-import { archivosLab, carpetasLab, rutaEnLab } from './lab'
+import { archivosLab, buscarLab, carpetasLab, rutaEnLab, vistaPreviaLab } from './lab'
 import { alDia } from './ledger'
 import { leerRutas } from './rutas'
 import { pendientes, responder } from './sugerencias'
@@ -209,6 +209,8 @@ export function crearHandlers({
     lab: {
       carpetas: () => carpetasLab(info.dmmOsRoot),
       archivos: (carpeta) => archivosLab(info.dmmOsRoot, carpeta),
+      buscar: (consulta) => buscarLab(info.dmmOsRoot, consulta),
+      vistaPrevia: (ruta) => vistaPreviaLab(info.dmmOsRoot, ruta),
       abrir: async (ruta) => {
         const error = await abrirCarpeta(rutaEnLab(info.dmmOsRoot, ruta))
         if (error) throw new Error(error)

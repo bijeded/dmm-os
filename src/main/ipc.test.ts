@@ -128,6 +128,8 @@ function handlers() {
     lab: {
       carpetas: vi.fn(() => [{ nombre: 'Benchmarks', archivos: 0 }]),
       archivos: vi.fn(() => []),
+      buscar: vi.fn(() => []),
+      vistaPrevia: vi.fn(() => null),
       abrir: vi.fn(async () => {})
     }
   } satisfies DmmHandlers
@@ -147,7 +149,7 @@ describe('IPC contract', () => {
     recorrerContrato(contrato, (canal) => canales.push(canal))
     expect([...conectar(handlers()).registrados.keys()]).toEqual(canales)
     expect(canales).toContain('respaldos:estado')
-    expect(canales).toEqual(expect.arrayContaining(['lab:carpetas', 'lab:archivos', 'lab:abrir']))
+    expect(canales).toEqual(expect.arrayContaining(['lab:carpetas', 'lab:archivos', 'lab:buscar', 'lab:vistaPrevia', 'lab:abrir']))
   })
 
   it('round-trips calls and arguments from the renderer API to main handlers', async () => {

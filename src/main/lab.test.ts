@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, utimesSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { archivosLab, carpetasLab, rutaEnLab } from './lab'
+import { archivosLab, buscarLab, carpetasLab, rutaEnLab, VISTA_PREVIA_BYTES, vistaPreviaLab } from './lab'
 
 let root: string
 let lab: string
@@ -110,5 +110,64 @@ describe('abrir en Lab', () => {
     for (const ruta of ['', '.', '..', '../Vault/dmm.db', 'Benchmarks/../../Vault', '/etc/passwd']) {
       expect(() => rutaEnLab(root, ruta), ruta).toThrow(/fuera de Lab/)
     }
+  })
+})
+
+describe('buscar en Lab', () => {
+  beforeEach(() => {
+    archivo('Design Systems/sistema-hoteles.txt', 'tokens', '2026-09-15T10:00:00.000Z')
+    mkdirSync(join(lab, 'Newsletter'))
+    archivo('Newsletter/Boletín Hotelería.md', '', '2026-07-01T10:00:00.000Z')
+  })
+
+  it('finds files by name in any Lab folder, newest first, saying where each is', () => {
+    expect(buscarLab(root, 'hotel')).toEqual([
+      { carpeta: 'Design Systems', nombre: 'sistema-hoteles.txt', tipo: 'TXT', bytes: 6, modificado: '2026-09-15T10:00:00.000Z' },
+      { carpeta: 'Benchmarks', nombre: 'benchmark-landing-hoteles.md', tipo: 'MD', bytes: 9, modificado: '2026-09-09T10:00:00.000Z' },
+      { carpeta: 'Newsletter', nombre: 'Boletín Hotelería.md', tipo: 'MD', bytes: 0, modificado: '2026-07-01T10:00:00.000Z' }
+    ])
+  })
+
+  it('ignores case, accents and surrounding spaces, as the other searches do', () => {
+    expect(buscarLab(root, '  BOLETIN hoteleria ').map((a) => a.nombre)).toEqual(['Boletín Hotelería.md'])
+  })
+
+  it('finds nothing for an empty search, a folder name or a hidden file', () => {
+    expect(buscarLab(root, '  ')).toEqual([])
+    expect(buscarLab(root, 'Benchmarks')).toEqual([])
+    expect(buscarLab(root, 'DS_Store')).toEqual([])
+  })
+
+  it.skipIf(process.getuid?.() === 0)('still searches the others when one folder cannot be read', () => {
+    chmodSync(join(lab, 'Design Systems'), 0o000)
+    try {
+      expect(buscarLab(root, 'hotel').map((a) => a.carpeta)).toEqual(['Benchmarks', 'Newsletter'])
+    } finally {
+      chmodSync(join(lab, 'Design Systems'), 0o755)
+    }
+  })
+})
+
+describe('vista previa en Lab', () => {
+  it('shows a .md or .txt file’s text', () => {
+    archivo('Benchmarks/notas.TXT', 'línea 1\nlínea 2', '2026-09-01T10:00:00.000Z')
+    expect(vistaPreviaLab(root, 'Benchmarks/benchmark-landing-hoteles.md')).toEqual({ texto: '# Hoteles', recortado: false })
+    expect(vistaPreviaLab(root, 'Benchmarks/notas.TXT')).toEqual({ texto: 'línea 1\nlínea 2', recortado: false })
+  })
+
+  it('caps a long file, never splitting a character', () => {
+    archivo('Benchmarks/largo.md', 'a'.repeat(VISTA_PREVIA_BYTES - 1) + 'ñ' + 'resto', '2026-09-01T10:00:00.000Z')
+    const vista = vistaPreviaLab(root, 'Benchmarks/largo.md')
+    expect(vista).toEqual({ texto: 'a'.repeat(VISTA_PREVIA_BYTES - 1), recortado: true })
+  })
+
+  it('has none for other file types', () => {
+    expect(vistaPreviaLab(root, 'Benchmarks/benchmark-ecommerce-mezcal.pdf')).toBeNull()
+    expect(vistaPreviaLab(root, 'Benchmarks/competencia-agencias-cdmx.xlsx')).toBeNull()
+  })
+
+  it('refuses paths outside Lab/', () => {
+    writeFileSync(join(root, 'secreto.md'), 'no')
+    expect(() => vistaPreviaLab(root, '../secreto.md')).toThrow(/fuera de Lab/)
   })
 })
