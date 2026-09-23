@@ -1,6 +1,9 @@
+import { sql } from 'drizzle-orm'
 import type { Db } from './db'
+import { ingresos } from './db/schema'
 import { expirarCotizaciones } from './cotizar'
 import { generarPeriodos } from './db/periodos'
+import type { Ingreso } from './ciclo-ingreso'
 
 // The ledger Al día: brought up to hoy before money is read. Sent Cotizaciones past their validity
 // become expiradas, then every Periodo generado due this month exists. Idempotent; reading twice
@@ -36,3 +39,20 @@ export function transaccionConPeriodos<T>(db: Db, hoy: string, trabajo: (tx: Tx)
     return resultado
   })
 }
+
+/** The dates an Ingreso counts on, first one set wins. */
+const FECHAS_INGRESO = ['fechaPago', 'fechaRegistro'] as const
+
+/**
+ * When an Ingreso counts: the day it was paid, else the day it was registered. A Reembolso is a
+ * paid Ingreso, so it counts on the day it was given back. Every screen that dates or ranges
+ * Ingresos reads it here; `null` for one with neither date.
+ */
+export const fechaIngreso = (i: Pick<Ingreso, (typeof FECHAS_INGRESO)[number]>): string | null =>
+  FECHAS_INGRESO.reduce<string | null>((fecha, columna) => fecha ?? i[columna], null)
+
+/** `fechaIngreso` inside a query over `ingresos`. */
+export const fechaIngresoSql = sql<string | null>`coalesce(${sql.join(
+  FECHAS_INGRESO.map((columna) => ingresos[columna]),
+  sql`, `
+)})`

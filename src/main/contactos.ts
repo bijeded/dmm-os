@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm'
 import type { Db } from './db'
 import { borrar } from './db/cancelacion'
 import { contactos, cotizaciones, ingresos, proyectos } from './db/schema'
+import { fechaIngreso } from './ledger'
 import { clave } from './nombres'
 import { ESTADOS_CONTACTO, NOMBRES_ESTADO_CONTACTO, type ArchivoCliente, type ContactoNuevo, type EstadoContacto, type FichaContacto, type ListaContactos, type Movimiento } from '../shared/dominio'
 
@@ -86,6 +87,9 @@ export function listarContactos(db: Db): ListaContactos {
 
 const dia = (iso: string) => iso.slice(0, 10)
 
+/** Display only: when the Ingreso counts, else the day it was created, so every row has a date. Never for ranging. */
+const fechaParaMostrar = (i: typeof ingresos.$inferSelect) => fechaIngreso(i) ?? dia(i.creadoEn)
+
 /** The Contacto's record: its data, its full history and the files in its `Clientes/` folder. */
 export function fichaContacto(db: Db, root: string, id: number): FichaContacto {
   const contacto = db.select().from(contactos).where(eq(contactos.id, id)).get()
@@ -119,7 +123,7 @@ export function fichaContacto(db: Db, root: string, id: number): FichaContacto {
     ...suyosIngresos.map((i) => ({
       tipo: 'pago' as const,
       id: i.id,
-      fecha: i.fechaPago ?? i.fechaRegistro ?? dia(i.creadoEn),
+      fecha: fechaParaMostrar(i),
       referencia: null,
       detalle: i.reembolsoDeId !== null ? 'Reembolso' : (i.notas ?? (i.periodo ? `Periodo ${i.periodo}` : i.categoria === 'factura' ? 'Factura' : 'Sin factura')),
       monto: i.subtotal,
