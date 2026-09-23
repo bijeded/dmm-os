@@ -5,6 +5,7 @@ import { promisify } from 'node:util'
 import { and, desc, eq, gte, isNotNull, lte, ne, sql, type SQL } from 'drizzle-orm'
 import type { Ajustes, Db } from './db'
 import { ahorroTokens, contactos, costos, cotizaciones, definicionesCosto, ingresos, proyectos, ubicacionesArchivo, usoTokens } from './db/schema'
+import { asignacionDeCosto } from './asignacion-costo'
 import { convertir, tasaDe } from './dinero'
 import { rangos } from './finanzas'
 import { fechaIngresoSql } from './ledger'
@@ -407,57 +408,6 @@ interface Enlace {
 }
 
 /**
- * Splits `total` centavos in proportion to `pesos`, in whole centavos that add up to it: each
- * takes its share rounded down, and the centavos left go one each to the largest remainders (the
- * first on a tie).
- */
-function mayorResto(total: number, pesos: number[]): number[] {
-  const suma = BigInt(pesos.reduce((s, p) => s + p, 0))
-  if (suma === 0n) return pesos.map(() => 0)
-  const exactos = pesos.map((p) => BigInt(Math.abs(total)) * BigInt(p))
-  const montos = exactos.map((e) => Number(e / suma))
-  let faltan = Math.abs(total) - montos.reduce((s, m) => s + m, 0)
-  const restos = exactos.map((e, k) => ({ k, resto: e % suma })).sort((a, b) => (a.resto === b.resto ? a.k - b.k : a.resto > b.resto ? -1 : 1))
-  for (const { k } of restos) {
-    if (faltan-- <= 0) break
-    montos[k]++
-  }
-  return montos.map((m) => Math.sign(total) * m || 0)
-}
-
-/**
- * Abierto en el mes: whether `p` started on or before the end of `mes` (or has no start date),
- * and was not completed or cancelled before it began. A closed one with no end date recorded
- * (imported history) is taken as closed before.
- */
-function abiertoEnElMes(p: ProyectoAi['p'], mes: string) {
-  if (p.fechaInicio !== null && p.fechaInicio > `${mes}-31`) return false
-  if (p.estado !== 'completado' && p.estado !== 'cancelado') return true
-  return p.fechaFin !== null && p.fechaFin >= `${mes}-01`
-}
-
-/**
- * Month `mes`'s Asignación de costo of `total`: by tokens across the Proyectos AI with usage in
- * it; with none, evenly across those Abiertos en el mes; with none of those, all Sin asignar.
- */
-function asignar(mes: string, total: number, tokens: Map<number, number>, ai: ProyectoAi[]): AsignacionCosto {
-  const conUso = ai.filter(({ p }) => (tokens.get(p.id) ?? 0) > 0)
-  const abiertos = ai.filter(({ p }) => abiertoEnElMes(p, mes))
-  const criterio = conUso.length > 0 ? 'tokens' : abiertos.length > 0 ? 'partes_iguales' : 'sin_proyectos'
-  const entre = criterio === 'tokens' ? conUso : abiertos
-  const pesos = entre.map(({ p }) => (criterio === 'tokens' ? tokens.get(p.id)! : 1))
-  const suma = pesos.reduce((s, x) => s + x, 0)
-  const montos = mayorResto(total, pesos)
-  return {
-    mes,
-    total,
-    criterio,
-    filas: entre.map(({ p }, k) => ({ proyectoId: p.id, nombre: p.nombre, tokens: tokens.get(p.id) ?? 0, parte: pesos[k] / suma, monto: montos[k] })),
-    sinAsignar: total - montos.reduce((s, m) => s + m, 0)
-  }
-}
-
-/**
  * Every month's Asignación de costo added up, for Todo el tiempo: each Proyecto AI's tokens and
  * amount over the months it took part in, by name. Shares are of the whole pool, so they and Sin
  * asignar's make up all of it. Each month was split on its own, so there is no single criterio.
@@ -518,7 +468,7 @@ function asignaciones(
 
   const costoReal = new Map<number, number>()
   const sumar = (proyectoId: number, monto: number) => costoReal.set(proyectoId, (costoReal.get(proyectoId) ?? 0) + monto)
-  const meses = [...pools].map(([mes, total]) => asignar(mes, total, tokens.get(mes) ?? new Map(), ai))
+  const meses = [...pools].map(([mes, total]) => asignacionDeCosto(mes, total, tokens.get(mes) ?? new Map(), ai.map(({ p }) => p)))
   for (const f of meses.flatMap((a) => a.filas)) sumar(f.proyectoId, f.monto)
   const asignacion = periodo === 'mes' ? meses.find((a) => a.mes === mesActual)! : sumarMeses(meses, ai)
 
