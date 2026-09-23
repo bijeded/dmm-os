@@ -181,8 +181,9 @@ export async function leerUso(db: Db, ajustes: Ajustes, root: string, ejecutar: 
  * accepted), or the rate a USD Ingreso or Costo was recorded at. `null` when there is none.
  */
 function tipoCambioReciente(db: Db): number | null {
-  const usd = <T extends typeof ingresos | typeof costos>(t: T) => eq(t.monedaOriginal, 'USD')
-  const montos = <T extends typeof ingresos | typeof costos>(t: T) => ({ total: t.total, montoOriginal: t.montoOriginal, monedaOriginal: t.monedaOriginal })
+  type Tabla = typeof ingresos | typeof costos
+  const usd = (t: Tabla) => eq(t.monedaOriginal, 'USD')
+  const columnasMonto = (t: Tabla) => ({ total: t.total, montoOriginal: t.montoOriginal, monedaOriginal: t.monedaOriginal })
   const candidatos = [
     ...db
       .select({ fecha: cotizaciones.fecha, tasa: cotizaciones.tipoCambio })
@@ -190,13 +191,13 @@ function tipoCambioReciente(db: Db): number | null {
       .where(isNotNull(cotizaciones.tipoCambio))
       .all(),
     ...db
-      .select({ fecha: sql<string | null>`coalesce(${ingresos.fechaPago}, ${ingresos.fechaRegistro})`, ...montos(ingresos) })
+      .select({ fecha: sql<string | null>`coalesce(${ingresos.fechaPago}, ${ingresos.fechaRegistro})`, ...columnasMonto(ingresos) })
       .from(ingresos)
       .where(usd(ingresos))
       .all()
       .map(({ fecha, ...m }) => ({ fecha, tasa: tasaDe(m) })),
     ...db
-      .select({ fecha: costos.fecha, ...montos(costos) })
+      .select({ fecha: costos.fecha, ...columnasMonto(costos) })
       .from(costos)
       .where(usd(costos))
       .all()
