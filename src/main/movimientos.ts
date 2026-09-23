@@ -5,8 +5,7 @@ import { monedaDe, tasaDe } from './dinero'
 import { exigirCosto, type ContextoCosto } from './ciclo-costo'
 import { exigirIngreso, MENSAJE_REEMBOLSO_EXCEDIDO, restante, type ContextoIngreso } from './ciclo-ingreso'
 import { transaccionConPeriodos } from './ledger'
-import { ivaDe } from '../shared/formato'
-import { exigirCentavos } from '../shared/montos'
+import { exigirCentavos, ivaDe } from '../shared/montos'
 import type { CostoNuevo, IngresoNuevo } from '../shared/dominio'
 
 // Movimientos: Ingresos and Costos entered, paid, cancelled, deleted, refunded or stopped. Which of

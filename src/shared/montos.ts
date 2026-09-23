@@ -15,3 +15,16 @@ export function centavosDe(pesos: string) {
   const limpio = pesos.replace(/[,\s$]/g, '')
   return exigirCentavos(limpio === '' ? NaN : Math.round(Number(limpio) * 100))
 }
+
+/** IVA charged on top of a subtotal. */
+export const TASA_IVA = 0.16
+
+/** 16% IVA on top of a subtotal in centavos (or USD cents) when `conIva`, rounded; else none. */
+export const ivaDe = (subtotal: number, conIva: boolean) => (conIva ? Math.round(subtotal * TASA_IVA) : 0)
+
+/** A quote's subtotal (sum of cantidad × precio, rounded) and IVA on top of it when `conIva`. */
+export function totalesCotizacion(partidas: readonly { cantidad: number; precio: number }[], conIva: boolean) {
+  const subtotal = Math.round(partidas.reduce((s, p) => s + p.cantidad * p.precio, 0))
+  const iva = ivaDe(subtotal, conIva)
+  return { subtotal, iva, total: subtotal + iva }
+}
