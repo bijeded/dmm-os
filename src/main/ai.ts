@@ -5,7 +5,7 @@ import { promisify } from 'node:util'
 import { and, desc, eq, gte, isNotNull, lte, ne, sql, type SQL } from 'drizzle-orm'
 import type { Ajustes, Db } from './db'
 import { ahorroTokens, contactos, costos, cotizaciones, definicionesCosto, ingresos, proyectos, ubicacionesArchivo, usoTokens } from './db/schema'
-import { convertir } from './dinero'
+import { convertir, tasaDe } from './dinero'
 import { rangos } from './finanzas'
 import { clave } from './nombres'
 import { carpetaEntre, referenciaProyecto } from './proyectos'
@@ -181,8 +181,9 @@ export async function leerUso(db: Db, ajustes: Ajustes, root: string, ejecutar: 
  * accepted), or the rate a USD Ingreso or Costo was recorded at. `null` when there is none.
  */
 function tipoCambioReciente(db: Db): number | null {
-  const conOriginalUsd = <T extends typeof ingresos | typeof costos>(t: T) =>
-    and(eq(t.monedaOriginal, 'USD'), isNotNull(t.montoOriginal), ne(t.montoOriginal, 0))
+  type Tabla = typeof ingresos | typeof costos
+  const usd = (t: Tabla) => eq(t.monedaOriginal, 'USD')
+  const columnasMonto = (t: Tabla) => ({ total: t.total, montoOriginal: t.montoOriginal, monedaOriginal: t.monedaOriginal })
   const candidatos = [
     ...db
       .select({ fecha: cotizaciones.fecha, tasa: cotizaciones.tipoCambio })
@@ -190,17 +191,17 @@ function tipoCambioReciente(db: Db): number | null {
       .where(isNotNull(cotizaciones.tipoCambio))
       .all(),
     ...db
-      .select({ fecha: sql<string | null>`coalesce(${ingresos.fechaPago}, ${ingresos.fechaRegistro})`, total: ingresos.total, original: ingresos.montoOriginal })
+      .select({ fecha: sql<string | null>`coalesce(${ingresos.fechaPago}, ${ingresos.fechaRegistro})`, ...columnasMonto(ingresos) })
       .from(ingresos)
-      .where(conOriginalUsd(ingresos))
+      .where(usd(ingresos))
       .all()
-      .map(({ fecha, total, original }) => ({ fecha, tasa: total / original! })),
+      .map(({ fecha, ...m }) => ({ fecha, tasa: tasaDe(m) })),
     ...db
-      .select({ fecha: costos.fecha, total: costos.total, original: costos.montoOriginal })
+      .select({ fecha: costos.fecha, ...columnasMonto(costos) })
       .from(costos)
-      .where(conOriginalUsd(costos))
+      .where(usd(costos))
       .all()
-      .map(({ fecha, total, original }) => ({ fecha, tasa: total / original! }))
+      .map(({ fecha, ...m }) => ({ fecha, tasa: tasaDe(m) }))
   ].filter((c): c is { fecha: string; tasa: number } => c.fecha !== null && c.tasa !== null && c.tasa > 0)
   if (candidatos.length === 0) return null
   const { tasa } = candidatos.reduce((a, b) => (b.fecha > a.fecha ? b : a))
