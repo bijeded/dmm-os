@@ -9,14 +9,14 @@ const proyecto = (id: number, nombre: string, p: Partial<ProyectoAsignable> = {}
   estado: 'en_curso',
   ...p
 })
-const AURA = proyecto(1, 'Aura')
-const NETDECKR = proyecto(2, 'Netdeckr')
-const VOZ = proyecto(3, 'Voz')
+const aura = proyecto(1, 'Aura')
+const netdeckr = proyecto(2, 'Netdeckr')
+const voz = proyecto(3, 'Voz')
 
 describe('Asignación de costo', () => {
   it('splits the pool by tokens across the Proyectos AI with usage, the centavo left to the larger remainder', () => {
     // 36,000 × 9,100 ÷ 15,700 = 20,866.24 and 36,000 × 6,600 ÷ 15,700 = 15,133.76.
-    expect(asignacionDeCosto('2026-09', 36_000, new Map([[1, 9_100], [2, 6_600]]), [AURA, NETDECKR])).toEqual({
+    expect(asignacionDeCosto('2026-09', 36_000, new Map([[1, 9_100], [2, 6_600]]), [aura, netdeckr])).toEqual({
       mes: '2026-09',
       total: 36_000,
       criterio: 'tokens',
@@ -30,14 +30,14 @@ describe('Asignación de costo', () => {
 
   it('gives the centavos left over one each to the largest remainders, the first on a tie', () => {
     const tresIguales = new Map([[1, 500], [2, 500], [3, 500]])
-    const montos = (total: number) => asignacionDeCosto('2026-09', total, tresIguales, [AURA, NETDECKR, VOZ]).filas.map((f) => f.monto)
+    const montos = (total: number) => asignacionDeCosto('2026-09', total, tresIguales, [aura, netdeckr, voz]).filas.map((f) => f.monto)
     expect(montos(100)).toEqual([34, 33, 33])
     expect(montos(101)).toEqual([34, 34, 33])
     expect(montos(46_001)).toEqual([15_334, 15_334, 15_333])
   })
 
   it('splits evenly across the Proyectos AI Abiertos en el mes when none has usage in it', () => {
-    const a = asignacionDeCosto('2026-09', 36_000, new Map(), [AURA, NETDECKR, VOZ])
+    const a = asignacionDeCosto('2026-09', 36_000, new Map(), [aura, netdeckr, voz])
     expect(a.criterio).toBe('partes_iguales')
     expect(a.filas.map((f) => [f.nombre, f.tokens, f.parte, f.monto])).toEqual([
       ['Aura', 0, 1 / 3, 12_000],

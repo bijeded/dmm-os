@@ -468,7 +468,8 @@ function asignaciones(
 
   const costoReal = new Map<number, number>()
   const sumar = (proyectoId: number, monto: number) => costoReal.set(proyectoId, (costoReal.get(proyectoId) ?? 0) + monto)
-  const meses = [...pools].map(([mes, total]) => asignacionDeCosto(mes, total, tokens.get(mes) ?? new Map(), ai.map(({ p }) => p)))
+  const deAiProyectos = ai.map(({ p }) => p)
+  const meses = [...pools].map(([mes, total]) => asignacionDeCosto(mes, total, tokens.get(mes) ?? new Map(), deAiProyectos))
   for (const f of meses.flatMap((a) => a.filas)) sumar(f.proyectoId, f.monto)
   const asignacion = periodo === 'mes' ? meses.find((a) => a.mes === mesActual)! : sumarMeses(meses, ai)
 

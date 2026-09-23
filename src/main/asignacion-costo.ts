@@ -1,13 +1,8 @@
-import type { AsignacionCosto, EstadoProyecto } from '../shared/dominio'
+import type { proyectos } from './db/schema'
+import type { AsignacionCosto } from '../shared/dominio'
 
 /** What the split reads of a Proyecto AI. */
-export interface ProyectoAsignable {
-  id: number
-  nombre: string
-  fechaInicio: string | null
-  fechaFin: string | null
-  estado: EstadoProyecto
-}
+export type ProyectoAsignable = Pick<typeof proyectos.$inferSelect, 'id' | 'nombre' | 'fechaInicio' | 'fechaFin' | 'estado'>
 
 /**
  * Splits `total` centavos in proportion to `pesos`, in whole centavos that add up to it: each
