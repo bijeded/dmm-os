@@ -65,7 +65,10 @@ function ubicarEntre(root: string, todas: (typeof ubicacionesArchivo.$inferSelec
 const visible = ({ estado, ruta, abrible }: CarpetaProyecto): CarpetaProyecto => ({ estado, ruta, abrible })
 const carpeta = (db: Db, root: string, id: number): CarpetaProyecto => visible(ubicar(db, root, id))
 
-/** Every Proyecto whose folder is on disk under the DMM OS root, with that folder. */
+/**
+ * Every Proyecto whose working folder in `Proyectos/` is on disk, with that folder. Archivado ones
+ * are left out: a Proyecto is archived when done, and its folder is deleted once backed up.
+ */
 export function carpetasDeProyectos(db: Db, root: string): { nombre: string; absoluta: string }[] {
   const ubicaciones = db.select().from(ubicacionesArchivo).all()
   return db
@@ -73,8 +76,8 @@ export function carpetasDeProyectos(db: Db, root: string): { nombre: string; abs
     .from(proyectos)
     .all()
     .flatMap(({ id, nombre }) => {
-      const { absoluta } = ubicarEntre(root, ubicaciones.filter((u) => u.proyectoId === id))
-      return absoluta ? [{ nombre, absoluta }] : []
+      const { estado, absoluta } = ubicarEntre(root, ubicaciones.filter((u) => u.proyectoId === id))
+      return estado === 'disponible' && absoluta ? [{ nombre, absoluta }] : []
     })
 }
 
