@@ -14,19 +14,19 @@ export interface PlanCobro {
   /** The month recurring definitions start in; its Periodos are generated on accepting. */
   periodo: string
   /** Pending Ingresos, por facturar: one, or one per parcialidad. Empty for a monthly quote. */
-  ingresos: (Montos & { categoria: 'factura'; estadoFacturacion: 'por_facturar'; notas: string | null })[]
+  ingresos: (MontosSinRetenciones & { categoria: 'factura'; estadoFacturacion: 'por_facturar'; notas: string | null })[]
   /** The monthly Ingreso definition of a monthly quote. */
-  definicionIngreso: (Montos & { tipo: 'mensual'; categoria: 'factura'; periodoInicio: string }) | null
+  definicionIngreso: (MontosSinRetenciones & { tipo: 'mensual'; categoria: 'factura'; periodoInicio: string }) | null
   /** Estimated one-time Costos, dated today. */
-  costos: (Montos & { nombre: string; categoria: 'unico'; estimado: true; fecha: string })[]
+  costos: (MontosSinRetenciones & { nombre: string; categoria: 'unico'; estimado: true; fecha: string })[]
   /** Recurring and MSI cost definitions, each with its price from `periodo`. */
   definicionesCosto: {
     definicion: { nombre: string; tipo: Exclude<CategoriaCosto, 'unico'>; diaDelMes: number; periodoInicio: string; numeroParcialidades: number | null }
-    precio: Montos & { desde: string }
+    precio: MontosSinRetenciones & { desde: string }
   }[]
 }
 
-type Montos = Omit<MontosRegistrados, 'retenciones'>
+type MontosSinRetenciones = Omit<MontosRegistrados, 'retenciones'>
 
 export const MENSAJE_SIN_TIPO_CAMBIO = 'Indica el tipo de cambio de la cotización en USD'
 
@@ -38,8 +38,8 @@ function tasaDeAceptacion(moneda: Moneda, tipoCambio: number | undefined): numbe
 }
 
 /** A quote's amounts as recorded. Quotes carry no retenciones, so the row's default of zero records them. */
-function registrado(subtotal: number, iva: number, tasaUsd: number | null): Montos {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+function registrado(subtotal: number, iva: number, tasaUsd: number | null): MontosSinRetenciones {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- dropped: always zero on a quote
   const { retenciones, ...resto } = montos(subtotal, { iva, tasaUsd })
   return resto
 }
