@@ -1,7 +1,7 @@
 import type { Db } from './db'
 import { calendarioPeriodos, type PeriodoCosto } from './db/calendario'
 import { coberturaCostos } from './db/cobertura'
-import { sumarAnios, sumarDias, sumarMeses } from '../shared/fechas'
+import { periodoDe, sumarAnios, sumarDias, sumarMeses } from '../shared/fechas'
 import { monedaDe } from './dinero'
 import { fechaIngreso } from './ledger'
 import { accionesCostos, origenCosto, type Costo } from './ciclo-costo'
@@ -86,7 +86,7 @@ function cubetas(periodo: PeriodoFinanzas, rango: Rango): { etiqueta: string; cl
   }
   if (periodo === 'trimestre' || periodo === 'anio') {
     const out = []
-    for (let periodoMes = rango.desde.slice(0, 7); periodoMes <= rango.hasta.slice(0, 7); periodoMes = sumarMeses(periodoMes, 1)) {
+    for (let periodoMes = periodoDe(rango.desde); periodoMes <= periodoDe(rango.hasta); periodoMes = sumarMeses(periodoMes, 1)) {
       const mes = periodoMes.slice(5, 7)
       out.push({ etiqueta: MESES[Number(mes) - 1], clave: (f: string) => f.slice(5, 7) === mes })
     }
@@ -127,7 +127,7 @@ function serie(periodo: PeriodoFinanzas, todosIngresos: Ingreso[], todosCostos: 
  */
 function siguientesPeriodos(db: Db, periodoActual: string, hoy: string, hasta: string): PagoProximo[] {
   const siguiente = new Map<number, PeriodoCosto>()
-  for (const p of calendarioPeriodos(db, hasta.slice(0, 7)).costos) {
+  for (const p of calendarioPeriodos(db, periodoDe(hasta)).costos) {
     if (p.periodo > periodoActual && !siguiente.has(p.definicion.id)) siguiente.set(p.definicion.id, p)
   }
   return [...siguiente.values()].flatMap(({ definicion: d, fecha, precio }) =>
@@ -141,7 +141,7 @@ function siguientesPeriodos(db: Db, periodoActual: string, hoy: string, hasta: s
  * paid, and what comes up next.
  */
 export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, diasVencida: number): ResumenFinanzas {
-  const periodoActual = hoy.slice(0, 7)
+  const periodoActual = periodoDe(hoy)
 
   const todosIngresos = db.select().from(ingresos).all()
   const todosCostos = db.select().from(costos).all()
@@ -212,7 +212,7 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
   // Reembolsos are negative, so this is what actually stayed in the bank.
   const real = cobrado.reduce((s, i) => s + i.subtotal, 0)
   // An invoice not yet issued may have no date; it still counts as now.
-  const hastaEsteMes = cobranza.filter((i) => i.fecha === null || i.fecha.slice(0, 7) <= periodoActual)
+  const hastaEsteMes = cobranza.filter((i) => i.fecha === null || periodoDe(i.fecha) <= periodoActual)
   const porFacturar = (i: FilaIngreso) => i.estadoFacturacion === 'por_facturar'
 
   return {
