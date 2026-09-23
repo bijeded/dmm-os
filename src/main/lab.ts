@@ -1,6 +1,8 @@
-import { readdirSync, realpathSync, statSync, type Dirent } from 'node:fs'
+import { closeSync, openSync, readdirSync, readSync, realpathSync, statSync, type Dirent } from 'node:fs'
 import { basename, extname, join, resolve } from 'node:path'
-import type { ArchivoLab, CarpetaLab } from '../shared/dominio'
+import { StringDecoder } from 'node:string_decoder'
+import type { ArchivoEnLab, ArchivoLab, CarpetaLab, VistaPreviaLab } from '../shared/dominio'
+import { normalizar } from '../shared/formato'
 import { toAbsolute, toRelative } from './paths'
 
 /**
@@ -9,6 +11,12 @@ import { toAbsolute, toRelative } from './paths'
  */
 
 const LAB = 'Lab'
+
+/** How much of a text file a preview shows; the rest is only in the file. */
+export const VISTA_PREVIA_BYTES = 64 * 1024
+
+/** The only types Lab previews; anything else only opens in its own app. */
+const CON_VISTA_PREVIA = new Set(['.md', '.txt'])
 
 /**
  * The absolute path of `ruta` (a folder or file relative to `Lab/`); refused unless it stays
@@ -35,20 +43,56 @@ export function carpetasLab(root: string): CarpetaLab[] {
 
 /** The files of one Lab folder (as `carpetasLab` names it), newest first. */
 export function archivosLab(root: string, carpeta: string): ArchivoLab[] {
-  const dir = rutaEnLab(root, carpeta)
+  rutaEnLab(root, carpeta)
   if (basename(carpeta) !== carpeta || carpeta.startsWith('.')) throw new Error(`${carpeta} no es una carpeta de Lab/`)
+  return archivosDe(root, carpeta).sort(recientes)
+}
+
+/**
+ * The files in any Lab folder whose name holds `consulta`, ignoring case and accents as the other
+ * sections' searches do; newest first. A folder that can't be read is skipped, as its count is.
+ */
+export function buscarLab(root: string, consulta: string): ArchivoEnLab[] {
+  const q = normalizar(consulta.trim())
+  if (!q) return []
+  return carpetasLab(root)
+    .flatMap(({ nombre: carpeta, archivos }) => (archivos === null ? [] : archivosDe(root, carpeta).map((a) => ({ carpeta, ...a }))))
+    .filter((a) => normalizar(a.nombre).includes(q))
+    .sort(recientes)
+}
+
+/** The start of a `.md` or `.txt` file, up to `VISTA_PREVIA_BYTES`; `null` for any other type. */
+export function vistaPreviaLab(root: string, ruta: string): VistaPreviaLab | null {
+  const abs = rutaEnLab(root, ruta)
+  if (!CON_VISTA_PREVIA.has(extname(abs).toLowerCase())) return null
+  const fd = openSync(abs, 'r')
+  try {
+    // One byte past the cap says whether there is more.
+    const buf = Buffer.alloc(VISTA_PREVIA_BYTES + 1)
+    const leidos = readSync(fd, buf, 0, buf.length, 0)
+    const recortado = leidos > VISTA_PREVIA_BYTES
+    // The decoder holds back a character cut by the cap instead of garbling it.
+    return { texto: new StringDecoder('utf8').write(buf.subarray(0, Math.min(leidos, VISTA_PREVIA_BYTES))), recortado }
+  } finally {
+    closeSync(fd)
+  }
+}
+
+/** The files directly in a Lab folder, with no order. */
+function archivosDe(root: string, carpeta: string): ArchivoLab[] {
   return entradasVisibles(root, join(LAB, carpeta))
     .filter((e) => e.isFile())
     .flatMap((e) => {
       try {
-        const { size, mtime } = statSync(join(dir, e.name))
+        const { size, mtime } = statSync(join(root, LAB, carpeta, e.name))
         return [{ nombre: e.name, tipo: extname(e.name).slice(1).toUpperCase(), bytes: size, modificado: mtime.toISOString() }]
       } catch {
         return [] // gone since the folder was read
       }
     })
-    .sort((a, b) => b.modificado.localeCompare(a.modificado) || a.nombre.localeCompare(b.nombre, 'es'))
 }
+
+const recientes = (a: ArchivoLab, b: ArchivoLab) => b.modificado.localeCompare(a.modificado) || a.nombre.localeCompare(b.nombre, 'es')
 
 function contarArchivos(root: string, carpeta: string): number | null {
   try {

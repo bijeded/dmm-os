@@ -116,6 +116,14 @@ describe('Lab', () => {
     mkdirSync(join(root, 'Lab', 'Newsletter'), { recursive: true })
     expect(await h.lab.carpetas()).toEqual([{ nombre: 'Newsletter', archivos: 0 }])
   })
+
+  it('searches Lab/ on disk and previews its text files', async () => {
+    mkdirSync(join(root, 'Lab', 'Newsletter'), { recursive: true })
+    writeFileSync(join(root, 'Lab', 'Newsletter', 'boletin.md'), '# Boletín')
+    expect((await h.lab.buscar('BOLET')).map((a) => [a.carpeta, a.nombre])).toEqual([['Newsletter', 'boletin.md']])
+    expect(await h.lab.vistaPrevia('Newsletter/boletin.md')).toEqual({ texto: '# Boletín', recortado: false })
+    expect(() => h.lab.vistaPrevia('../Vault/dmm.db')).toThrow(/fuera de Lab/)
+  })
 })
 
 describe('Sugerencias de importación', () => {

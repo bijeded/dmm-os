@@ -1,4 +1,5 @@
 import type {
+  ArchivoEnLab,
   ArchivoLab,
   CarpetaAbrible,
   CarpetaLab,
@@ -29,7 +30,8 @@ import type {
   ResumenFinanzas,
   ResumenInicio,
   Rutas,
-  Sugerencia
+  Sugerencia,
+  VistaPreviaLab
 } from './dominio'
 
 export interface AppInfo {
@@ -176,6 +178,10 @@ export const contrato = {
     carpetas: canal<[], CarpetaLab[]>(),
     /** One folder's files, newest first. */
     archivos: canal<[carpeta: string], ArchivoLab[]>(),
+    /** Files in any folder whose name holds the search, ignoring case and accents; newest first. */
+    buscar: canal<[consulta: string], ArchivoEnLab[]>(),
+    /** The start of a `.md` or `.txt` file, capped in size; `null` for any other type. */
+    vistaPrevia: canal<[ruta: string], VistaPreviaLab | null>(),
     /** Opens a file in its default app, or a folder in Finder. */
     abrir: canal<[ruta: string], void>()
   }

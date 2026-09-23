@@ -136,6 +136,17 @@ export interface ArchivoLab {
   modificado: string
 }
 
+/** A file Lab's search found, and the Lab folder it is in. */
+export interface ArchivoEnLab extends ArchivoLab {
+  carpeta: string
+}
+
+/** The start of a Lab text file; `recortado` when the file goes on past what is shown. */
+export interface VistaPreviaLab {
+  texto: string
+  recortado: boolean
+}
+
 /** Whether a year's Costos are known at all; a year without them shows Sin datos. */
 export interface CoberturaAnual {
   anio: number
