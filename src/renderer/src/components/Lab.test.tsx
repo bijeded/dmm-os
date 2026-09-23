@@ -176,4 +176,24 @@ describe('Lab', () => {
     fireEvent.click(within(vistaPrevia()).getByRole('button', { name: 'Abrir' }))
     await waitFor(() => expect(api.abrir).toHaveBeenCalledWith('Benchmarks/benchmark-ecommerce-mezcal.pdf'))
   })
+
+  it('says why a preview could not be read, and keeps the file’s Abrir', async () => {
+    montar({
+      vistaPrevia: vi.fn(async () => {
+        throw new Error("Error invoking remote method 'lab:vistaPrevia': Error: EISDIR")
+      })
+    })
+    await screen.findByText('benchmark-landing-hoteles.md')
+    fireEvent.click(screen.getByRole('button', { name: 'benchmark-landing-hoteles.md' }))
+    expect(await within(vistaPrevia()).findByText('EISDIR')).toBeTruthy()
+    fireEvent.click(within(vistaPrevia()).getByRole('button', { name: 'Abrir' }))
+    await waitFor(() => expect(api.abrir).toHaveBeenCalledWith('Benchmarks/benchmark-landing-hoteles.md'))
+  })
+
+  it('keeps every action usable while a preview loads', async () => {
+    montar({ vistaPrevia: vi.fn(() => new Promise<null>(() => {})) })
+    await screen.findByText('benchmark-landing-hoteles.md')
+    fireEvent.click(screen.getByRole('button', { name: 'benchmark-landing-hoteles.md' }))
+    expect(screen.getByRole('button', { name: 'Abrir en Finder' }).hasAttribute('disabled')).toBe(false)
+  })
 })

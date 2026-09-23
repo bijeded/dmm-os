@@ -10,6 +10,14 @@ import { celdaCls, etiquetaCls, tituloCls } from './estilos'
 const tamano = (bytes: number) =>
   bytes < 1024 ? `${bytes} B` : bytes < 1024 ** 2 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1024 ** 2).toFixed(1)} MB`
 
+/** The picked file (relative to Lab/) and its preview: absent while it loads, null when its type has none. */
+interface Elegido {
+  ruta: string
+  vista?: VistaPreviaLab | null
+  /** Why the preview could not be read. */
+  error?: string
+}
+
 /**
  * Lab: a read-only view of `Lab/`, where Claude Desktop output lands. Every subfolder is listed,
  * so a new one shows up with no code change; the search spans all of them. A picked `.md` or
@@ -22,9 +30,7 @@ export function Lab() {
   const [archivos, setArchivos] = useState<ArchivoLab[] | null>(null)
   const [busqueda, setBusqueda] = useState('')
   const [encontrados, setEncontrados] = useState<ArchivoEnLab[] | null>(null)
-  // The picked file (relative to Lab/) and its preview: undefined while it loads, null when its type has none.
-  const [elegido, setElegido] = useState<string | null>(null)
-  const [vista, setVista] = useState<VistaPreviaLab | null | undefined>(undefined)
+  const [elegido, setElegido] = useState<Elegido | null>(null)
   const { error, setError, ocupado, correr } = useAccion()
   // Answers arrive in any order; only the latest search's, and the latest pick's, are shown.
   const ultimaBusqueda = useRef(0)
@@ -54,7 +60,10 @@ export function Lab() {
     setBusqueda(valor)
     const n = ++ultimaBusqueda.current
     const q = valor.trim()
-    if (!q) return setEncontrados(null)
+    if (!q) {
+      setEncontrados(null)
+      return
+    }
     setError(null)
     api.buscar(q).then(
       (r) => n === ultimaBusqueda.current && setEncontrados(r),
@@ -68,15 +77,15 @@ export function Lab() {
     correr(() => leer(nombre))
   }
 
+  // Not through `correr` either: a preview loading never holds up the other actions.
   const elegir = (ruta: string | null) => {
     ultimoElegido.current = ruta
-    setElegido(ruta)
-    setVista(undefined)
-    if (ruta)
-      correr(async () => {
-        const v = await api.vistaPrevia(ruta)
-        if (ultimoElegido.current === ruta) setVista(v)
-      })
+    setElegido(ruta === null ? null : { ruta })
+    if (ruta === null) return
+    api.vistaPrevia(ruta).then(
+      (vista) => ultimoElegido.current === ruta && setElegido({ ruta, vista }),
+      (e) => ultimoElegido.current === ruta && setElegido({ ruta, error: mensaje(e) })
+    )
   }
 
   const abrir = (ruta: string) => correr(() => api.abrir(ruta))
@@ -93,24 +102,27 @@ export function Lab() {
             Carpetas
           </h2>
           <ul aria-label="Carpetas" className="m-0 flex list-none flex-col gap-1 p-0">
-            {carpetas?.map((c) => (
-              <li key={c.nombre}>
-                <button
-                  type="button"
-                  aria-current={c.nombre === carpeta && !consulta ? 'true' : undefined}
-                  disabled={ocupado}
-                  onClick={() => elegirCarpeta(c.nombre)}
-                  className={`flex w-full cursor-pointer items-center justify-between rounded-control px-3 py-2 text-left text-[13px] ${
-                    c.nombre === carpeta && !consulta ? 'bg-surface-raised text-on-surface' : 'text-on-surface-muted hover:bg-surface-hover'
-                  }`}
-                >
-                  <span>{c.nombre}</span>
-                  <span className="font-mono text-[12px]" title={c.archivos === null ? 'No se pudo leer' : undefined}>
-                    {c.archivos ?? '—'}
-                  </span>
-                </button>
-              </li>
-            ))}
+            {carpetas?.map((c) => {
+              const actual = c.nombre === carpeta && !consulta
+              return (
+                <li key={c.nombre}>
+                  <button
+                    type="button"
+                    aria-current={actual ? 'true' : undefined}
+                    disabled={ocupado}
+                    onClick={() => elegirCarpeta(c.nombre)}
+                    className={`flex w-full cursor-pointer items-center justify-between rounded-control px-3 py-2 text-left text-[13px] ${
+                      actual ? 'bg-surface-raised text-on-surface' : 'text-on-surface-muted hover:bg-surface-hover'
+                    }`}
+                  >
+                    <span>{c.nombre}</span>
+                    <span className="font-mono text-[12px]" title={c.archivos === null ? 'No se pudo leer' : undefined}>
+                      {c.archivos ?? '—'}
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
           </ul>
           {carpetas && <p className="m-0 text-[12px] text-on-surface-muted">Nuevas carpetas en Lab/ aparecen aquí</p>}
         </section>
@@ -134,7 +146,9 @@ export function Lab() {
               )}
             </div>
           )}
-          {(consulta || carpeta) && <h2 className="m-0 text-[15px] font-semibold text-on-surface">{consulta ? 'Resultados en Lab' : carpeta}</h2>}
+          {(consulta || carpeta) && (
+            <h2 className="m-0 text-[15px] font-semibold text-on-surface">{consulta ? 'Resultados en Lab' : carpeta}</h2>
+          )}
 
           {filas && filas.length > 0 && (
             <table className="tbl w-full border-collapse text-[13px]">
@@ -153,13 +167,14 @@ export function Lab() {
               <tbody>
                 {filas.map((a) => {
                   const ruta = `${a.carpeta}/${a.nombre}`
+                  const esElegido = ruta === elegido?.ruta
                   return (
                     <tr key={ruta}>
                       <td data-label="Nombre" className={`${celdaCls} break-all`}>
                         <button
                           type="button"
-                          aria-pressed={ruta === elegido}
-                          className={`cursor-pointer text-left ${ruta === elegido ? 'text-primary-text' : 'text-on-surface'}`}
+                          aria-pressed={esElegido}
+                          className={`cursor-pointer text-left ${esElegido ? 'text-primary-text' : 'text-on-surface'}`}
                           onClick={() => elegir(ruta)}
                         >
                           {a.nombre}
@@ -180,7 +195,12 @@ export function Lab() {
                         {dia(diaLocal(new Date(a.modificado)))}
                       </td>
                       <td className={celdaCls}>
-                        <button type="button" disabled={ocupado} className="cursor-pointer font-mono text-[11px] text-primary-text" onClick={() => abrir(ruta)}>
+                        <button
+                          type="button"
+                          disabled={ocupado}
+                          className="cursor-pointer font-mono text-[11px] text-primary-text"
+                          onClick={() => abrir(ruta)}
+                        >
                           Abrir
                         </button>
                       </td>
@@ -200,19 +220,21 @@ export function Lab() {
               className="flex min-h-[260px] flex-col gap-3 rounded-control border border-dashed border-border-strong bg-surface-sunken p-4"
             >
               {!elegido && <p className="m-auto text-[12px] text-on-surface-muted">Elige un archivo para ver su vista previa.</p>}
-              {elegido && <span className={etiquetaCls}>{elegido}</span>}
-              {elegido && vista === null && (
+              {elegido && <span className={etiquetaCls}>{elegido.ruta}</span>}
+              {elegido && (elegido.vista === null || elegido.error) && (
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="m-0 text-[13px] text-on-surface-muted">Sin vista previa para este tipo de archivo.</p>
-                  <Button variant="secondary" disabled={ocupado} onClick={() => abrir(elegido)}>
+                  <p className="m-0 text-[13px] text-on-surface-muted">{elegido.error ?? 'Sin vista previa para este tipo de archivo.'}</p>
+                  <Button variant="secondary" disabled={ocupado} onClick={() => abrir(elegido.ruta)}>
                     Abrir
                   </Button>
                 </div>
               )}
-              {elegido && vista && (
+              {elegido?.vista && (
                 <>
-                  <pre className="m-0 max-h-[420px] overflow-auto font-mono text-[12px] break-words whitespace-pre-wrap text-on-surface">{vista.texto}</pre>
-                  {vista.recortado && (
+                  <pre className="m-0 max-h-[420px] overflow-auto font-mono text-[12px] break-words whitespace-pre-wrap text-on-surface">
+                    {elegido.vista.texto}
+                  </pre>
+                  {elegido.vista.recortado && (
                     <p className="m-0 text-[12px] text-on-surface-muted">Vista previa recortada: abre el archivo para verlo completo.</p>
                   )}
                 </>
