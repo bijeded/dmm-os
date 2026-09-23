@@ -1023,9 +1023,13 @@ describe('when an Ingreso counts', () => {
     reloj('2026-09-16')
     await h.finanzas.pagarIngreso(id)
     expect(await enCadaPantalla()).toEqual({ finanzas: 1000, ai: 1000, ficha: [['2026-09-16', 1000]] })
+    reloj('2026-08-31')
+    expect(await enCadaPantalla()).toMatchObject({ finanzas: 0, ai: 0 })
 
     reloj('2026-10-05')
     await h.finanzas.reembolsar(id, 400)
     expect(await enCadaPantalla()).toEqual({ finanzas: -400, ai: -400, ficha: [['2026-10-05', -400], ['2026-09-16', 1000]] })
+    reloj('2026-09-30')
+    expect(await enCadaPantalla()).toMatchObject({ finanzas: 1000, ai: 1000 })
   })
 })
