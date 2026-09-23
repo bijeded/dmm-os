@@ -1,11 +1,11 @@
 import { eq } from 'drizzle-orm'
 import type { Db } from './db'
 import { costos, definicionesCosto, ingresos, proyectos, vigenciasPrecio } from './db/schema'
-import { monedaDe, tasaDe } from './dinero'
+import { monedaDe, montos, tasaDe } from './dinero'
 import { exigirCosto, type ContextoCosto } from './ciclo-costo'
 import { exigirIngreso, MENSAJE_REEMBOLSO_EXCEDIDO, restante, type ContextoIngreso } from './ciclo-ingreso'
 import { transaccionConPeriodos } from './ledger'
-import { exigirCentavos, ivaDe } from '../shared/montos'
+import { exigirCentavos } from '../shared/montos'
 import type { CostoNuevo, IngresoNuevo } from '../shared/dominio'
 
 // Movimientos: Ingresos and Costos entered, paid, cancelled, deleted, refunded or stopped. Which of
@@ -48,11 +48,6 @@ function registrarReembolso(
     .get()
 }
 
-function exigirMonto(subtotal: number, iva: number) {
-  exigirCentavos(subtotal)
-  exigirCentavos(iva, { cero: true })
-}
-
 function exigirFecha(fecha: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) throw new Error('La fecha no es válida')
 }
@@ -85,9 +80,9 @@ function costoConContexto(db: Db, id: number, hoy: string): { c: ReturnType<type
 
 /** A hand-entered Ingreso; given a Proyecto, its Contacto is the Proyecto's. */
 export function nuevoIngreso(db: Db, n: IngresoNuevo, hoy: string) {
+  exigirCentavos(n.subtotal)
   // Uninvoiced income carries no IVA.
-  const iva = ivaDe(n.subtotal, n.categoria === 'factura' && n.conIva)
-  exigirMonto(n.subtotal, iva)
+  const registrados = montos(n.subtotal, { iva: n.categoria === 'factura' && n.conIva })
   exigirFecha(n.fecha)
   let contactoId = n.contactoId
   if (n.proyectoId !== null) {
@@ -101,9 +96,7 @@ export function nuevoIngreso(db: Db, n: IngresoNuevo, hoy: string) {
       categoria: n.categoria,
       estadoFacturacion: n.categoria === 'factura' ? (n.facturado ? 'facturado' : 'por_facturar') : null,
       estado: pagado ? 'pagado' : 'pendiente',
-      subtotal: n.subtotal,
-      iva,
-      total: n.subtotal + iva,
+      ...registrados,
       proyectoId: n.proyectoId,
       contactoId,
       fechaRegistro: n.fecha,
@@ -117,11 +110,11 @@ export function nuevoIngreso(db: Db, n: IngresoNuevo, hoy: string) {
 export function nuevoCosto(db: Db, n: CostoNuevo, hoy: string) {
   const nombre = n.nombre.trim()
   if (!nombre) throw new Error('El costo necesita un nombre')
-  const iva = ivaDe(n.subtotal, n.conIva)
-  exigirMonto(n.subtotal, iva)
+  exigirCentavos(n.subtotal)
   exigirFecha(n.fecha)
   if (n.categoria === 'msi' && (!n.parcialidades || n.parcialidades < 2)) throw new Error('Un costo a MSI necesita al menos 2 parcialidades')
-  const montos = { subtotal: n.subtotal, iva, total: n.subtotal + iva }
+  // A one-time Costo and a recurring one's first vigencia are built alike.
+  const registrados = montos(n.subtotal, { iva: n.conIva })
   const proveedor = n.proveedor?.trim() || null
 
   if (n.categoria === 'unico') {
@@ -131,7 +124,7 @@ export function nuevoCosto(db: Db, n: CostoNuevo, hoy: string) {
         nombre,
         categoria: 'unico',
         estado: pagado ? 'pagado' : 'pendiente',
-        ...montos,
+        ...registrados,
         proveedor,
         referencia: n.referencia?.trim() || null,
         fecha: n.fecha,
@@ -159,7 +152,7 @@ export function nuevoCosto(db: Db, n: CostoNuevo, hoy: string) {
       })
       .returning({ id: definicionesCosto.id })
       .get().id
-    tx.insert(vigenciasPrecio).values({ definicionCostoId, desde: periodoInicio, ...montos }).run()
+    tx.insert(vigenciasPrecio).values({ definicionCostoId, desde: periodoInicio, ...registrados }).run()
   })
 }
 
