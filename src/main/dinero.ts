@@ -96,6 +96,7 @@ export function reembolso(monto: number, { de, queda, tasaUsd }: { de: Partes; q
   const total = todo ? queda.total : Math.min(queda.total, Math.round(monto * (tasaUsd ?? 1)))
   const parte = (f: keyof Partes) => (todo ? queda[f] : Math.min(queda[f], Math.round((total * de[f]) / de.total)))
   const [iva, retenciones] = [parte('iva'), parte('retenciones')]
+  // 0 - n, not -n: a part with nothing to give back stays 0, never -0.
   const menos = (n: number) => 0 - n
   return montos(menos(total - iva + retenciones), {
     iva: menos(iva),
