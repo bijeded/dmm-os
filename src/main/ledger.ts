@@ -4,6 +4,7 @@ import { ingresos } from './db/schema'
 import { expirarCotizaciones } from './cotizar'
 import { generarPeriodos } from './db/periodos'
 import type { Ingreso } from './ciclo-ingreso'
+import { periodoDe } from '../shared/fechas'
 
 // The ledger Al día: brought up to hoy before money is read. Sent Cotizaciones past their validity
 // become expiradas, then every Periodo generado due this month exists. Idempotent; reading twice
@@ -19,7 +20,7 @@ type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 /** Brings the ledger Al día: expires Cotizaciones, then generates Periodos up to `hoy`'s month. */
 function alDia(db: Db, hoy: string): void {
   expirarCotizaciones(db, hoy)
-  generarPeriodos(db, hoy.slice(0, 7))
+  generarPeriodos(db, periodoDe(hoy))
 }
 
 /** The db to work with for `hoy`, brought Al día first. */
@@ -35,7 +36,7 @@ export function dbAlDia(db: Db, hoy: string): Db {
 export function transaccionConPeriodos<T>(db: Db, hoy: string, trabajo: (tx: Tx) => T): T {
   return db.transaction((tx) => {
     const resultado = trabajo(tx)
-    generarPeriodos(tx, hoy.slice(0, 7))
+    generarPeriodos(tx, periodoDe(hoy))
     return resultado
   })
 }

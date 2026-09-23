@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import type { Db } from './db'
 import { costos, definicionesCosto } from './db/schema'
 import type { AccionCosto, FilaCosto } from '../shared/dominio'
+import { periodoDe } from '../shared/fechas'
 
 export type Costo = typeof costos.$inferSelect
 type Definicion = typeof definicionesCosto.$inferSelect
@@ -49,7 +50,7 @@ const ACCIONES: AccionCosto[] = ['pagar', 'cancelar', 'borrar', 'detener']
  */
 export function accionesCostos(db: Db, filas: Costo[], hoy: string): Map<number, AccionCosto[]> {
   const definicion = new Map(db.select().from(definicionesCosto).all().map((d) => [d.id, d]))
-  const periodoActual = hoy.slice(0, 7)
+  const periodoActual = periodoDe(hoy)
   return new Map(
     filas.map((c) => {
       const ctx = { definicion: c.definicionId === null ? undefined : definicion.get(c.definicionId), periodoActual }
@@ -63,7 +64,7 @@ export function exigirCosto(db: Db, accion: AccionCosto, id: number, hoy: string
   const costo = db.select().from(costos).where(eq(costos.id, id)).get()
   if (!costo) throw new Error(`El costo ${id} no existe`)
   const definicion = costo.definicionId === null ? undefined : db.select().from(definicionesCosto).where(eq(definicionesCosto.id, costo.definicionId)).get()
-  const mensaje = rechazo(accion, costo, { definicion, periodoActual: hoy.slice(0, 7) })
+  const mensaje = rechazo(accion, costo, { definicion, periodoActual: periodoDe(hoy) })
   if (mensaje) throw new Error(mensaje)
   return costo
 }

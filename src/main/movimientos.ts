@@ -7,6 +7,7 @@ import { exigirIngreso } from './ciclo-ingreso'
 import { transaccionConPeriodos } from './ledger'
 import { exigirCentavos } from '../shared/montos'
 import type { CostoNuevo, IngresoNuevo } from '../shared/dominio'
+import { periodoDe } from '../shared/fechas'
 
 // Movimientos: Ingresos and Costos entered, paid, cancelled, deleted, refunded or stopped. Which of
 // those each one allows now is its lifecycle's (ciclo-ingreso, ciclo-costo), as the Finanzas rows show.
@@ -73,7 +74,7 @@ export function nuevoCosto(db: Db, n: CostoNuevo, hoy: string) {
     return
   }
 
-  const periodoInicio = n.fecha.slice(0, 7)
+  const periodoInicio = periodoDe(n.fecha)
   transaccionConPeriodos(db, hoy, (tx) => {
     const definicionCostoId = tx
       .insert(definicionesCosto)
@@ -154,5 +155,5 @@ export function borrarCosto(db: Db, id: number, hoy: string) {
 /** Ends the monthly or annual series the Costo belongs to after this month; MSI is committed. */
 export function detenerCosto(db: Db, id: number, hoy: string) {
   const c = exigirCosto(db, 'detener', id, hoy)
-  db.update(definicionesCosto).set({ periodoFin: hoy.slice(0, 7) }).where(eq(definicionesCosto.id, c.definicionId!)).run()
+  db.update(definicionesCosto).set({ periodoFin: periodoDe(hoy) }).where(eq(definicionesCosto.id, c.definicionId!)).run()
 }

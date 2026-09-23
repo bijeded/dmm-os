@@ -12,6 +12,7 @@ import { fechaIngresoSql } from './ledger'
 import { clave } from './nombres'
 import { carpetaEntre, referenciaProyecto } from './proyectos'
 import type { AsignacionCosto, FilaAsignacion, FilaSuscripcion, LecturaUso, PeriodoAi, Rango, ResumenAi, UsoModelo, UsoTokens } from '../shared/dominio'
+import { periodoDe } from '../shared/fechas'
 
 /**
  * AI: token usage imported from CC Usage (tokens and approximate API cost) and RTK (tokens
@@ -446,9 +447,9 @@ function asignaciones(
   filas: FilaSuscripcion[],
   hoy: string
 ): { asignacion: AsignacionCosto; costoReal: Map<number, number> } {
-  const mesActual = hoy.slice(0, 7)
+  const mesActual = periodoDe(hoy)
   const pools = new Map<string, number>([[mesActual, 0]])
-  for (const s of filas) pools.set(s.fecha.slice(0, 7), (pools.get(s.fecha.slice(0, 7)) ?? 0) + s.monto)
+  for (const s of filas) pools.set(periodoDe(s.fecha), (pools.get(periodoDe(s.fecha)) ?? 0) + s.monto)
 
   const deAiIds = new Set(ai.map(({ p }) => p.id))
   const tokens = new Map<string, Map<number, number>>()

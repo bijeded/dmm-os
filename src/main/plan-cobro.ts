@@ -1,6 +1,7 @@
 import type { cotizaciones } from './db/schema'
 import { montos, repartir, type MontosRegistrados } from './dinero'
 import type { CategoriaCosto, Moneda } from '../shared/dominio'
+import { periodoDe } from '../shared/fechas'
 
 export type CotizacionAPlanear = Pick<typeof cotizaciones.$inferSelect, 'moneda' | 'facturacion' | 'parcialidades' | 'subtotal' | 'iva' | 'costosEstimados'>
 
@@ -47,7 +48,7 @@ function registrado(subtotal: number, iva: number, tasaUsd: number | null): Mont
 /** What accepting `c` on `hoy` records. Every amount is built by the dinero constructor (`montos`), parcialidades by its split (`repartir`). */
 export function planCobro(c: CotizacionAPlanear, hoy: string, tipoCambio?: number): PlanCobro {
   const tasa = tasaDeAceptacion(c.moneda, tipoCambio)
-  const periodo = hoy.slice(0, 7)
+  const periodo = periodoDe(hoy)
 
   let ingresos: PlanCobro['ingresos'] = []
   if (c.facturacion !== 'mensual') {
