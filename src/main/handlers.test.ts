@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDatabase, type Conexion } from './db'
-import { contactos, cotizaciones, ingresos } from './db/schema'
+import { contactos, costos, cotizaciones, ingresos } from './db/schema'
 import { MENSAJE_SIN_PAGAR } from './ciclo-proyecto'
 import { crearHandlers, type HandlersOptions } from './handlers'
 import { MENSAJE_MONTO } from '../shared/montos'
@@ -566,5 +566,63 @@ describe('Contactos, Cotizaciones e Inicio al día', () => {
     const id = await mensualEnviada('2026-07-16')
     h = crearHandlers(opciones)
     expect((await h.cotizaciones.ficha(id)).estado).toBe('expirada')
+  })
+})
+
+describe('Every ledger command works Al día', () => {
+  it.each(['rechazar', 'cancelar'] as const)('refuses to %s a sent quote past its validity, with no read before it', async (accion) => {
+    const id = await mensualEnviada('2026-07-16')
+    h = crearHandlers(opciones)
+    const mensaje = accion === 'rechazar' ? 'Solo una cotización enviada se puede rechazar' : 'Solo una cotización enviada o aceptada se puede cancelar'
+    await expect(async () => h.cotizaciones[accion](id)).rejects.toThrow(mensaje)
+    expect((await h.cotizaciones.ficha(id)).estado).toBe('expirada')
+  })
+
+  it('refuses to accept a quote past its validity, and accepting a monthly one generates its first Periodo', async () => {
+    const vencida = await mensualEnviada('2026-07-16')
+    const vigente = await mensualEnviada('2026-09-16')
+    h = crearHandlers(opciones)
+    await expect(async () => h.cotizaciones.aceptar(vencida)).rejects.toThrow('Solo una cotización enviada se puede aceptar')
+    await h.cotizaciones.aceptar(vigente)
+    expect(conexion.db.select().from(ingresos).all().map((i) => i.periodo)).toEqual(['2026-09'])
+  })
+
+  it('pays an Ingreso after this month’s Periodos exist, with no read before it', async () => {
+    const id = await mensualEnviada('2026-08-16')
+    await h.cotizaciones.aceptar(id)
+    await h.finanzas.nuevoIngreso({ categoria: 'sin_factura', facturado: false, contactoId: null, proyectoId: null, fecha: '2026-08-16', subtotal: 1000, conIva: false, pagado: false, notas: null })
+    const suelto = conexion.db.select().from(ingresos).all().find((i) => i.periodo === null)!
+    h = crearHandlers(opciones)
+    await h.finanzas.pagarIngreso(suelto.id)
+    expect(conexion.db.select().from(ingresos).all().map((i) => i.periodo)).toEqual(['2026-08', null, '2026-09'])
+  })
+
+  it('a new monthly Costo has its first Periodo as soon as it is saved', async () => {
+    await h.finanzas.nuevoCosto({ nombre: 'Hosting', proveedor: null, referencia: null, categoria: 'mensual', proyectoId: null, fecha: '2026-09-01', subtotal: 1000, conIva: false, parcialidades: null, suscripcionIa: false, pagado: false })
+    expect(conexion.db.select().from(costos).all().map((c) => c.periodo)).toEqual(['2026-09'])
+    expect((await h.finanzas.resumen('mes')).costos.map((c) => c.nombre)).toEqual(['Hosting'])
+  })
+
+  // Every entry of the sections over the ledger, read off the handlers themselves, so a new one is covered too.
+  const secciones = ['contactos', 'cotizaciones', 'proyectos', 'finanzas', 'inicio'] as const
+  // A setting, not the ledger.
+  const fuera = ['finanzas.configurarVencida']
+
+  it('every entry over the ledger first expires quotes and generates this month’s Periodos', async () => {
+    const entradas = [...secciones.flatMap((s) => Object.keys(h[s]).map((n) => `${s}.${n}`)), 'ai.resumen'].filter((e) => !fuera.includes(e))
+    const periodos = () => conexion.db.select().from(ingresos).all().filter((i) => i.periodo === '2026-09').length
+    for (const entrada of entradas) {
+      const enviada = await mensualEnviada('2026-08-10')
+      await h.cotizaciones.aceptar(await mensualEnviada('2026-08-10'))
+      const antes = periodos()
+      h = crearHandlers(opciones)
+      const [s, n] = entrada.split('.') as [keyof DmmHandlers, string]
+      // Called on nothing, so it changes nothing; what counts is what it brought Al día first.
+      await Promise.resolve()
+        .then(() => (h[s] as unknown as Record<string, (arg: unknown) => unknown>)[n](0))
+        .catch(() => undefined)
+      const estado = conexion.db.select().from(cotizaciones).all().find((c) => c.id === enviada)!.estado
+      expect([entrada, estado, periodos()]).toEqual([entrada, 'expirada', antes + 1])
+    }
   })
 })

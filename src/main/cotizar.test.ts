@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, vigenciasPrecio } from './db/schema'
 import { generarPeriodos } from './db/periodos'
 import { contacto, db, reiniciarDb } from './db/test-db'
+import { dbAlDia } from './ledger'
 import {
   aceptarCotizacion,
   archivoPdf,
@@ -146,7 +147,7 @@ describe('aceptar', () => {
 
   it('refuses a sent quote past its validity, marking it expirada', async () => {
     const { id } = await enviada({ fecha: '2026-09-01', validezDias: 30 })
-    expect(() => aceptarCotizacion(db, root, id, '2026-10-02')).toThrow('enviada')
+    expect(() => aceptarCotizacion(dbAlDia(db, '2026-10-02'), root, id, '2026-10-02')).toThrow('enviada')
     expect(fichaCotizacion(db, id).estado).toBe('expirada')
     expect(db.select().from(proyectos).all()).toEqual([])
   })

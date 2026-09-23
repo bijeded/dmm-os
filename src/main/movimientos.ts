@@ -4,7 +4,7 @@ import { costos, definicionesCosto, ingresos, proyectos, vigenciasPrecio } from 
 import { monedaDe, tasaDe } from './dinero'
 import { exigirCosto, type ContextoCosto } from './ciclo-costo'
 import { exigirIngreso, MENSAJE_REEMBOLSO_EXCEDIDO, restante, type ContextoIngreso } from './ciclo-ingreso'
-import { alDia } from './ledger'
+import { transaccionConPeriodos } from './ledger'
 import { ivaDe } from '../shared/formato'
 import { exigirCentavos } from '../shared/montos'
 import type { CostoNuevo, IngresoNuevo } from '../shared/dominio'
@@ -145,7 +145,7 @@ export function nuevoCosto(db: Db, n: CostoNuevo, hoy: string) {
   }
 
   const periodoInicio = n.fecha.slice(0, 7)
-  db.transaction((tx) => {
+  transaccionConPeriodos(db, hoy, (tx) => {
     const definicionCostoId = tx
       .insert(definicionesCosto)
       .values({
@@ -162,7 +162,6 @@ export function nuevoCosto(db: Db, n: CostoNuevo, hoy: string) {
       .get().id
     tx.insert(vigenciasPrecio).values({ definicionCostoId, desde: periodoInicio, ...montos }).run()
   })
-  alDia(db, hoy)
 }
 
 export function pagarIngreso(db: Db, id: number, hoy: string) {

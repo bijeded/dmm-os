@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { costos, cotizaciones, definicionesCosto, ingresos } from './db/schema'
 import { contacto, db, reiniciarDb } from './db/test-db'
 import { rangos, resumenFinanzas } from './finanzas'
+import { dbAlDia } from './ledger'
 import { borrarCosto, borrarIngreso, cancelarIngreso, detenerCosto, nuevoCosto, nuevoIngreso, pagarIngreso, reembolsar } from './movimientos'
 import type { CostoNuevo, IngresoNuevo } from '../shared/dominio'
 
@@ -97,7 +98,7 @@ describe('resumen', () => {
     db.insert(ingresos).values({ categoria: 'sin_factura', subtotal: 3000, iva: 0, total: 3000, contactoId, cotizacionId: c.id, fechaRegistro: '2026-09-01' }).run()
     nuevoIngreso(db, ingreso({ subtotal: 10000 }), hoy)
 
-    const r = resumenFinanzas(db, 'anio', hoy, 30)
+    const r = resumenFinanzas(dbAlDia(db, hoy), 'anio', hoy, 30)
     expect(db.select().from(cotizaciones).where(eq(cotizaciones.id, c.id)).get()!.estado).toBe('expirada')
     expect(r.actual).toMatchObject({ ingresos: 13000, ingresosSinFactura: 13000 })
   })

@@ -4,9 +4,9 @@ import { and, eq, max } from 'drizzle-orm'
 import type { Db } from './db'
 import { borrar, cancelar } from './db/cancelacion'
 import { contactos, costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, vigenciasPrecio } from './db/schema'
-import { generarPeriodos } from './db/periodos'
 import { accionesCotizacion, exigirCotizacion, type ContextoCotizacion } from './ciclo-cotizacion'
 import { estadoCobro } from './cobranza'
+import { transaccionConPeriodos } from './ledger'
 import { plantillaCotizacion } from './plantilla-cotizacion'
 import { planCobro } from './plan-cobro'
 import { crearCarpeta } from './proyectos'
@@ -154,16 +154,15 @@ export function expirarCotizaciones(db: Db, hoy: string): void {
  * Accepting a sent quote creates its Proyecto, the pending Ingresos (por facturar, dates blank
  * until invoiced) or the monthly definition, and the estimated Costos, as its Plan de cobro
  * (`planCobro`) lays them out; a USD quote needs `tipoCambio`.
- * Expiry is brought up to date first, so a quote past its validity is refused. The first
- * Periodos are generated in the same transaction; the Proyecto folder is created once it commits.
+ * `db` is Al día, so a quote past its validity is refused. The first Periodos are generated in the
+ * same transaction; the Proyecto folder is created once it commits.
  */
 export function aceptarCotizacion(db: Db, root: string, id: number, hoy: string, tipoCambio?: number): FichaCotizacion {
-  expirarCotizaciones(db, hoy)
   const c = leer(db, id)
   exigirCotizacion('aceptar', c.estado, contexto(db, id))
   const plan = planCobro(c, hoy, tipoCambio)
 
-  db.transaction((tx) => {
+  transaccionConPeriodos(db, hoy, (tx) => {
     tx.update(cotizaciones).set({ estado: 'aceptada', tipoCambio: plan.tipoCambio }).where(eq(cotizaciones.id, id)).run()
     const proyectoId = tx
       .insert(proyectos)
@@ -183,7 +182,6 @@ export function aceptarCotizacion(db: Db, root: string, id: number, hoy: string,
         .get().id
       tx.insert(vigenciasPrecio).values({ ...precio, definicionCostoId }).run()
     }
-    generarPeriodos(tx, plan.periodo)
   })
   const ficha = fichaCotizacion(db, id)
   if (ficha.proyectoId === null) throw new Error(`La cotización ${id} se aceptó sin crear su proyecto`)
