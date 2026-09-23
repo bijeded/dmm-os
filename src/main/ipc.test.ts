@@ -124,6 +124,11 @@ function handlers() {
     },
     inicio: {
       resumen: vi.fn(() => ({ finanzas: {} as ResumenFinanzas, proyectos: [], cotizaciones: [], tareas: { pendientes: [], hechas: [], diasHechas: 30 } }))
+    },
+    lab: {
+      carpetas: vi.fn(() => [{ nombre: 'Benchmarks', archivos: 0 }]),
+      archivos: vi.fn(() => []),
+      abrir: vi.fn(async () => {})
     }
   } satisfies DmmHandlers
 }
@@ -142,6 +147,7 @@ describe('IPC contract', () => {
     recorrerContrato(contrato, (canal) => canales.push(canal))
     expect([...conectar(handlers()).registrados.keys()]).toEqual(canales)
     expect(canales).toContain('respaldos:estado')
+    expect(canales).toEqual(expect.arrayContaining(['lab:carpetas', 'lab:archivos', 'lab:abrir']))
   })
 
   it('round-trips calls and arguments from the renderer API to main handlers', async () => {
@@ -157,6 +163,9 @@ describe('IPC contract', () => {
     expect(h.respaldos.crear).toHaveBeenCalled()
     expect(h.respaldos.configurar).toHaveBeenCalledWith({ frecuenciaDias: 1, conservar: 2 })
     expect(h.respaldos.restaurar).toHaveBeenCalledWith('/v/a.db')
+
+    await api.lab.abrir('Benchmarks/a.md')
+    expect(h.lab.abrir).toHaveBeenCalledWith('Benchmarks/a.md')
   })
 
   it('refuses to start with an endpoint missing its handler', () => {

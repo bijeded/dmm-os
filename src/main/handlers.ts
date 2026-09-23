@@ -42,6 +42,7 @@ import {
 } from './proyectos'
 import { agregarTarea, borrarTarea, completarTarea, listarTareas } from './tareas'
 import { escanearCarpetas, importarFacturas, marcarHddNoDisponible } from './importacion'
+import { archivosLab, carpetasLab, rutaEnLab } from './lab'
 import { alDia } from './ledger'
 import { leerRutas } from './rutas'
 import { pendientes, responder } from './sugerencias'
@@ -204,6 +205,14 @@ export function crearHandlers({
     },
     inicio: {
       resumen: () => resumenInicio(conexion.db, info.dmmOsRoot, hoy(), diasVencida())
+    },
+    lab: {
+      carpetas: () => carpetasLab(info.dmmOsRoot),
+      archivos: (carpeta) => archivosLab(info.dmmOsRoot, carpeta),
+      abrir: async (ruta) => {
+        const error = await abrirCarpeta(rutaEnLab(info.dmmOsRoot, ruta))
+        if (error) throw new Error(error)
+      }
     }
   }
 }

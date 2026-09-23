@@ -99,6 +99,25 @@ describe('abrir carpetas', () => {
   })
 })
 
+describe('Lab', () => {
+  it('opens a Lab file or folder under the DMM OS root', async () => {
+    await h.lab.abrir('Benchmarks/benchmark.md')
+    await h.lab.abrir('Benchmarks')
+    expect(opciones.abrirCarpeta).toHaveBeenNthCalledWith(1, join(root, 'Lab', 'Benchmarks', 'benchmark.md'))
+    expect(opciones.abrirCarpeta).toHaveBeenNthCalledWith(2, join(root, 'Lab', 'Benchmarks'))
+  })
+
+  it('refuses to open anything outside Lab/', async () => {
+    await expect(h.lab.abrir('../Vault')).rejects.toThrow(/fuera de Lab/)
+    expect(opciones.abrirCarpeta).not.toHaveBeenCalled()
+  })
+
+  it('lists the folders of Lab/ on disk', async () => {
+    mkdirSync(join(root, 'Lab', 'Newsletter'), { recursive: true })
+    expect(await h.lab.carpetas()).toEqual([{ nombre: 'Newsletter', archivos: 0 }])
+  })
+})
+
 describe('Sugerencias de importación', () => {
   it('starts with none pending', async () => {
     mkdirSync(join(root, 'Entrada'))

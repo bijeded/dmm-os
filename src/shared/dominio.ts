@@ -120,6 +120,22 @@ export interface Rutas {
 /** A folder the app can reveal in Finder. */
 export type CarpetaAbrible = 'raiz' | 'entrada' | 'facturas'
 
+/** A subfolder of `Lab/`, where Claude Desktop output lands, and how many files it holds. */
+export interface CarpetaLab {
+  nombre: string
+  /** `null` when the folder can't be read. */
+  archivos: number | null
+}
+
+/** A file in a Lab folder. `tipo` comes from its extension (`MD`, `PDF`), '' when it has none. */
+export interface ArchivoLab {
+  nombre: string
+  tipo: string
+  bytes: number
+  /** ISO timestamp. */
+  modificado: string
+}
+
 /** Whether a year's Costos are known at all; a year without them shows Sin datos. */
 export interface CoberturaAnual {
   anio: number
