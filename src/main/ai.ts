@@ -2,14 +2,14 @@ import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { promisify } from 'node:util'
-import { and, desc, eq, gte, isNotNull, lte, ne, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, isNotNull, lte, ne, sql, type SQL } from 'drizzle-orm'
 import type { Ajustes, Db } from './db'
 import { ahorroTokens, costos, cotizaciones, definicionesCosto, ingresos, usoTokens } from './db/schema'
 import { convertir } from './dinero'
 import { rangos } from './finanzas'
 import { alDia } from './ledger'
 import { clave } from './nombres'
-import type { FilaSuscripcion, LecturaUso, PeriodoAi, Rango, ResumenAi } from '../shared/dominio'
+import type { FilaSuscripcion, LecturaUso, PeriodoAi, Rango, ResumenAi, UsoModelo } from '../shared/dominio'
 
 /**
  * AI: token usage imported from CC Usage (tokens and approximate API cost) and RTK (tokens
@@ -246,6 +246,54 @@ function suscripciones(db: Db, rango: Rango): FilaSuscripcion[] {
     .map((c) => ({ id: c.id, proveedor: c.proveedor, plan: c.nombre, fecha: c.fecha, monto: c.subtotal, origen: c.cfdiUuid ? 'cfdi' : 'manual' }))
 }
 
+/** Claude's families, smallest first: the order the chart shows them in. */
+const FAMILIAS_CLAUDE = ['haiku', 'sonnet', 'opus', 'fable']
+
+/**
+ * A model's family, the first word of its name that isn't its provider or a version:
+ * `claude-sonnet-4-5-20250929` and `claude-3-5-sonnet-20241022` are sonnet, `gpt-5` is gpt.
+ */
+const familia = (proveedor: string, modelo: string) =>
+  modelo
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .find((p) => p && p !== proveedor && p !== 'claude' && !/^\d/.test(p)) ?? modelo
+
+const rangoFamilia = (modelo: string) => {
+  const k = FAMILIAS_CLAUDE.indexOf(modelo)
+  return k === -1 ? FAMILIAS_CLAUDE.length : k
+}
+
+/**
+ * Tokens and API cost per model family in the period. Every family ever seen is listed, with
+ * zero when unused, so the chart keeps the same bars across periods. By provider, then Claude's
+ * families smallest first, then by name.
+ */
+function usoPorModelo(db: Db, enPeriodo: SQL | undefined): UsoModelo[] {
+  const filas = db
+    .select({
+      proveedor: usoTokens.proveedor,
+      modelo: usoTokens.modelo,
+      tokens: sql<number>`coalesce(sum(case when ${enPeriodo ?? sql`1`} then ${usoTokens.tokensEntrada} + ${usoTokens.tokensSalida} + ${usoTokens.tokensCacheEscritura} + ${usoTokens.tokensCacheLectura} else 0 end), 0)`,
+      costoUsd: sql<number>`coalesce(sum(case when ${enPeriodo ?? sql`1`} then ${usoTokens.costoUsd} else 0 end), 0)`
+    })
+    .from(usoTokens)
+    .groupBy(usoTokens.proveedor, usoTokens.modelo)
+    .all()
+  const modelos = new Map<string, UsoModelo>()
+  for (const f of filas) {
+    const modelo = familia(f.proveedor, f.modelo)
+    const k = JSON.stringify([f.proveedor, modelo])
+    const m = modelos.get(k) ?? { proveedor: f.proveedor, modelo, tokens: 0, costoUsd: 0 }
+    m.tokens += f.tokens
+    m.costoUsd += f.costoUsd
+    modelos.set(k, m)
+  }
+  return [...modelos.values()].sort(
+    (a, b) => a.proveedor.localeCompare(b.proveedor) || rangoFamilia(a.modelo) - rangoFamilia(b.modelo) || a.modelo.localeCompare(b.modelo)
+  )
+}
+
 /**
  * The AI section's figures for `periodo`: Este mes runs, as in Finanzas, from the 1st to `hoy`.
  * Money is read Al día, so this month's Suscripciones exist.
@@ -278,6 +326,7 @@ export function resumenAi(db: Db, ajustes: Ajustes, periodo: PeriodoAi, hoy: str
     costoApiUsd: uso.costoUsd,
     costoApiMxn: tipoCambio === null ? null : convertir(uso.costoUsd, 'USD', 'MXN', tipoCambio),
     tipoCambio,
+    modelos: usoPorModelo(db, enPeriodo(usoTokens.dia)),
     suscripciones: filas,
     suscripcionesTotal: filas.reduce((s, f) => s + f.monto, 0),
     ...ultimaLectura(ajustes)

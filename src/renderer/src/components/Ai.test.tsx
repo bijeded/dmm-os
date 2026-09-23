@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import type { AgenteOSkill, FilaSuscripcion, PeriodoAi, ResumenAi } from '../../../shared/dominio'
+import type { AgenteOSkill, FilaSuscripcion, PeriodoAi, ResumenAi, UsoModelo } from '../../../shared/dominio'
 import type { DmmApi } from '../../../shared/contrato'
 import { dia, monto } from '../../../shared/formato'
 import { fecha } from './Seccion'
@@ -15,6 +15,13 @@ const SUSCRIPCIONES_MES: FilaSuscripcion[] = [
 ]
 const SUSCRIPCION_AGOSTO: FilaSuscripcion = { id: 3, proveedor: 'Anthropic', plan: 'Claude Pro', fecha: '2026-08-18', monto: 36_000, origen: 'cfdi' }
 
+const modelo = (proveedor: string, nombre: string, tokens: number, costoUsd: number): UsoModelo => ({ proveedor, modelo: nombre, tokens, costoUsd })
+
+const MODELOS: Record<PeriodoAi, UsoModelo[]> = {
+  mes: [modelo('claude', 'haiku', 900_000, 120), modelo('claude', 'sonnet', 6_400_000, 3_820), modelo('claude', 'opus', 8_400_000, 5_460), modelo('openai', 'gpt', 0, 0)],
+  todo: [modelo('claude', 'haiku', 2_100_000, 280), modelo('claude', 'sonnet', 21_000_000, 12_500), modelo('claude', 'opus', 24_100_000, 18_270), modelo('openai', 'gpt', 1_000_000, 0)]
+}
+
 const resumen = (periodo: PeriodoAi, cambios: Partial<ResumenAi> = {}): ResumenAi => ({
   periodo,
   tokens: periodo === 'mes' ? 15_700_000 : 48_200_000,
@@ -23,6 +30,7 @@ const resumen = (periodo: PeriodoAi, cambios: Partial<ResumenAi> = {}): ResumenA
   costoApiUsd: periodo === 'mes' ? 9_400 : 31_050,
   costoApiMxn: periodo === 'mes' ? 172_960 : 571_320,
   tipoCambio: 18.4,
+  modelos: MODELOS[periodo],
   suscripciones: periodo === 'mes' ? SUSCRIPCIONES_MES : [...SUSCRIPCIONES_MES, SUSCRIPCION_AGOSTO],
   suscripcionesTotal: periodo === 'mes' ? 54_000 : 90_000,
   ultimoEscaneo: ESCANEO,
@@ -110,6 +118,39 @@ describe('AI', () => {
     const avisos = await screen.findByRole('list', { name: 'Avisos de lectura' })
     expect(within(avisos).getByText('CC Usage: no está instalado (no se encontró `ccusage`)')).toBeTruthy()
     expect(tarjeta(/Tokens totales/).textContent).toContain('15.7 M')
+  })
+
+  it('charts every model, grouped by provider, including one unused in the period', async () => {
+    montar()
+    const grafica = await screen.findByRole('img', { name: 'Tokens por modelo' })
+    const barras = () => within(grafica).getAllByLabelText(/ · /).map((b) => b.getAttribute('aria-label'))
+    expect(barras()).toEqual(['claude · haiku', 'claude · sonnet', 'claude · opus', 'openai · gpt'])
+    expect(within(grafica).getByText('claude')).toBeTruthy()
+    expect(within(grafica).getByText('openai')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Todo el tiempo' }))
+    await screen.findByText('48.2 M')
+    expect(barras()).toEqual(['claude · haiku', 'claude · sonnet', 'claude · opus', 'openai · gpt'])
+  })
+
+  it('shows a model’s tokens and API cost in the tooltip', async () => {
+    montar()
+    const grafica = await screen.findByRole('img', { name: 'Tokens por modelo' })
+    expect(screen.queryByRole('tooltip')).toBeNull()
+    fireEvent.mouseEnter(within(grafica).getByLabelText('claude · sonnet'))
+    const tooltip = screen.getByRole('tooltip')
+    expect(tooltip.textContent).toContain('claude · sonnet')
+    expect(tooltip.textContent).toContain('6.4 M tokens')
+    expect(tooltip.textContent).toContain(`≈ ${monto(3_820, 'USD')} API`)
+    fireEvent.mouseEnter(within(grafica).getByLabelText('openai · gpt'))
+    expect(screen.getByRole('tooltip').textContent).toContain('0 tokens')
+    fireEvent.mouseLeave(grafica)
+    expect(screen.queryByRole('tooltip')).toBeNull()
+  })
+
+  it('says when no token usage has been read yet', async () => {
+    montar({ resumen: vi.fn(async (p: PeriodoAi) => resumen(p, { modelos: [] })) })
+    expect(await screen.findByText('Sin uso de tokens leído.')).toBeTruthy()
+    expect(screen.queryByRole('img', { name: 'Tokens por modelo' })).toBeNull()
   })
 
   it('lists the period’s Suscripciones with their origin, and totals them on the card', async () => {

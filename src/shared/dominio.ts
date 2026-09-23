@@ -527,10 +527,24 @@ export interface ResumenAi extends LecturaUso {
   costoApiMxn: number | null
   /** The most recent pesos per USD recorded in the app. */
   tipoCambio: number | null
+  /** Every model ever used, by provider, with the period's usage: zero when it was not used in it. */
+  modelos: UsoModelo[]
   /** The period's Suscripciones, newest first. */
   suscripciones: FilaSuscripcion[]
   /** Their subtotals added up. */
   suscripcionesTotal: number
+}
+
+/** A model family's usage in a period: every version of it, from every folder. */
+export interface UsoModelo {
+  /** Who makes it: `claude`, `openai`. */
+  proveedor: string
+  /** The family, e.g. haiku, sonnet, opus, fable. */
+  modelo: string
+  /** Input, output and cache tokens. */
+  tokens: number
+  /** USD cents it would cost through the API. */
+  costoUsd: number
 }
 
 export const NOMBRES_ORIGEN_SUSCRIPCION = { cfdi: 'CFDI recibido', manual: 'Manual' } as const
