@@ -14,7 +14,8 @@ import {
   type FilaSuscripcion,
   type PeriodoAi,
   type ResumenAi,
-  type UsoModelo
+  type UsoModelo,
+  type UsoTokens
 } from '../../../shared/dominio'
 import { dia, monto, normalizar, pesos } from '../../../shared/formato'
 import { NOMBRES_CARPETA } from './Proyectos'
@@ -255,6 +256,9 @@ function AgentesYSkills() {
 
 const USOS_TOKENS = { con_uso: 'Con uso', sin_uso: 'Sin uso' } as const
 
+/** API cost in pesos, as the Costo API aprox. card shows it; in USD while the app has no tipo de cambio. */
+const costoApi = (u: UsoTokens) => (u.costoApiMxn === null ? monto(u.costoUsd, 'USD') : pesos(u.costoApiMxn))
+
 /**
  * The AI Proyectos in the order main gives (by name), with the period's usage in their folders,
  * filterable. Usage in no Proyecto's folder closes the list as Sin proyecto while nothing is
@@ -370,7 +374,7 @@ function ProyectosAi({ filas, sinProyecto }: Pick<ResumenAi, 'sinProyecto'> & { 
                 {tokens(p.tokens)}
               </td>
               <td data-label="API aprox." className={`${celdaCls} text-right font-mono text-[12px]`}>
-                {monto(p.costoUsd, 'USD')}
+                {costoApi(p)}
               </td>
               <td data-label="Estado" className={celdaCls}>
                 {NOMBRES_ESTADO_PROYECTO[p.estado]}
@@ -408,7 +412,7 @@ function ProyectosAi({ filas, sinProyecto }: Pick<ResumenAi, 'sinProyecto'> & { 
                 {tokens(sinProyecto.tokens)}
               </td>
               <td data-label="API aprox." className={`${celdaCls} text-right font-mono text-[12px]`}>
-                {monto(sinProyecto.costoUsd, 'USD')}
+                {costoApi(sinProyecto)}
               </td>
               <td className={celdaCls} />
               <td className={celdaCls} />

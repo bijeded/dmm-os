@@ -407,7 +407,16 @@ describe('AI Proyectos', () => {
     const r = resumenAi(db, ajustes, DISCO, 'mes', HOY)
     expect(r.proyectos.find((p) => p.nombre === 'Aura')).toMatchObject({ tokens: 10_030 + 70, costoUsd: 1_050 + 50 })
     // Netdeckr's usage from the first read is still there.
-    expect(r.sinProyecto).toEqual({ tokens: 5 + 200 + 300, costoUsd: 10 + 20 + 30 })
+    expect(r.sinProyecto).toEqual({ tokens: 5 + 200 + 300, costoUsd: 10 + 20 + 30, costoApiMxn: null })
+  })
+
+  it('gives each row’s API cost in pesos too, at the most recent tipo de cambio', () => {
+    expect(fila('Aura')).toMatchObject({ costoUsd: 1_175, costoApiMxn: null })
+    db.insert(costos)
+      .values({ nombre: 'Claude Pro', categoria: 'mensual', fecha: '2026-09-18', subtotal: 36_800, iva: 0, total: 36_800, montoOriginal: 2_000, monedaOriginal: 'USD' })
+      .run()
+    expect(fila('Aura')).toMatchObject({ costoUsd: 1_175, costoApiMxn: Math.round(1_175 * 18.4) })
+    expect(fila('Chatbot Terra')).toMatchObject({ costoUsd: 0, costoApiMxn: 0 })
   })
 
   it('gives a subfolder to the Proyecto whose folder it is, not to the one it sits under', async () => {
@@ -471,6 +480,12 @@ describe('Ingreso cards', () => {
   })
 
   it('Ingreso proyectos AI adds up the accepted Cotizaciones of AI Proyectos started in the period, in pesos', () => {
+    expect(resumenAi(db, ajustes, DISCO, 'mes', HOY).ingresoProyectos).toBe(1_850_000)
+    expect(resumenAi(db, ajustes, DISCO, 'todo', HOY).ingresoProyectos).toBe(5_800_000 + 1_850_000)
+  })
+
+  it('counts a Proyecto with no start date in Todo el tiempo only', () => {
+    db.update(proyectos).set({ fechaInicio: null }).where(eq(proyectos.id, aura.id)).run()
     expect(resumenAi(db, ajustes, DISCO, 'mes', HOY).ingresoProyectos).toBe(1_850_000)
     expect(resumenAi(db, ajustes, DISCO, 'todo', HOY).ingresoProyectos).toBe(5_800_000 + 1_850_000)
   })

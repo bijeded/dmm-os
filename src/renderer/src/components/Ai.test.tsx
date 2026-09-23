@@ -38,14 +38,15 @@ const proyectoAi = (id: number, nombre: string, cambios: Partial<FilaProyectoAi>
   modelos: [],
   tokens: 0,
   costoUsd: 0,
+  costoApiMxn: null,
   ...cambios
 })
 
 const PROYECTOS: Record<PeriodoAi, FilaProyectoAi[]> = {
   mes: [
-    proyectoAi(1, 'Aura', { estado: 'completado', modelos: ['sonnet', 'opus'], tokens: 9_100_000, costoUsd: 98_000, carpeta: { estado: 'archivado', ruta: 'Archivo/Proyectos/Aura', abrible: false } }),
-    proyectoAi(4, 'Chatbot Terra', { contacto: 'Grupo Terra', clienteFinal: 'Terra Norte', fechaInicio: '2025-11-02', estado: 'pausado', carpeta: { estado: 'no_disponible', ruta: 'Proyectos/Chatbot Terra', abrible: false } }),
-    proyectoAi(3, 'Netdeckr', { referencia: null, etiqueta: 'personal', contactoId: null, contacto: null, modelos: ['opus'], tokens: 6_600_000, costoUsd: 41_000 })
+    proyectoAi(1, 'Aura', { estado: 'completado', modelos: ['sonnet', 'opus'], tokens: 9_100_000, costoUsd: 5_326, costoApiMxn: 98_000, carpeta: { estado: 'archivado', ruta: 'Archivo/Proyectos/Aura', abrible: false } }),
+    proyectoAi(4, 'Chatbot Terra', { contacto: 'Grupo Terra', clienteFinal: 'Terra Norte', fechaInicio: '2025-11-02', estado: 'pausado', costoApiMxn: 0, carpeta: { estado: 'no_disponible', ruta: 'Proyectos/Chatbot Terra', abrible: false } }),
+    proyectoAi(3, 'Netdeckr', { referencia: null, etiqueta: 'personal', contactoId: null, contacto: null, modelos: ['opus'], tokens: 6_600_000, costoUsd: 3_315, costoApiMxn: 61_000 })
   ],
   todo: [
     proyectoAi(1, 'Aura', { estado: 'completado', modelos: ['haiku', 'sonnet', 'opus'], tokens: 30_000_000, costoUsd: 250_000 }),
@@ -68,7 +69,7 @@ const resumen = (periodo: PeriodoAi, cambios: Partial<ResumenAi> = {}): ResumenA
   ingresoProyectos: periodo === 'mes' ? 5_800_000 : 12_300_000,
   ingresoAi: periodo === 'mes' ? 1_800_000 : 7_450_000,
   proyectos: PROYECTOS[periodo],
-  sinProyecto: periodo === 'mes' ? { tokens: 500_000, costoUsd: 900 } : { tokens: 1_800_000, costoUsd: 3_100 },
+  sinProyecto: periodo === 'mes' ? { tokens: 500_000, costoUsd: 900, costoApiMxn: 16_560 } : { tokens: 1_800_000, costoUsd: 3_100, costoApiMxn: null },
   ultimoEscaneo: ESCANEO,
   avisos: [],
   ...cambios
@@ -300,10 +301,10 @@ describe('AI Proyectos', () => {
     montar()
     await screen.findByRole('table', { name: 'AI Proyectos' })
     expect(filasProyectos()).toEqual([
-      ['Aura', 'PRY-001', 'Hotel Aura', 'sonnet, opus', '9.1 M', monto(98_000, 'USD'), 'Completado', 'Archivado'],
-      ['Chatbot Terra', 'PRY-004', 'Grupo Terra · Terra Norte', '—', '0', monto(0, 'USD'), 'Pausado', 'No disponible'],
-      ['Netdeckr', '—', 'Personal', 'opus', '6.6 M', monto(41_000, 'USD'), 'En curso', 'Abrir'],
-      ['Sin proyecto', '', '', '', '500.0 K', monto(900, 'USD'), '', '']
+      ['Aura', 'PRY-001', 'Hotel Aura', 'sonnet, opus', '9.1 M', '$980.00', 'Completado', 'Archivado'],
+      ['Chatbot Terra', 'PRY-004', 'Grupo Terra · Terra Norte', '—', '0', '$0.00', 'Pausado', 'No disponible'],
+      ['Netdeckr', '—', 'Personal', 'opus', '6.6 M', '$610.00', 'En curso', 'Abrir'],
+      ['Sin proyecto', '', '', '', '500.0 K', '$165.60', '', '']
     ])
   })
 
@@ -315,6 +316,15 @@ describe('AI Proyectos', () => {
     expect(filaProyecto('Aura').textContent).toContain('haiku, sonnet, opus')
     expect(filaProyecto('Aura').textContent).toContain('30.0 M')
     expect(filaProyecto('Sin proyecto').textContent).toContain('1.8 M')
+  })
+
+  it('shows the API cost in USD when the app has no tipo de cambio', async () => {
+    montar()
+    await screen.findByRole('table', { name: 'AI Proyectos' })
+    fireEvent.click(screen.getByRole('button', { name: 'Todo el tiempo' }))
+    await screen.findByText('48.2 M')
+    expect(filaProyecto('Aura').textContent).toContain(monto(250_000, 'USD'))
+    expect(filaProyecto('Sin proyecto').textContent).toContain(monto(3_100, 'USD'))
   })
 
   const nombres = () => filasProyectos().map((f) => f[0])
@@ -386,7 +396,7 @@ describe('AI Proyectos', () => {
   })
 
   it('says when there are no AI Proyectos', async () => {
-    montar({ resumen: vi.fn(async (p: PeriodoAi) => resumen(p, { proyectos: [], sinProyecto: { tokens: 0, costoUsd: 0 } })) })
+    montar({ resumen: vi.fn(async (p: PeriodoAi) => resumen(p, { proyectos: [], sinProyecto: { tokens: 0, costoUsd: 0, costoApiMxn: null } })) })
     expect(await screen.findByText('Ningún proyecto en la categoría AI.')).toBeTruthy()
     expect(screen.queryByRole('table', { name: 'AI Proyectos' })).toBeNull()
   })

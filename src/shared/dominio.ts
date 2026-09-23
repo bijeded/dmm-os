@@ -540,34 +540,30 @@ export interface ResumenAi extends LecturaUso {
   /** The AI Proyectos by name, each with the period's usage in its folder. */
   proyectos: FilaProyectoAi[]
   /** The period's usage in folders that are no Proyecto's. */
-  sinProyecto: { tokens: number; costoUsd: number }
+  sinProyecto: UsoTokens
+}
+
+/** Token usage and what it would cost through the API. */
+export interface UsoTokens {
+  /** Input, output and cache tokens. */
+  tokens: number
+  /** USD cents. */
+  costoUsd: number
+  /** The same in centavos at the most recent tipo de cambio; `null` when the app has none. */
+  costoApiMxn: number | null
 }
 
 /**
  * A Proyecto in the AI categoría, with the usage at or under its folder in the period. Usage is
  * linked by folder when read, so moving or renaming the folder re-links it.
  */
-export interface FilaProyectoAi {
-  id: number
-  /** `null` for a personal one. */
-  referencia: string | null
-  nombre: string
-  etiqueta: EtiquetaProyecto
-  contactoId: number | null
-  /** `null` for a personal one, which reads Personal. */
-  contacto: string | null
-  clienteFinal: string | null
-  categoria: Categoria
-  fechaInicio: string | null
-  estado: EstadoProyecto
-  carpeta: CarpetaProyecto
-  /** The model families it used, in the chart's order. */
-  modelos: string[]
-  /** Input, output and cache tokens. */
-  tokens: number
-  /** USD cents it would cost through the API. */
-  costoUsd: number
-}
+export type FilaProyectoAi = Omit<FilaProyecto, 'referencia' | 'sinIngresosRegistrados'> &
+  UsoTokens & {
+    /** `null` for a personal one, whose Contacto is `null` too and reads Personal. */
+    referencia: string | null
+    /** The model families it used, in the chart's order. */
+    modelos: string[]
+  }
 
 /** A model family's usage in a period: every version of it, from every folder. */
 export interface UsoModelo {
