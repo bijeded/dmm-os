@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDatabase, type Conexion } from './db'
-import { contactos, costos, cotizaciones, ingresos, proyectos, vigenciasPrecio } from './db/schema'
+import { eq } from 'drizzle-orm'
+import { contactos, costos, cotizaciones, definicionesCosto, ingresos, proyectos, vigenciasPrecio } from './db/schema'
 import { MENSAJE_SIN_PAGAR } from './ciclo-proyecto'
 import { crearHandlers, type HandlersOptions } from './handlers'
 import { MENSAJE_MONTO } from '../shared/montos'
@@ -820,5 +821,173 @@ describe('Montos registrados, como Finanzas los muestra hoy', () => {
     await h.finanzas.reembolsar(usd.id, 5_000)
     const [reembolso] = (await h.finanzas.resumen('mes')).ingresos.filter((i) => i.reembolsoDeId === usd.id)
     expect(pin(reembolso)).toEqual({ subtotal: -75_431, iva: -12_069, retenciones: 0, total: -87_500, moneda: 'USD', reembolsable: 0, montoOriginal: -5_000, monedaOriginal: 'USD' })
+  })
+})
+
+/** Moves the clock to `fecha`. */
+const reloj = (fecha: string) => {
+  h = crearHandlers({ ...opciones, ahora: () => `${fecha}T10:00:00.000Z` })
+}
+
+describe('Periodos generados', () => {
+  const periodos = async () => (await h.finanzas.resumen('todo')).ingresos.filter((i) => i.origen === 'periodo')
+  const costo = async (nombre: string, categoria: 'mensual' | 'msi', fecha: string, proyectoId: number | null = null) =>
+    h.finanzas.nuevoCosto({ nombre, proveedor: null, referencia: null, categoria, proyectoId, fecha, subtotal: 10_000, conIva: false, parcialidades: categoria === 'msi' ? 3 : null, suscripcionIa: false, pagado: false })
+  const costosDe = (nombre: string) => conexion.db.select().from(costos).all().filter((c) => c.nombre === nombre)
+  const proyectoPersonal = async (nombre: string) =>
+    (await h.proyectos.guardar({ nombre, etiqueta: 'personal', contactoId: null, clienteFinal: null, categoria: 'website', fechaInicio: null, fechaEntrega: null, notas: null })).id
+
+  it('a monthly Cotización’s Ingresos reach hoy’s month once each, to be invoiced', async () => {
+    const id = await mensualEnviada('2026-07-16')
+    await h.cotizaciones.aceptar(id)
+    reloj('2026-09-16')
+    await h.finanzas.resumen('todo')
+    expect((await periodos()).map((i) => [i.fecha, i.estadoFacturacion])).toEqual([
+      ['2026-09-01', 'por_facturar'],
+      ['2026-08-01', 'por_facturar'],
+      ['2026-07-01', 'por_facturar']
+    ])
+  })
+
+  it('a monthly Costo on the 31st falls on the last day of shorter months', async () => {
+    reloj('2026-03-16')
+    await costo('Renta', 'mensual', '2026-01-31')
+    expect((await h.finanzas.resumen('todo')).costosPendientes.map((c) => c.fecha)).toEqual(['2026-01-31', '2026-02-28', '2026-03-31'])
+  })
+
+  it.each([
+    ['its Proyecto is completed', (_: number, proyectoId: number): unknown => h.proyectos.completar(proyectoId)],
+    ['its Proyecto is cancelled', (_: number, proyectoId: number): unknown => h.proyectos.cancelar(proyectoId)],
+    ['its Cotización is cancelled', (cotizacionId: number): unknown => h.cotizaciones.cancelar(cotizacionId)]
+  ] as const)('a monthly Ingreso series stops once %s', async (_, cerrar) => {
+    const id = await mensualEnviada('2026-07-16')
+    const { proyectoId } = await h.cotizaciones.aceptar(id)
+    for (const i of await periodos()) await h.finanzas.pagarIngreso(i.id)
+    await cerrar(id, proyectoId!)
+    reloj('2026-11-16')
+    await h.finanzas.resumen('todo')
+    expect(conexion.db.select().from(ingresos).all().map((i) => i.periodo)).toEqual(['2026-07'])
+  })
+
+  it('monthly Costos stop when their Proyecto closes; MSI Costos run to their end', async () => {
+    reloj('2026-01-16')
+    const completado = await proyectoPersonal('Completado')
+    const cancelado = await proyectoPersonal('Cancelado')
+    await costo('mensual completado', 'mensual', '2026-01-05', completado)
+    await costo('mensual cancelado', 'mensual', '2026-01-05', cancelado)
+    await costo('msi cancelado', 'msi', '2026-01-05', cancelado)
+    await h.proyectos.completar(completado)
+    await h.proyectos.cancelar(cancelado)
+    reloj('2026-06-16')
+    await h.finanzas.resumen('todo')
+    expect(costosDe('mensual completado')).toHaveLength(1)
+    expect(costosDe('mensual cancelado')).toHaveLength(1)
+    expect(costosDe('msi cancelado').map((c) => c.periodo)).toEqual(['2026-01', '2026-02', '2026-03'])
+  })
+
+  it('limits installments and applies a Vigencia de precio from its date forward, leaving generated periods as they were', async () => {
+    reloj('2026-01-16')
+    await costo('Claude Max', 'msi', '2026-01-05')
+    const [{ id: definicionCostoId }] = conexion.db.select().from(definicionesCosto).all()
+    conexion.db.insert(vigenciasPrecio).values({ definicionCostoId, desde: '2026-02', subtotal: 20_000, total: 20_000 }).run()
+    conexion.db.update(vigenciasPrecio).set({ subtotal: 99_900, total: 99_900 }).where(eq(vigenciasPrecio.desde, '2026-01')).run()
+    reloj('2026-06-16')
+    expect((await h.finanzas.resumen('todo')).costos.map((c) => [c.fecha, c.total])).toEqual([
+      ['2026-03-05', 20_000],
+      ['2026-02-05', 20_000],
+      ['2026-01-05', 10_000]
+    ])
+  })
+})
+
+describe('the preview is a promise', () => {
+  // Próximos pagos shows a Costo for next month; once the clock reaches that month, Finanzas has
+  // it as a pending Costo with that date and total. What it does not show never appears.
+  const costo = async (nombre: string, categoria: 'mensual' | 'msi' | 'anual', fecha = '2026-08-05', proyectoId: number | null = null) => {
+    await h.finanzas.nuevoCosto({ nombre, proveedor: null, referencia: null, categoria, proyectoId, fecha, subtotal: 100_000, conIva: false, parcialidades: categoria === 'msi' ? 3 : null, suscripcionIa: false, pagado: false })
+  }
+  const definicion = (nombre: string) => conexion.db.select().from(definicionesCosto).all().find((d) => d.nombre === nombre)!
+  const proyectoPersonal = async () =>
+    (await h.proyectos.guardar({ nombre: 'Interno', etiqueta: 'personal', contactoId: null, clienteFinal: null, categoria: 'website', fechaInicio: null, fechaEntrega: null, notas: null })).id
+
+  it.each([
+    ['a monthly Costo', (n: string) => costo(n, 'mensual'), { fecha: '2026-10-05', total: 100_000 }],
+    [
+      'a monthly Costo of a Proyecto later completed',
+      async (n: string) => {
+        const proyectoId = await proyectoPersonal()
+        await costo(n, 'mensual', '2026-08-05', proyectoId)
+        await h.proyectos.completar(proyectoId)
+      },
+      null
+    ],
+    [
+      'a monthly Costo estimated in a Cotización whose Proyecto is completed',
+      async (n: string) => {
+        reloj('2026-08-05')
+        const { id: contactoId } = conexion.db.insert(contactos).values({ nombre: 'Café Luna' }).returning().get()
+        const { id } = await h.cotizaciones.guardar({
+          contactoId,
+          nombre: 'Sitio',
+          categoria: 'website',
+          fecha: '2026-08-05',
+          validezDias: 30,
+          moneda: 'MXN',
+          partidas: [{ concepto: 'Sitio', categoria: 'website', cantidad: 1, precio: 300_000 }],
+          conIva: false,
+          facturacion: 'unica',
+          parcialidades: null,
+          stack: null,
+          terminos: null,
+          notas: null,
+          costosEstimados: [{ concepto: n, monto: 50_000, categoria: 'mensual', parcialidades: null }]
+        })
+        await h.cotizaciones.enviar(id)
+        const { proyectoId } = await h.cotizaciones.aceptar(id)
+        for (const i of (await h.finanzas.resumen('todo')).cobranza) await h.finanzas.pagarIngreso(i.id)
+        await h.proyectos.completar(proyectoId!)
+      },
+      { fecha: '2026-10-05', total: 50_000 }
+    ],
+    ['an MSI Costo on its last parcialidad', (n: string) => costo(n, 'msi'), { fecha: '2026-10-05', total: 100_000 }],
+    ['an annual Costo', (n: string) => costo(n, 'anual', '2025-10-05'), { fecha: '2026-10-05', total: 100_000 }],
+    [
+      'a Costo stopped this month',
+      async (n: string) => {
+        await costo(n, 'mensual')
+        const { id } = (await h.finanzas.resumen('mes')).costos.find((c) => c.nombre === n)!
+        await h.finanzas.detenerCosto(id)
+      },
+      null
+    ],
+    [
+      'a price change from next month',
+      async (n: string) => {
+        await costo(n, 'mensual')
+        conexion.db.insert(vigenciasPrecio).values({ definicionCostoId: definicion(n).id, desde: '2026-10', subtotal: 200_000, total: 200_000 }).run()
+      },
+      { fecha: '2026-10-05', total: 200_000 }
+    ],
+    [
+      'a definition with no vigencia yet for the next period',
+      async (n: string) => {
+        await costo(n, 'mensual')
+        conexion.db.update(vigenciasPrecio).set({ desde: '2026-11' }).where(eq(vigenciasPrecio.definicionCostoId, definicion(n).id)).run()
+      },
+      null
+    ]
+  ] as const)('%s', async (_, preparar, promesa) => {
+    const nombre = 'Servicio'
+    await preparar(nombre)
+    const deOctubre = (x: { nombre: string; fecha: string }) => x.nombre === nombre && x.fecha.startsWith('2026-10')
+    const promesaDe = ({ fecha, total }: { fecha: string; total: number }) => ({ fecha, total })
+
+    reloj('2026-09-16')
+    const previsto = (await h.finanzas.resumen('mes')).proximosPagos.filter(deOctubre).map(promesaDe)
+    expect(previsto).toEqual(promesa ? [promesa] : [])
+
+    reloj('2026-10-28')
+    const pendientes = (await h.finanzas.resumen('mes')).costosPendientes.filter(deOctubre).map(promesaDe)
+    expect(pendientes).toEqual(previsto)
   })
 })
