@@ -156,8 +156,8 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
   const sinDatos = new Set(coberturaCostos(db, desde, anioDe(hoy)).filter((c) => c.sinDatos).map((c) => c.anio))
   const aniosSinDatos = (span: Rango | null) => (span ? [...sinDatos].filter((anio) => anio >= anioDe(span.desde) && anio <= anioDe(span.hasta)) : [])
 
-  const cicloIngreso = accionesIngresos(db, todosIngresos)
-  const accionesCosto = accionesCostos(db, todosCostos, hoy)
+  const porIngreso = accionesIngresos(db, todosIngresos)
+  const porCosto = accionesCostos(db, todosCostos, hoy)
   const limiteVencida = sumarDias(hoy, -diasVencida)
   const filaIngreso = (i: Ingreso): FilaIngreso => ({
     id: i.id,
@@ -174,10 +174,10 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     origen: origenIngreso(i),
     vencida: i.estado === 'pendiente' && i.estadoFacturacion === 'facturado' && i.fechaRegistro !== null && i.fechaRegistro < limiteVencida,
     moneda: monedaDe(i),
-    reembolsable: cicloIngreso.get(i.id)!.reembolsable,
+    reembolsable: porIngreso.get(i.id)!.reembolsable,
     reembolsoDeId: i.reembolsoDeId,
     notas: i.notas,
-    acciones: cicloIngreso.get(i.id)!.acciones
+    acciones: porIngreso.get(i.id)!.acciones
   })
   const filaCosto = (c: Costo): FilaCosto => ({
     id: c.id,
@@ -193,7 +193,7 @@ export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, d
     retenciones: c.retenciones,
     total: c.total,
     origen: origenCosto(c),
-    acciones: accionesCosto.get(c.id)!
+    acciones: porCosto.get(c.id)!
   })
 
   const porFecha = <T>(f: (x: T) => string | null) => (a: T, b: T) => (f(a) ?? '').localeCompare(f(b) ?? '')

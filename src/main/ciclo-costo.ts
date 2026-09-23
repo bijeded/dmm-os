@@ -6,8 +6,8 @@ import type { AccionCosto, FilaCosto } from '../shared/dominio'
 export type Costo = typeof costos.$inferSelect
 type Definicion = typeof definicionesCosto.$inferSelect
 
-// The Costo lifecycle builds its own context from the Al día ledger, for many rows (Finanzas) or
-// one (the commands), so what a row offers and what its command accepts come from the same reads.
+// The Costo lifecycle builds its own context from the ledger its caller brought Al día, for many rows (Finanzas) or
+// one (the commands), so what a row offers and what its command accepts are judged on the same context.
 
 /** What the Costo lifecycle needs beyond its estado. */
 interface ContextoCosto {

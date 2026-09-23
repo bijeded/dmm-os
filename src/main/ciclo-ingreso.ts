@@ -6,8 +6,8 @@ import type { AccionIngreso, FilaIngreso } from '../shared/dominio'
 
 export type Ingreso = typeof ingresos.$inferSelect
 
-// The Ingreso lifecycle builds its own context from the Al día ledger, for many rows (Finanzas) or
-// one (the commands), so what a row offers and what its command accepts come from the same reads.
+// The Ingreso lifecycle builds its own context from the ledger its caller brought Al día, for many rows (Finanzas) or
+// one (the commands), so what a row offers and what its command accepts are judged on the same context.
 
 /** What the Ingreso lifecycle needs beyond its estado: the Reembolsos pointing at it. */
 interface ContextoIngreso {
