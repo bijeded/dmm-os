@@ -1,13 +1,22 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { leerRutas } from './rutas'
 
 let root: string
 
+/** Temp folders made by the current test, removed after it. */
+const temporales: string[] = []
+function temporal(prefijo: string) {
+  const dir = mkdtempSync(join(tmpdir(), prefijo))
+  temporales.push(dir)
+  return dir
+}
+afterEach(() => temporales.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })))
+
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'dmm-rutas-'))
+  root = temporal('dmm-rutas-')
 })
 
 describe('las rutas que la app lee', () => {
@@ -30,7 +39,7 @@ describe('las rutas que la app lee', () => {
   })
 
   it('reports the external HDD as connected only while its folder is reachable', () => {
-    const hdd = mkdtempSync(join(tmpdir(), 'dmm-hdd-'))
+    const hdd = temporal('dmm-hdd-')
     expect(leerRutas(root, hdd).hddConectado).toBe(true)
     expect(leerRutas(root, join(hdd, 'desconectado')).hddConectado).toBe(false)
   })

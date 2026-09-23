@@ -1,7 +1,7 @@
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { agentesYSkills, rutaAgenteOSkill } from './agentes-skills'
 import { proyectos, ubicacionesArchivo } from './db/schema'
 import { db, reiniciarDb } from './db/test-db'
@@ -21,9 +21,18 @@ const proyecto = (nombre: string, ruta: string, tipo: 'proyectos' | 'archivo' = 
 
 const frontmatter = (campos: string) => `---\n${campos}\n---\n\n# Cuerpo\n`
 
+/** Temp folders made by the current test, removed after it. */
+const temporales: string[] = []
+function temporal(prefijo: string) {
+  const dir = mkdtempSync(join(tmpdir(), prefijo))
+  temporales.push(dir)
+  return dir
+}
+afterEach(() => temporales.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })))
+
 beforeEach(() => {
   reiniciarDb()
-  root = mkdtempSync(join(tmpdir(), 'dmm-ai-'))
+  root = temporal('dmm-ai-')
   archivo('AI/agents/code-reviewer.md', frontmatter('name: code-reviewer\ndescription: Revisa cambios antes de publicarlos.'))
   archivo('AI/skills/newsletter-writer/SKILL.md', frontmatter('name: newsletter-writer\ndescription: "Escribe el boletín: tono DMM."'))
   archivo('AI/skills/newsletter-writer/references/tono.md', '# Tono')
@@ -63,7 +72,7 @@ describe('Agentes y Skills', () => {
   })
 
   it('reads AI/Agents and AI/Skills as Finder names them', () => {
-    root = mkdtempSync(join(tmpdir(), 'dmm-ai-'))
+    root = temporal('dmm-ai-')
     archivo('AI/Agents/code-reviewer.md', frontmatter('name: code-reviewer'))
     archivo('AI/Skills/design-md-planner/SKILL.md', frontmatter('name: design-md-planner'))
     expect(agentesYSkills(db, root).map((a) => a.archivo)).toEqual(['Agents/code-reviewer.md', 'Skills/design-md-planner/SKILL.md'])
@@ -99,7 +108,7 @@ describe('Agentes y Skills', () => {
   })
 
   it('says so when AI/ is missing', () => {
-    expect(() => agentesYSkills(db, mkdtempSync(join(tmpdir(), 'dmm-sin-ai-')))).toThrow(/No se encontró la carpeta AI/)
+    expect(() => agentesYSkills(db, temporal('dmm-sin-ai-'))).toThrow(/No se encontró la carpeta AI/)
   })
 })
 

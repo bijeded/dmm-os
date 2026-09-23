@@ -1,7 +1,7 @@
-import { chmodSync, mkdirSync, mkdtempSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { archivosLab, buscarLab, carpetasLab, rutaEnLab, VISTA_PREVIA_BYTES, vistaPreviaLab } from './lab'
 
 let root: string
@@ -13,8 +13,17 @@ const archivo = (ruta: string, contenido: string, modificado: string) => {
   utimesSync(join(lab, ruta), t, t)
 }
 
+/** Temp folders made by the current test, removed after it. */
+const temporales: string[] = []
+function temporal(prefijo: string) {
+  const dir = mkdtempSync(join(tmpdir(), prefijo))
+  temporales.push(dir)
+  return dir
+}
+afterEach(() => temporales.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })))
+
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'dmm-lab-'))
+  root = temporal('dmm-lab-')
   lab = join(root, 'Lab')
   mkdirSync(join(lab, 'Benchmarks'), { recursive: true })
   mkdirSync(join(lab, 'Design Systems'))
@@ -40,7 +49,7 @@ describe('las carpetas de Lab', () => {
   })
 
   it('says so when Lab/ is missing', () => {
-    expect(() => carpetasLab(mkdtempSync(join(tmpdir(), 'dmm-sin-lab-')))).toThrow(/No se encontró la carpeta Lab/)
+    expect(() => carpetasLab(temporal('dmm-sin-lab-'))).toThrow(/No se encontró la carpeta Lab/)
   })
 
   it.skipIf(process.getuid?.() === 0)('still lists the others when one folder cannot be read', () => {
