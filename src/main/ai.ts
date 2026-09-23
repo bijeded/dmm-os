@@ -7,7 +7,6 @@ import type { Ajustes, Db } from './db'
 import { ahorroTokens, contactos, costos, cotizaciones, definicionesCosto, ingresos, proyectos, ubicacionesArchivo, usoTokens } from './db/schema'
 import { convertir } from './dinero'
 import { rangos } from './finanzas'
-import { alDia } from './ledger'
 import { clave } from './nombres'
 import { carpetaEntre, referenciaProyecto } from './proyectos'
 import type { AsignacionCosto, FilaAsignacion, FilaSuscripcion, LecturaUso, PeriodoAi, Rango, ResumenAi, UsoModelo, UsoTokens } from '../shared/dominio'
@@ -564,10 +563,9 @@ function ingresosAi(db: Db, periodo: PeriodoAi, rango: Rango, tipoCambio: number
 
 /**
  * The AI section's figures for `periodo`: Este mes runs, as in Finanzas, from the 1st to `hoy`.
- * Money is read Al día, so this month's Suscripciones exist. Proyecto folders are checked under `root`.
+ * `db` is Al día, so this month's Suscripciones exist. Proyecto folders are checked under `root`.
  */
 export function resumenAi(db: Db, ajustes: Ajustes, root: string, periodo: PeriodoAi, hoy: string): ResumenAi {
-  alDia(db, hoy)
   const { desde, hasta } = rangos('mes', hoy).rango
   const enPeriodo = (dia: typeof usoTokens.dia | typeof ahorroTokens.dia) => (periodo === 'mes' ? and(gte(dia, desde), lte(dia, hasta)) : undefined)
   const uso = db

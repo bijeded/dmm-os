@@ -81,9 +81,9 @@ export function crearHandlers({
 }: HandlersOptions): DmmHandlers {
   // The local calendar day, which is what a quote is accepted on.
   const hoy = () => diaLocal(new Date(ahora()))
-  // Reads of Ingresos or Cotizaciones, and completing a Proyecto, work on an Al día db, as Finanzas
-  // does: an expired quote turns its Contacto from hot lead back to cold, and a Contacto's totals
-  // include this month's Periodos.
+  // Every entry of Contactos, Cotizaciones, Proyectos, Finanzas, Inicio and the AI resumen works on
+  // an Al día db: a quote past its validity is expirada before anything judges it, and this month's
+  // Periodos exist. Sections that never touch money use the connection directly.
   const alDiaDb = () => dbAlDia(conexion.db, hoy())
 
   // The external HDD is organised like the main root, and is usually disconnected. Its path is
@@ -146,8 +146,8 @@ export function crearHandlers({
     contactos: {
       listar: () => listarContactos(alDiaDb()),
       ficha: (id) => fichaContacto(alDiaDb(), info.dmmOsRoot, id),
-      guardar: (contacto) => guardarContacto(conexion.db, contacto),
-      borrar: (id) => borrarContacto(conexion.db, id),
+      guardar: (contacto) => guardarContacto(alDiaDb(), contacto),
+      borrar: (id) => borrarContacto(alDiaDb(), id),
       csv: () => contactosCsv(alDiaDb())
     },
     catalogo: {
@@ -158,14 +158,14 @@ export function crearHandlers({
     cotizaciones: {
       listar: () => listarCotizaciones(alDiaDb()),
       ficha: (id) => fichaCotizacion(alDiaDb(), id),
-      guardar: (cotizacion) => guardarCotizacion(conexion.db, cotizacion),
-      enviar: (id) => enviarCotizacion(conexion.db, info.dmmOsRoot, id, imprimirPdf),
-      aceptar: (id, tipoCambio) => aceptarCotizacion(conexion.db, info.dmmOsRoot, id, hoy(), tipoCambio),
-      rechazar: (id) => rechazarCotizacion(conexion.db, id),
-      cancelar: (id) => cancelarCotizacion(conexion.db, id),
-      borrar: (id) => borrarCotizacion(conexion.db, id),
+      guardar: (cotizacion) => guardarCotizacion(alDiaDb(), cotizacion),
+      enviar: (id) => enviarCotizacion(alDiaDb(), info.dmmOsRoot, id, imprimirPdf),
+      aceptar: (id, tipoCambio) => aceptarCotizacion(alDiaDb(), info.dmmOsRoot, id, hoy(), tipoCambio),
+      rechazar: (id) => rechazarCotizacion(alDiaDb(), id),
+      cancelar: (id) => cancelarCotizacion(alDiaDb(), id),
+      borrar: (id) => borrarCotizacion(alDiaDb(), id),
       abrirPdf: async (id) => {
-        const { pdf } = fichaCotizacion(conexion.db, id)
+        const { pdf } = fichaCotizacion(alDiaDb(), id)
         if (!pdf) throw new Error('La cotización no tiene PDF')
         const error = await abrirCarpeta(join(info.dmmOsRoot, pdf))
         if (error) throw new Error(error)
@@ -174,34 +174,34 @@ export function crearHandlers({
     proyectos: {
       listar: () => listarProyectos(alDiaDb(), info.dmmOsRoot),
       ficha: (id) => fichaProyecto(alDiaDb(), info.dmmOsRoot, id),
-      guardar: (proyecto) => guardarProyecto(conexion.db, info.dmmOsRoot, proyecto, hoy()),
-      pausar: (id) => pausarProyecto(conexion.db, info.dmmOsRoot, id),
-      reanudar: (id) => reanudarProyecto(conexion.db, info.dmmOsRoot, id),
+      guardar: (proyecto) => guardarProyecto(alDiaDb(), info.dmmOsRoot, proyecto, hoy()),
+      pausar: (id) => pausarProyecto(alDiaDb(), info.dmmOsRoot, id),
+      reanudar: (id) => reanudarProyecto(alDiaDb(), info.dmmOsRoot, id),
       completar: (id) => completarProyecto(alDiaDb(), info.dmmOsRoot, id, hoy()),
-      cancelar: (id) => cancelarProyecto(conexion.db, info.dmmOsRoot, id, hoy()),
-      borrar: (id) => borrarProyecto(conexion.db, id),
+      cancelar: (id) => cancelarProyecto(alDiaDb(), info.dmmOsRoot, id, hoy()),
+      borrar: (id) => borrarProyecto(alDiaDb(), id),
       abrirCarpeta: async (id) => {
-        const error = await abrirCarpeta(carpetaAbrible(conexion.db, info.dmmOsRoot, id))
+        const error = await abrirCarpeta(carpetaAbrible(alDiaDb(), info.dmmOsRoot, id))
         if (error) throw new Error(error)
       }
     },
     finanzas: {
-      coberturaCostos: (desde, hasta) => coberturaCostos(conexion.db, desde, hasta),
-      resumen: (periodo) => resumenFinanzas(conexion.db, periodo, hoy(), diasVencida()),
+      coberturaCostos: (desde, hasta) => coberturaCostos(alDiaDb(), desde, hasta),
+      resumen: (periodo) => resumenFinanzas(alDiaDb(), periodo, hoy(), diasVencida()),
       configurarVencida: (dias) => {
         if (!Number.isInteger(dias) || dias < 1) throw new Error('Los días deben ser un entero mayor a cero')
         conexion.ajustes.escribir('finanzas.diasVencida', String(dias))
       },
-      nuevoIngreso: (ingreso) => nuevoIngreso(conexion.db, ingreso, hoy()),
-      nuevoCosto: (costo) => nuevoCosto(conexion.db, costo, hoy()),
-      pagarIngreso: (id) => pagarIngreso(conexion.db, id, hoy()),
-      cancelarIngreso: (id) => cancelarIngreso(conexion.db, id),
-      borrarIngreso: (id) => borrarIngreso(conexion.db, id),
-      reembolsar: (id, monto) => reembolsar(conexion.db, id, monto, hoy()),
-      pagarCosto: (id) => pagarCosto(conexion.db, id, hoy()),
-      cancelarCosto: (id) => cancelarCosto(conexion.db, id, hoy()),
-      borrarCosto: (id) => borrarCosto(conexion.db, id, hoy()),
-      detenerCosto: (id) => detenerCosto(conexion.db, id, hoy())
+      nuevoIngreso: (ingreso) => nuevoIngreso(alDiaDb(), ingreso, hoy()),
+      nuevoCosto: (costo) => nuevoCosto(alDiaDb(), costo, hoy()),
+      pagarIngreso: (id) => pagarIngreso(alDiaDb(), id, hoy()),
+      cancelarIngreso: (id) => cancelarIngreso(alDiaDb(), id),
+      borrarIngreso: (id) => borrarIngreso(alDiaDb(), id),
+      reembolsar: (id, monto) => reembolsar(alDiaDb(), id, monto, hoy()),
+      pagarCosto: (id) => pagarCosto(alDiaDb(), id, hoy()),
+      cancelarCosto: (id) => cancelarCosto(alDiaDb(), id, hoy()),
+      borrarCosto: (id) => borrarCosto(alDiaDb(), id, hoy()),
+      detenerCosto: (id) => detenerCosto(alDiaDb(), id, hoy())
     },
     tareas: {
       listar: () => listarTareas(conexion.db, hoy()),
@@ -210,7 +210,7 @@ export function crearHandlers({
       borrar: (id) => borrarTarea(conexion.db, id, hoy())
     },
     inicio: {
-      resumen: () => resumenInicio(conexion.db, info.dmmOsRoot, hoy(), diasVencida())
+      resumen: () => resumenInicio(alDiaDb(), info.dmmOsRoot, hoy(), diasVencida())
     },
     lab: {
       carpetas: () => carpetasLab(info.dmmOsRoot),
@@ -223,7 +223,7 @@ export function crearHandlers({
       }
     },
     ai: {
-      resumen: (periodo) => resumenAi(conexion.db, conexion.ajustes, info.dmmOsRoot, periodo, hoy()),
+      resumen: (periodo) => resumenAi(alDiaDb(), conexion.ajustes, info.dmmOsRoot, periodo, hoy()),
       leerUso: () => leerUso(conexion.db, conexion.ajustes, info.dmmOsRoot, ejecutarUso, ahora()),
       agentesYSkills: () => agentesYSkills(conexion.db, info.dmmOsRoot),
       abrir: async (archivo) => {

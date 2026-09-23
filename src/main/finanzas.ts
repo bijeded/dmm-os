@@ -3,7 +3,6 @@ import type { Db } from './db'
 import { coberturaCostos } from './db/cobertura'
 import { fechaEnPeriodo, sumarAnios, sumarDias, sumarMeses } from '../shared/fechas'
 import { monedaDe } from './dinero'
-import { alDia } from './ledger'
 import { accionesCosto, origenCosto, type Costo, type Definicion } from './ciclo-costo'
 import { accionesIngreso, origenIngreso, reembolsableIngreso, restante, type Ingreso } from './ciclo-ingreso'
 import {
@@ -167,13 +166,12 @@ function siguientesPeriodos(db: Db, defs: Definicion[], periodoActual: string, h
 }
 
 /**
- * Finanzas for a period: brings the ledger up to hoy, then reads revenue, costs
- * and profit (subtotals, IVA apart) against the same span a period earlier, the chart, what is
- * still to be collected and paid, and what comes up next.
+ * Finanzas for a period, read from an Al día `db`: revenue, costs and profit (subtotals, IVA
+ * apart) against the same span a period earlier, the chart, what is still to be collected and
+ * paid, and what comes up next.
  */
 export function resumenFinanzas(db: Db, periodo: PeriodoFinanzas, hoy: string, diasVencida: number): ResumenFinanzas {
   const periodoActual = hoy.slice(0, 7)
-  alDia(db, hoy)
 
   const todosIngresos = db.select().from(ingresos).all()
   const todosCostos = db.select().from(costos).all()
