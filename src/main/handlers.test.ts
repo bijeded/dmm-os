@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDatabase, type Conexion } from './db'
-import { contactos, costos, cotizaciones, ingresos } from './db/schema'
+import { contactos, costos, cotizaciones, ingresos, proyectos } from './db/schema'
 import { MENSAJE_SIN_PAGAR } from './ciclo-proyecto'
 import { crearHandlers, type HandlersOptions } from './handlers'
 import { MENSAJE_MONTO } from '../shared/montos'
@@ -603,26 +603,109 @@ describe('Every ledger command works Al día', () => {
     expect((await h.finanzas.resumen('mes')).costos.map((c) => c.nombre)).toEqual(['Hosting'])
   })
 
-  // Every entry of the sections over the ledger, read off the handlers themselves, so a new one is covered too.
-  const secciones = ['contactos', 'cotizaciones', 'proyectos', 'finanzas', 'inicio'] as const
-  // A setting, not the ledger.
-  const fuera = ['finanzas.configurarVencida']
+  /** August, before the clock moves: a sent quote that lapses on September 9, an accepted monthly one and a monthly Costo. */
+  async function agosto() {
+    const enviada = await mensualEnviada('2026-08-10')
+    const aceptada = await mensualEnviada('2026-08-10')
+    const { contactoId, proyectoId } = await h.cotizaciones.aceptar(aceptada)
+    await h.finanzas.nuevoCosto({ nombre: 'Hosting', proveedor: null, referencia: null, categoria: 'mensual', proyectoId: null, fecha: '2026-08-01', subtotal: 1000, conIva: false, parcialidades: null, suscripcionIa: false, pagado: false })
+    return { enviada, contactoId, proyectoId: proyectoId! }
+  }
+  type Agosto = Awaited<ReturnType<typeof agosto>>
 
-  it('every entry over the ledger first expires quotes and generates this month’s Periodos', async () => {
-    const entradas = [...secciones.flatMap((s) => Object.keys(h[s]).map((n) => `${s}.${n}`)), 'ai.resumen'].filter((e) => !fuera.includes(e))
-    const periodos = () => conexion.db.select().from(ingresos).all().filter((i) => i.periodo === '2026-09').length
-    for (const entrada of entradas) {
-      const enviada = await mensualEnviada('2026-08-10')
-      await h.cotizaciones.aceptar(await mensualEnviada('2026-08-10'))
-      const antes = periodos()
-      h = crearHandlers(opciones)
+  /** A read, called on what August left; a command, called on nothing; or an entry that never touches the ledger. */
+  type Uso = ((a: Agosto) => unknown) | 'orden' | 'fuera'
+
+  // Every entry of every section over the ledger. Typed against the handlers, so a new entry does not compile until it is listed here.
+  const entradas: { [S in 'importacion' | 'contactos' | 'cotizaciones' | 'proyectos' | 'finanzas' | 'inicio' | 'ai']: Record<keyof DmmHandlers[S], Uso> } = {
+    // Imported history is exempt (ADR-0002): the importer writes through the connection, and the next call brings it Al día.
+    importacion: { facturas: 'fuera', carpetas: 'fuera', estado: 'fuera', sugerencias: 'fuera', responder: 'fuera' },
+    contactos: { listar: () => h.contactos.listar(), ficha: (a) => h.contactos.ficha(a.contactoId), guardar: 'orden', borrar: 'orden', csv: () => h.contactos.csv() },
+    cotizaciones: {
+      listar: () => h.cotizaciones.listar(),
+      ficha: (a) => h.cotizaciones.ficha(a.enviada),
+      guardar: 'orden',
+      enviar: 'orden',
+      aceptar: 'orden',
+      rechazar: 'orden',
+      cancelar: 'orden',
+      borrar: 'orden',
+      abrirPdf: 'orden'
+    },
+    proyectos: {
+      listar: () => h.proyectos.listar(),
+      ficha: (a) => h.proyectos.ficha(a.proyectoId),
+      guardar: 'orden',
+      pausar: 'orden',
+      reanudar: 'orden',
+      completar: 'orden',
+      cancelar: 'orden',
+      borrar: 'orden',
+      abrirCarpeta: 'orden'
+    },
+    finanzas: {
+      coberturaCostos: () => h.finanzas.coberturaCostos(2025, 2026),
+      resumen: () => h.finanzas.resumen('mes'),
+      // A setting, not the ledger.
+      configurarVencida: 'fuera',
+      nuevoIngreso: 'orden',
+      nuevoCosto: 'orden',
+      pagarIngreso: 'orden',
+      cancelarIngreso: 'orden',
+      borrarIngreso: 'orden',
+      reembolsar: 'orden',
+      pagarCosto: 'orden',
+      cancelarCosto: 'orden',
+      borrarCosto: 'orden',
+      detenerCosto: 'orden'
+    },
+    inicio: { resumen: () => h.inicio.resumen() },
+    // Usage and files on disk, not money.
+    ai: { resumen: () => h.ai.resumen('mes'), leerUso: 'fuera', agentesYSkills: 'fuera', abrir: 'fuera' }
+  }
+  const casos = Object.entries(entradas).flatMap(([s, e]) =>
+    Object.entries(e as Record<string, Uso>).flatMap(([n, uso]) => (uso === 'fuera' ? [] : [[`${s}.${n}`, uso] as const]))
+  )
+
+  /** Where the ledger stands: the quote that lapses, and the Periodos of both monthly series. */
+  const estadoDelLedger = (a: Agosto) => ({
+    enviada: conexion.db.select().from(cotizaciones).all().find((c) => c.id === a.enviada)!.estado,
+    ingresos: conexion.db.select().from(ingresos).all().map((i) => i.periodo),
+    costos: conexion.db.select().from(costos).all().map((c) => c.periodo)
+  })
+  const filas = () => [cotizaciones, proyectos, ingresos, costos].map((t) => conexion.db.select().from(t).all())
+  // On 2026-09-16: the quote lapsed on the 9th, and September's Periodos exist.
+  const alDiaEnSeptiembre = { enviada: 'expirada', ingresos: ['2026-08', '2026-09'], costos: ['2026-08', '2026-09'] }
+
+  it.each(casos)('%s is the first call of the day and sees the ledger Al día', async (entrada, uso) => {
+    const a = await agosto()
+    expect(estadoDelLedger(a)).toEqual({ enviada: 'enviada', ingresos: ['2026-08'], costos: ['2026-08'] })
+    h = crearHandlers(opciones)
+
+    if (uso === 'orden') {
       const [s, n] = entrada.split('.') as [keyof DmmHandlers, string]
-      // Called on nothing, so it changes nothing; what counts is what it brought Al día first.
+      // Called on nothing, so it changes nothing; what counts is the ledger it was judged against.
       await Promise.resolve()
-        .then(() => (h[s] as unknown as Record<string, (arg: unknown) => unknown>)[n](0))
+        .then(() => (h[s] as unknown as Record<string, (id: number) => unknown>)[n](0))
         .catch(() => undefined)
-      const estado = conexion.db.select().from(cotizaciones).all().find((c) => c.id === enviada)!.estado
-      expect([entrada, estado, periodos()]).toEqual([entrada, 'expirada', antes + 1])
+      expect(estadoDelLedger(a)).toEqual(alDiaEnSeptiembre)
+      return
     }
+    // The first read already sees it Al día: reading again shows the same and changes nothing.
+    const primera = await uso(a)
+    expect(estadoDelLedger(a)).toEqual(alDiaEnSeptiembre)
+    const antes = filas()
+    expect(await uso(a)).toEqual(primera)
+    expect(filas()).toEqual(antes)
+  })
+
+  it.each(['completar', 'cancelar'] as const)('a Proyecto closed with %s gets no Periodo when the month turns', async (accion) => {
+    const id = await mensualEnviada('2026-08-10')
+    const { proyectoId } = await h.cotizaciones.aceptar(id)
+    conexion.db.update(ingresos).set({ estado: 'pagado' }).run()
+    await h.proyectos[accion](proyectoId!)
+    h = crearHandlers(opciones)
+    await h.proyectos.ficha(proyectoId!)
+    expect(conexion.db.select().from(ingresos).all().map((i) => i.periodo)).toEqual(['2026-08'])
   })
 })
