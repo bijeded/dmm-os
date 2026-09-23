@@ -1,10 +1,10 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDatabase, type Conexion } from './db'
-import { eq } from 'drizzle-orm'
-import { contactos, costos, cotizaciones, definicionesCosto, ingresos, proyectos, vigenciasPrecio } from './db/schema'
+import { contactos, costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, vigenciasPrecio } from './db/schema'
 import { MENSAJE_SIN_PAGAR } from './ciclo-proyecto'
 import { crearHandlers, type HandlersOptions } from './handlers'
 import { MENSAJE_MONTO } from '../shared/montos'
@@ -473,10 +473,15 @@ describe('finanzas', () => {
   })
 })
 
+/** Moves the clock to `fecha`. */
+function reloj(fecha: string) {
+  h = crearHandlers({ ...opciones, ahora: () => `${fecha}T10:00:00.000Z` })
+}
+
 /** A monthly Cotización for Café Luna, sent on `fecha` and valid 30 days. */
 async function mensualEnviada(fecha: string) {
   const { id: contactoId } = conexion.db.insert(contactos).values({ nombre: 'Café Luna' }).returning().get()
-  h = crearHandlers({ ...opciones, ahora: () => `${fecha}T10:00:00.000Z` })
+  reloj(fecha)
   const { id } = await h.cotizaciones.guardar({
     contactoId,
     nombre: 'Mantenimiento',
@@ -824,11 +829,6 @@ describe('Montos registrados, como Finanzas los muestra hoy', () => {
   })
 })
 
-/** Moves the clock to `fecha`. */
-const reloj = (fecha: string) => {
-  h = crearHandlers({ ...opciones, ahora: () => `${fecha}T10:00:00.000Z` })
-}
-
 describe('Periodos generados', () => {
   const periodos = async () => (await h.finanzas.resumen('todo')).ingresos.filter((i) => i.origen === 'periodo')
   const costo = async (nombre: string, categoria: 'mensual' | 'msi', fecha: string, proyectoId: number | null = null) =>
@@ -867,6 +867,20 @@ describe('Periodos generados', () => {
     reloj('2026-11-16')
     await h.finanzas.resumen('todo')
     expect(conexion.db.select().from(ingresos).all().map((i) => i.periodo)).toEqual(['2026-07'])
+  })
+
+  it('an installment Ingreso series stops once its Cotización is cancelled', async () => {
+    const id = await mensualEnviada('2026-07-16')
+    await h.cotizaciones.aceptar(id)
+    const { id: definicionId } = conexion.db
+      .insert(definicionesIngreso)
+      .values({ cotizacionId: id, tipo: 'parcialidades', numeroParcialidades: 6, categoria: 'sin_factura', subtotal: 1, total: 1, periodoInicio: '2026-07' })
+      .returning()
+      .get()
+    await h.cotizaciones.cancelar(id)
+    reloj('2026-11-16')
+    await h.finanzas.resumen('todo')
+    expect(conexion.db.select().from(ingresos).all().filter((i) => i.definicionId === definicionId).map((i) => i.periodo)).toEqual(['2026-07'])
   })
 
   it('monthly Costos stop when their Proyecto closes; MSI Costos run to their end', async () => {
