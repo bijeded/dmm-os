@@ -2,8 +2,8 @@ import { eq } from 'drizzle-orm'
 import type { Db } from './db'
 import { costos, definicionesCosto, ingresos, proyectos, vigenciasPrecio } from './db/schema'
 import { monedaDe, montos, reembolso, tasaDe } from './dinero'
-import { exigirCosto, type ContextoCosto } from './ciclo-costo'
-import { exigirIngreso, restante, type ContextoIngreso } from './ciclo-ingreso'
+import { exigirCosto } from './ciclo-costo'
+import { exigirIngreso } from './ciclo-ingreso'
 import { transaccionConPeriodos } from './ledger'
 import { exigirCentavos } from '../shared/montos'
 import type { CostoNuevo, IngresoNuevo } from '../shared/dominio'
@@ -13,32 +13,6 @@ import type { CostoNuevo, IngresoNuevo } from '../shared/dominio'
 
 function exigirFecha(fecha: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) throw new Error('La fecha no es válida')
-}
-
-function leerIngreso(db: Db, id: number) {
-  const i = db.select().from(ingresos).where(eq(ingresos.id, id)).get()
-  if (!i) throw new Error(`El ingreso ${id} no existe`)
-  return i
-}
-
-const reembolsosDe = (db: Db, id: number) => db.select().from(ingresos).where(eq(ingresos.reembolsoDeId, id)).all()
-
-/** Ingreso `id` and what its lifecycle needs to judge it. */
-function ingresoConContexto(db: Db, id: number): { i: ReturnType<typeof leerIngreso>; ctx: ContextoIngreso } {
-  return { i: leerIngreso(db, id), ctx: { reembolsos: reembolsosDe(db, id) } }
-}
-
-function leerCosto(db: Db, id: number) {
-  const c = db.select().from(costos).where(eq(costos.id, id)).get()
-  if (!c) throw new Error(`El costo ${id} no existe`)
-  return c
-}
-
-/** Costo `id` and what its lifecycle needs to judge it in `hoy`'s month. */
-function costoConContexto(db: Db, id: number, hoy: string): { c: ReturnType<typeof leerCosto>; ctx: ContextoCosto } {
-  const c = leerCosto(db, id)
-  const definicion = c.definicionId === null ? undefined : db.select().from(definicionesCosto).where(eq(definicionesCosto.id, c.definicionId)).get()
-  return { c, ctx: { definicion, periodoActual: hoy.slice(0, 7) } }
 }
 
 /** A hand-entered Ingreso; given a Proyecto, its Contacto is the Proyecto's. */
@@ -120,21 +94,18 @@ export function nuevoCosto(db: Db, n: CostoNuevo, hoy: string) {
 }
 
 export function pagarIngreso(db: Db, id: number, hoy: string) {
-  const { i, ctx } = ingresoConContexto(db, id)
-  exigirIngreso('pagar', i, ctx)
+  exigirIngreso(db, 'pagar', id)
   db.update(ingresos).set({ estado: 'pagado', fechaPago: hoy }).where(eq(ingresos.id, id)).run()
 }
 
 export function cancelarIngreso(db: Db, id: number) {
-  const { i, ctx } = ingresoConContexto(db, id)
-  exigirIngreso('cancelar', i, ctx)
+  exigirIngreso(db, 'cancelar', id)
   db.update(ingresos).set({ estado: 'cancelado' }).where(eq(ingresos.id, id)).run()
 }
 
 /** Borrar vs cancelar: an imported, generated or quoted Ingreso, or one with a Reembolso, is cancelled instead. */
 export function borrarIngreso(db: Db, id: number) {
-  const { i, ctx } = ingresoConContexto(db, id)
-  exigirIngreso('borrar', i, ctx)
+  exigirIngreso(db, 'borrar', id)
   db.delete(ingresos).where(eq(ingresos.id, id)).run()
 }
 
@@ -144,14 +115,13 @@ export function borrarIngreso(db: Db, id: number) {
  */
 export function reembolsar(db: Db, id: number, monto: number, hoy: string) {
   exigirCentavos(monto)
-  const { i, ctx } = ingresoConContexto(db, id)
-  exigirIngreso('reembolsar', i, ctx)
+  const { ingreso: i, queda } = exigirIngreso(db, 'reembolsar', id)
   const tasaUsd = tasaDe(i)
   if (monedaDe(i) === 'USD' && tasaUsd === null) throw new Error('El ingreso en USD no tiene su monto en USD')
   db
     .insert(ingresos)
     .values({
-      ...reembolso(monto, { de: i, queda: restante(i, ctx.reembolsos), tasaUsd }),
+      ...reembolso(monto, { de: i, queda, tasaUsd }),
       categoria: i.categoria,
       estado: 'pagado',
       estadoFacturacion: i.estadoFacturacion,
@@ -166,27 +136,23 @@ export function reembolsar(db: Db, id: number, monto: number, hoy: string) {
 }
 
 export function pagarCosto(db: Db, id: number, hoy: string) {
-  const { c, ctx } = costoConContexto(db, id, hoy)
-  exigirCosto('pagar', c, ctx)
+  exigirCosto(db, 'pagar', id, hoy)
   db.update(costos).set({ estado: 'pagado', fechaPago: hoy }).where(eq(costos.id, id)).run()
 }
 
 export function cancelarCosto(db: Db, id: number, hoy: string) {
-  const { c, ctx } = costoConContexto(db, id, hoy)
-  exigirCosto('cancelar', c, ctx)
+  exigirCosto(db, 'cancelar', id, hoy)
   db.update(costos).set({ estado: 'cancelado' }).where(eq(costos.id, id)).run()
 }
 
 /** Borrar vs cancelar: only a hand-entered one-time Costo nothing is attributed from. */
 export function borrarCosto(db: Db, id: number, hoy: string) {
-  const { c, ctx } = costoConContexto(db, id, hoy)
-  exigirCosto('borrar', c, ctx)
+  exigirCosto(db, 'borrar', id, hoy)
   db.delete(costos).where(eq(costos.id, id)).run()
 }
 
 /** Ends the monthly or annual series the Costo belongs to after this month; MSI is committed. */
 export function detenerCosto(db: Db, id: number, hoy: string) {
-  const { c, ctx } = costoConContexto(db, id, hoy)
-  exigirCosto('detener', c, ctx)
-  db.update(definicionesCosto).set({ periodoFin: ctx.periodoActual }).where(eq(definicionesCosto.id, c.definicionId!)).run()
+  const c = exigirCosto(db, 'detener', id, hoy)
+  db.update(definicionesCosto).set({ periodoFin: hoy.slice(0, 7) }).where(eq(definicionesCosto.id, c.definicionId!)).run()
 }

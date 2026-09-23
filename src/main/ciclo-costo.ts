@@ -1,11 +1,16 @@
-import type { costos, definicionesCosto } from './db/schema'
+import { eq } from 'drizzle-orm'
+import type { Db } from './db'
+import { costos, definicionesCosto } from './db/schema'
 import type { AccionCosto, FilaCosto } from '../shared/dominio'
 
 export type Costo = typeof costos.$inferSelect
-export type Definicion = typeof definicionesCosto.$inferSelect
+type Definicion = typeof definicionesCosto.$inferSelect
+
+// The Costo lifecycle builds its own context from the Al día ledger, for many rows (Finanzas) or
+// one (the commands), so what a row offers and what its command accepts come from the same reads.
 
 /** What the Costo lifecycle needs beyond its estado. */
-export interface ContextoCosto {
+interface ContextoCosto {
   /** The series it belongs to, if any. */
   definicion: Definicion | undefined
   /** `YYYY-MM` of today. */
@@ -38,11 +43,27 @@ function rechazo(accion: AccionCosto, c: Costo, ctx: ContextoCosto): string | nu
 
 const ACCIONES: AccionCosto[] = ['pagar', 'cancelar', 'borrar', 'detener']
 
-/** The actions the Finanzas row offers: exactly those `exigirCosto` accepts. */
-export const accionesCosto = (c: Costo, ctx: ContextoCosto): AccionCosto[] =>
-  ACCIONES.filter((a) => rechazo(a, c, ctx) === null)
+/**
+ * The actions each of `filas` offers on its Finanzas row in `hoy`'s month: exactly those
+ * `exigirCosto` accepts. Reads every series definition once for all.
+ */
+export function accionesCostos(db: Db, filas: Costo[], hoy: string): Map<number, AccionCosto[]> {
+  const definicion = new Map(db.select().from(definicionesCosto).all().map((d) => [d.id, d]))
+  const periodoActual = hoy.slice(0, 7)
+  return new Map(
+    filas.map((c) => {
+      const ctx = { definicion: c.definicionId === null ? undefined : definicion.get(c.definicionId), periodoActual }
+      return [c.id, ACCIONES.filter((a) => rechazo(a, c, ctx) === null)]
+    })
+  )
+}
 
-export function exigirCosto(accion: AccionCosto, c: Costo, ctx: ContextoCosto): void {
-  const mensaje = rechazo(accion, c, ctx)
+/** Costo `id`, once its lifecycle allows `accion` on it in `hoy`'s month; throws the refusal otherwise. */
+export function exigirCosto(db: Db, accion: AccionCosto, id: number, hoy: string): Costo {
+  const costo = db.select().from(costos).where(eq(costos.id, id)).get()
+  if (!costo) throw new Error(`El costo ${id} no existe`)
+  const definicion = costo.definicionId === null ? undefined : db.select().from(definicionesCosto).where(eq(definicionesCosto.id, costo.definicionId)).get()
+  const mensaje = rechazo(accion, costo, { definicion, periodoActual: hoy.slice(0, 7) })
   if (mensaje) throw new Error(mensaje)
+  return costo
 }
