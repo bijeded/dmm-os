@@ -1,19 +1,26 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router'
 import {
+  ESTADOS_PROYECTO,
+  NOMBRES_ESTADO_PROYECTO,
   NOMBRES_ORIGEN_SUSCRIPCION,
   NOMBRES_TIPO_AGENTE_SKILL,
   NOMBRES_PERIODO_FINANZAS,
   PERIODOS_AI,
   type AgenteOSkill,
+  type EstadoProyecto,
+  type EtiquetaProyecto,
+  type FilaProyectoAi,
   type FilaSuscripcion,
   type PeriodoAi,
   type ResumenAi,
   type UsoModelo
 } from '../../../shared/dominio'
-import { dia, monto, pesos } from '../../../shared/formato'
+import { dia, monto, normalizar, pesos } from '../../../shared/formato'
+import { NOMBRES_CARPETA } from './Proyectos'
 import { Aviso, Cifra, fecha, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
-import { celdaCls, etiquetaCls, tituloCls } from './estilos'
+import { campoCls, celdaCls, etiquetaCls, tituloCls } from './estilos'
 
 /** A token count as the cards show it: `15.7 M`, `840.0 K`, `312`. */
 const tokens = (n: number) => {
@@ -96,6 +103,8 @@ export function Ai() {
             detalle={[resumen.costoApiMxn === null ? 'sin tipo de cambio registrado' : `≈ ${monto(resumen.costoApiUsd, 'USD')}`]}
           />
           <Cifra label="Suscripciones" valor={pesos(resumen.suscripcionesTotal)} detalle={[...new Set(resumen.suscripciones.map((s) => s.plan))]} />
+          <Cifra label="Ingreso proyectos AI" valor={pesos(resumen.ingresoProyectos)} detalle={['cotizado']} />
+          <Cifra label="Ingreso AI" valor={pesos(resumen.ingresoAi)} detalle={['cobrado']} />
         </ul>
       )}
 
@@ -114,6 +123,12 @@ export function Ai() {
           <p className="m-0 text-[12px] text-on-surface-muted">Vista filtrada de Costos · proveedor AI</p>
           <TablaSuscripciones filas={resumen.suscripciones} />
           <p className="m-0 text-[12px] text-on-surface-muted">Mismo registro que Finanzas → Costos.</p>
+        </Seccion>
+      )}
+
+      {resumen && (
+        <Seccion id="ai-proyectos" titulo="AI Proyectos">
+          <ProyectosAi filas={resumen.proyectos} sinProyecto={resumen.sinProyecto} />
         </Seccion>
       )}
 
@@ -235,6 +250,175 @@ function AgentesYSkills() {
         </ul>
       )}
     </Seccion>
+  )
+}
+
+const USOS_TOKENS = { con_uso: 'Con uso', sin_uso: 'Sin uso' } as const
+
+/**
+ * The AI Proyectos in the order main gives (by name), with the period's usage in their folders,
+ * filterable. Usage in no Proyecto's folder closes the list as Sin proyecto while nothing is
+ * filtered. A row opens its Proyecto; Abrir reveals its folder.
+ */
+function ProyectosAi({ filas, sinProyecto }: Pick<ResumenAi, 'sinProyecto'> & { filas: FilaProyectoAi[] }) {
+  const navigate = useNavigate()
+  const [busqueda, setBusqueda] = useState('')
+  const [cliente, setCliente] = useState('')
+  const [anio, setAnio] = useState('')
+  const [etiqueta, setEtiqueta] = useState<EtiquetaProyecto | ''>('')
+  const [uso, setUso] = useState<keyof typeof USOS_TOKENS | ''>('')
+  const [estado, setEstado] = useState<EstadoProyecto | ''>('')
+  const { error, correr } = useAccion()
+
+  const clientes = useMemo(
+    () => [...new Map(filas.filter((p) => p.contactoId !== null).map((p) => [p.contactoId!, p.contacto!])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'es')),
+    [filas]
+  )
+  const anios = useMemo(() => [...new Set(filas.flatMap((p) => (p.fechaInicio ? [p.fechaInicio.slice(0, 4)] : [])))].sort().reverse(), [filas])
+  const q = normalizar(busqueda.trim())
+  const filtrando = Boolean(q || cliente || anio || etiqueta || uso || estado)
+  const filtrados = filas.filter(
+    (p) =>
+      (!cliente || (cliente === 'personal' ? p.etiqueta === 'personal' : String(p.contactoId) === cliente)) &&
+      (!anio || p.fechaInicio?.startsWith(anio)) &&
+      (!etiqueta || p.etiqueta === etiqueta) &&
+      (!uso || (uso === 'con_uso') === p.tokens > 0) &&
+      (!estado || p.estado === estado) &&
+      (!q || [p.referencia, p.nombre, p.contacto, p.clienteFinal].some((v) => v && normalizar(v).includes(q)))
+  )
+
+  if (filas.length === 0) return <p className="m-0 text-[13px] text-on-surface-muted">Ningún proyecto en la categoría AI.</p>
+  return (
+    <>
+      <div className="acts flex flex-wrap items-center gap-2">
+        <input
+          type="search"
+          placeholder="Buscar ref., proyecto AI…"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          className="srch h-9 w-56 rounded-control border border-border-strong bg-surface-sunken px-3 text-[13px] text-on-surface"
+        />
+        <select aria-label="Cliente" value={cliente} onChange={(e) => setCliente(e.target.value)} className={campoCls}>
+          <option value="">Cliente: Todos</option>
+          <option value="personal">Personal</option>
+          {clientes.map(([id, nombre]) => (
+            <option key={id} value={id}>
+              {nombre}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Año" value={anio} onChange={(e) => setAnio(e.target.value)} className={campoCls}>
+          <option value="">Año: Todos</option>
+          {anios.map((a) => (
+            <option key={a}>{a}</option>
+          ))}
+        </select>
+        {/* Every row is categoría AI; what tells them apart is client or personal work. */}
+        <select aria-label="Categoría" value={etiqueta} onChange={(e) => setEtiqueta(e.target.value as EtiquetaProyecto | '')} className={campoCls}>
+          <option value="">Categoría: Todas</option>
+          <option value="cliente">Cliente</option>
+          <option value="personal">Personal</option>
+        </select>
+        <select aria-label="Uso tokens" value={uso} onChange={(e) => setUso(e.target.value as keyof typeof USOS_TOKENS | '')} className={campoCls}>
+          <option value="">Uso tokens: Todos</option>
+          {Object.entries(USOS_TOKENS).map(([k, nombre]) => (
+            <option key={k} value={k}>
+              {nombre}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Estado" value={estado} onChange={(e) => setEstado(e.target.value as EstadoProyecto | '')} className={campoCls}>
+          <option value="">Estado: Todos</option>
+          {ESTADOS_PROYECTO.map((e) => (
+            <option key={e} value={e}>
+              {NOMBRES_ESTADO_PROYECTO[e]}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <table aria-labelledby="ai-proyectos" className="tbl w-full border-collapse text-[13px]">
+        <thead>
+          <tr className={etiquetaCls}>
+            <th className={celdaCls}>Proyecto</th>
+            <th className={celdaCls}>Ref.</th>
+            <th className={celdaCls}>Cliente</th>
+            <th className={celdaCls}>Modelos</th>
+            <th className={`${celdaCls} text-right`}>Tokens</th>
+            <th className={`${celdaCls} text-right`}>API aprox.</th>
+            <th className={celdaCls}>Estado</th>
+            <th className={celdaCls}>Carpeta</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filtrados.map((p) => (
+            <tr key={p.id} className="cursor-pointer" onClick={() => navigate(`/proyectos/${p.id}`)}>
+              <td data-label="Proyecto" className={celdaCls}>
+                {p.nombre}
+              </td>
+              <td data-label="Ref." className={`${celdaCls} font-mono text-[12px]`}>
+                {p.referencia ?? '—'}
+              </td>
+              <td data-label="Cliente" className={celdaCls}>
+                {p.etiqueta === 'personal' ? <span className="text-on-surface-muted">Personal</span> : p.contacto}
+                {p.clienteFinal && <span className="text-on-surface-muted"> · {p.clienteFinal}</span>}
+              </td>
+              <td data-label="Modelos" className={`${celdaCls} font-mono text-[12px]`}>
+                {p.modelos.length > 0 ? p.modelos.join(', ') : '—'}
+              </td>
+              <td data-label="Tokens" className={`${celdaCls} text-right font-mono text-[12px]`}>
+                {tokens(p.tokens)}
+              </td>
+              <td data-label="API aprox." className={`${celdaCls} text-right font-mono text-[12px]`}>
+                {monto(p.costoUsd, 'USD')}
+              </td>
+              <td data-label="Estado" className={celdaCls}>
+                {NOMBRES_ESTADO_PROYECTO[p.estado]}
+              </td>
+              <td data-label="Carpeta" className={celdaCls}>
+                {p.carpeta.abrible ? (
+                  <button
+                    type="button"
+                    title={p.carpeta.ruta ?? undefined}
+                    className="cursor-pointer font-mono text-[11px] text-primary-text"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      correr(() => window.dmm.proyectos.abrirCarpeta(p.id))
+                    }}
+                  >
+                    Abrir
+                  </button>
+                ) : (
+                  <span title={p.carpeta.ruta ?? undefined} className="font-mono text-[11px] text-on-surface-muted">
+                    {p.carpeta.estado === 'sin_carpeta' ? '—' : NOMBRES_CARPETA[p.carpeta.estado]}
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+          {!filtrando && (sinProyecto.tokens > 0 || sinProyecto.costoUsd > 0) && (
+            <tr className="text-on-surface-muted">
+              <td data-label="Proyecto" className={celdaCls}>
+                Sin proyecto
+              </td>
+              <td className={celdaCls} />
+              <td className={celdaCls} />
+              <td className={celdaCls} />
+              <td data-label="Tokens" className={`${celdaCls} text-right font-mono text-[12px]`}>
+                {tokens(sinProyecto.tokens)}
+              </td>
+              <td data-label="API aprox." className={`${celdaCls} text-right font-mono text-[12px]`}>
+                {monto(sinProyecto.costoUsd, 'USD')}
+              </td>
+              <td className={celdaCls} />
+              <td className={celdaCls} />
+            </tr>
+          )}
+        </tbody>
+      </table>
+      {filtrados.length === 0 && <p className="m-0 text-[13px] text-on-surface-muted">Ningún proyecto AI coincide.</p>}
+      <Aviso error={error} />
+    </>
   )
 }
 

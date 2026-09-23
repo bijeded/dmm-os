@@ -222,7 +222,7 @@ export function crearHandlers({
       }
     },
     ai: {
-      resumen: (periodo) => resumenAi(conexion.db, conexion.ajustes, periodo, hoy()),
+      resumen: (periodo) => resumenAi(conexion.db, conexion.ajustes, info.dmmOsRoot, periodo, hoy()),
       leerUso: () => leerUso(conexion.db, conexion.ajustes, info.dmmOsRoot, ejecutarUso, ahora()),
       agentesYSkills: () => agentesYSkills(conexion.db, info.dmmOsRoot),
       abrir: async (archivo) => {

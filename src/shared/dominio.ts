@@ -533,6 +533,40 @@ export interface ResumenAi extends LecturaUso {
   suscripciones: FilaSuscripcion[]
   /** Their subtotals added up. */
   suscripcionesTotal: number
+  /** Subtotal, in pesos, of the accepted Cotizaciones of AI Proyectos started in the period. */
+  ingresoProyectos: number
+  /** Subtotal of the paid Ingresos of AI Proyectos in the period, net of Reembolsos. */
+  ingresoAi: number
+  /** The AI Proyectos by name, each with the period's usage in its folder. */
+  proyectos: FilaProyectoAi[]
+  /** The period's usage in folders that are no Proyecto's. */
+  sinProyecto: { tokens: number; costoUsd: number }
+}
+
+/**
+ * A Proyecto in the AI categoría, with the usage at or under its folder in the period. Usage is
+ * linked by folder when read, so moving or renaming the folder re-links it.
+ */
+export interface FilaProyectoAi {
+  id: number
+  /** `null` for a personal one. */
+  referencia: string | null
+  nombre: string
+  etiqueta: EtiquetaProyecto
+  contactoId: number | null
+  /** `null` for a personal one, which reads Personal. */
+  contacto: string | null
+  clienteFinal: string | null
+  categoria: Categoria
+  fechaInicio: string | null
+  estado: EstadoProyecto
+  carpeta: CarpetaProyecto
+  /** The model families it used, in the chart's order. */
+  modelos: string[]
+  /** Input, output and cache tokens. */
+  tokens: number
+  /** USD cents it would cost through the API. */
+  costoUsd: number
 }
 
 /** A model family's usage in a period: every version of it, from every folder. */

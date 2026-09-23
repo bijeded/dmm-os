@@ -4,11 +4,12 @@ import { delimiter, join } from 'node:path'
 import { promisify } from 'node:util'
 import { and, desc, eq, gte, isNotNull, lte, ne, sql, type SQL } from 'drizzle-orm'
 import type { Ajustes, Db } from './db'
-import { ahorroTokens, costos, cotizaciones, definicionesCosto, ingresos, usoTokens } from './db/schema'
+import { ahorroTokens, contactos, costos, cotizaciones, definicionesCosto, ingresos, proyectos, ubicacionesArchivo, usoTokens } from './db/schema'
 import { convertir } from './dinero'
 import { rangos } from './finanzas'
 import { alDia } from './ledger'
 import { clave } from './nombres'
+import { carpetaEntre, referenciaProyecto } from './proyectos'
 import type { FilaSuscripcion, LecturaUso, PeriodoAi, Rango, ResumenAi, UsoModelo } from '../shared/dominio'
 
 /**
@@ -267,6 +268,10 @@ const ordenFamilia = (familia: string) => {
   return k === -1 ? FAMILIAS_CLAUDE.length : k
 }
 
+/** The chart's order: by provider, then Claude's families smallest first, then by name. */
+const compararModelos = (a: { proveedor: string; familia: string }, b: { proveedor: string; familia: string }) =>
+  a.proveedor.localeCompare(b.proveedor) || ordenFamilia(a.familia) - ordenFamilia(b.familia) || a.familia.localeCompare(b.familia)
+
 /**
  * Tokens and API cost per model family in the period. Every family ever seen is listed, with
  * zero when unused, so the chart keeps the same bars across periods. By provider, then Claude's
@@ -293,16 +298,129 @@ function usoPorModelo(db: Db, enPeriodo: SQL | undefined): UsoModelo[] {
     m.costoUsd += f.costoUsd
     modelos.set(k, m)
   }
-  return [...modelos.values()].sort(
-    (a, b) => a.proveedor.localeCompare(b.proveedor) || ordenFamilia(a.familia) - ordenFamilia(b.familia) || a.familia.localeCompare(b.familia)
-  )
+  return [...modelos.values()].sort(compararModelos)
+}
+
+type Ubicacion = typeof ubicacionesArchivo.$inferSelect
+
+/**
+ * Which Proyecto a usage folder belongs to: the one whose folder under the DMM OS root (its
+ * working folder in `Proyectos/` or its `Archivo/` one) it is at or under, compared in Claude
+ * Code's naming as usage is stored. The deepest folder wins, so a Proyecto kept inside another's
+ * folder keeps its own usage. `null` is Sin proyecto.
+ */
+function enlazarUso(ubicaciones: Ubicacion[]): (carpeta: string) => number | null {
+  const suyas = ubicaciones
+    .filter((u) => u.tipo === 'proyectos' || u.tipo === 'archivo')
+    .map((u) => ({ proyectoId: u.proyectoId, carpeta: nombreClaude(u.rutaRelativa.replace(/\/+$/, '')) }))
+    .filter((u) => u.carpeta !== '')
+    .sort((a, b) => b.carpeta.length - a.carpeta.length)
+  return (carpeta) => suyas.find((u) => carpeta === u.carpeta || carpeta.startsWith(`${u.carpeta}-`))?.proyectoId ?? null
+}
+
+/**
+ * The AI Proyectos by name, each with the period's usage at or under its folder, and the usage
+ * no Proyecto's folder holds. Linked here, when read, so a moved or renamed folder re-links.
+ */
+function proyectosAi(db: Db, root: string, enPeriodo: SQL | undefined): Pick<ResumenAi, 'proyectos' | 'sinProyecto'> {
+  const ubicaciones = db.select().from(ubicacionesArchivo).all()
+  const enlazar = enlazarUso(ubicaciones)
+  const usos = new Map<number | null, { tokens: number; costoUsd: number; modelos: { proveedor: string; familia: string }[] }>()
+  const filas = db
+    .select({
+      carpeta: usoTokens.carpeta,
+      proveedor: usoTokens.proveedor,
+      modelo: usoTokens.modelo,
+      tokens: sql<number>`sum(${TOKENS})`,
+      costoUsd: sql<number>`sum(${usoTokens.costoUsd})`
+    })
+    .from(usoTokens)
+    .where(enPeriodo)
+    .groupBy(usoTokens.carpeta, usoTokens.proveedor, usoTokens.modelo)
+    .all()
+  for (const f of filas) {
+    const proyectoId = enlazar(f.carpeta)
+    const uso = usos.get(proyectoId) ?? { tokens: 0, costoUsd: 0, modelos: [] }
+    uso.tokens += f.tokens
+    uso.costoUsd += f.costoUsd
+    if (f.tokens > 0) uso.modelos.push({ proveedor: f.proveedor, familia: familia(f.proveedor, f.modelo) })
+    usos.set(proyectoId, uso)
+  }
+
+  const deAi = db
+    .select({ p: proyectos, contacto: contactos.nombre })
+    .from(proyectos)
+    .leftJoin(contactos, eq(contactos.id, proyectos.contactoId))
+    .where(eq(proyectos.categoria, 'ai'))
+    .all()
+    .sort((a, b) => a.p.nombre.localeCompare(b.p.nombre, 'es'))
+  const sinProyecto = usos.get(null)
+  return {
+    proyectos: deAi.map(({ p, contacto }) => {
+      const uso = usos.get(p.id)
+      const personal = p.etiqueta === 'personal'
+      return {
+        id: p.id,
+        referencia: personal ? null : referenciaProyecto(p.id),
+        nombre: p.nombre,
+        etiqueta: p.etiqueta,
+        contactoId: p.contactoId,
+        contacto: personal ? null : contacto,
+        clienteFinal: p.clienteFinal,
+        categoria: p.categoria,
+        fechaInicio: p.fechaInicio,
+        estado: p.estado,
+        carpeta: carpetaEntre(root, ubicaciones.filter((u) => u.proyectoId === p.id)),
+        modelos: [...new Set((uso?.modelos ?? []).sort(compararModelos).map((m) => m.familia))],
+        tokens: uso?.tokens ?? 0,
+        costoUsd: uso?.costoUsd ?? 0
+      }
+    }),
+    sinProyecto: { tokens: sinProyecto?.tokens ?? 0, costoUsd: sinProyecto?.costoUsd ?? 0 }
+  }
+}
+
+/**
+ * The AI Proyectos' income in `rango`, in subtotals as Finanzas KPIs are. Ingreso proyectos AI:
+ * the accepted Cotizaciones of those started in it, a USD one in pesos at its own rate (else the
+ * most recent recorded). Ingreso AI: their Ingresos paid in it, a Reembolso counting against the
+ * period it was given back in.
+ */
+function ingresosAi(db: Db, rango: Rango, tipoCambio: number | null): Pick<ResumenAi, 'ingresoProyectos' | 'ingresoAi'> {
+  const dentro = (fecha: string | null) => fecha !== null && fecha >= rango.desde && fecha <= rango.hasta
+  const cotizadas = db
+    .select({ fechaInicio: proyectos.fechaInicio, c: cotizaciones })
+    .from(proyectos)
+    .innerJoin(cotizaciones, eq(cotizaciones.id, proyectos.cotizacionId))
+    .where(and(eq(proyectos.categoria, 'ai'), eq(cotizaciones.estado, 'aceptada')))
+    .all()
+    .filter(({ fechaInicio }) => dentro(fechaInicio))
+  const ingresoProyectos = cotizadas.reduce((s, { c }) => {
+    if (c.moneda === 'MXN') return s + c.subtotal
+    const tasa = c.tipoCambio ?? tipoCambio
+    return tasa === null ? s : s + convertir(c.subtotal, 'USD', 'MXN', tasa)
+  }, 0)
+  const { ingresoAi } = db
+    .select({ ingresoAi: sql<number>`coalesce(sum(${ingresos.subtotal}), 0)` })
+    .from(ingresos)
+    .innerJoin(proyectos, eq(proyectos.id, ingresos.proyectoId))
+    .where(
+      and(
+        eq(proyectos.categoria, 'ai'),
+        eq(ingresos.estado, 'pagado'),
+        gte(sql`coalesce(${ingresos.fechaPago}, ${ingresos.fechaRegistro})`, rango.desde),
+        lte(sql`coalesce(${ingresos.fechaPago}, ${ingresos.fechaRegistro})`, rango.hasta)
+      )
+    )
+    .get()!
+  return { ingresoProyectos, ingresoAi }
 }
 
 /**
  * The AI section's figures for `periodo`: Este mes runs, as in Finanzas, from the 1st to `hoy`.
- * Money is read Al día, so this month's Suscripciones exist.
+ * Money is read Al día, so this month's Suscripciones exist. Proyecto folders are checked under `root`.
  */
-export function resumenAi(db: Db, ajustes: Ajustes, periodo: PeriodoAi, hoy: string): ResumenAi {
+export function resumenAi(db: Db, ajustes: Ajustes, root: string, periodo: PeriodoAi, hoy: string): ResumenAi {
   alDia(db, hoy)
   const { desde, hasta } = rangos('mes', hoy).rango
   const enPeriodo = (dia: typeof usoTokens.dia | typeof ahorroTokens.dia) => (periodo === 'mes' ? and(gte(dia, desde), lte(dia, hasta)) : undefined)
@@ -321,7 +439,8 @@ export function resumenAi(db: Db, ajustes: Ajustes, periodo: PeriodoAi, hoy: str
     .get()!
   const tipoCambio = tipoCambioReciente(db)
   // Todo el tiempo ends today too, as in Finanzas.
-  const filas = suscripciones(db, { desde: periodo === 'mes' ? desde : '', hasta })
+  const rango = { desde: periodo === 'mes' ? desde : '', hasta }
+  const filas = suscripciones(db, rango)
   return {
     periodo,
     tokens: uso.tokens,
@@ -333,6 +452,8 @@ export function resumenAi(db: Db, ajustes: Ajustes, periodo: PeriodoAi, hoy: str
     modelos: usoPorModelo(db, enPeriodo(usoTokens.dia)),
     suscripciones: filas,
     suscripcionesTotal: filas.reduce((s, f) => s + f.monto, 0),
+    ...ingresosAi(db, rango, tipoCambio),
+    ...proyectosAi(db, root, enPeriodo(usoTokens.dia)),
     ...ultimaLectura(ajustes)
   }
 }

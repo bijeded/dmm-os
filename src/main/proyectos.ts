@@ -65,6 +65,9 @@ function ubicarEntre(root: string, todas: (typeof ubicacionesArchivo.$inferSelec
 const visible = ({ estado, ruta, abrible }: CarpetaProyecto): CarpetaProyecto => ({ estado, ruta, abrible })
 const carpeta = (db: Db, root: string, id: number): CarpetaProyecto => visible(ubicar(db, root, id))
 
+/** A Proyecto's folder as it should be shown, from its already-loaded locations. */
+export const carpetaEntre = (root: string, ubicaciones: (typeof ubicacionesArchivo.$inferSelect)[]): CarpetaProyecto => visible(ubicarEntre(root, ubicaciones))
+
 /**
  * Every Proyecto whose working folder in `Proyectos/` is on disk, with that folder. Archivado ones
  * are left out: a Proyecto is archived when done, and its folder is deleted once backed up.
@@ -262,7 +265,7 @@ export function listarProyectos(db: Db, root: string): ListaProyectos {
     categoria: p.categoria,
     fechaInicio: p.fechaInicio,
     estado: p.estado,
-    carpeta: visible(ubicarEntre(root, ubicaciones.get(p.id) ?? [])),
+    carpeta: carpetaEntre(root, ubicaciones.get(p.id) ?? []),
     // Completed, with files somewhere and a Cotización its paid Ingresos never reached: imported
     // history (ADR-0002) waiting for its uninvoiced Ingresos to be entered by hand.
     sinIngresosRegistrados: (cobros.get(p.id)?.falta?.faltante ?? 0) > 0
