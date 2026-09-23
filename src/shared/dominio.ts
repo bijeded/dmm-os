@@ -541,7 +541,7 @@ export interface ResumenAi extends LecturaUso {
   proyectos: FilaProyectoAi[]
   /** The period's usage in folders that are no Proyecto's. */
   sinProyecto: UsoTokens
-  /** This month's Asignación de costo, in either period. */
+  /** This month's Asignación de costo, or in Todo el tiempo every month's added up. */
   asignacion: AsignacionCosto
 }
 
@@ -556,11 +556,12 @@ export type CriterioAsignacion = 'tokens' | 'partes_iguales' | 'sin_proyectos'
  * Sin asignar add up to `total` to the centavo.
  */
 export interface AsignacionCosto {
-  /** `YYYY-MM` */
-  mes: string
-  /** The subtotal of the month's Suscripciones. */
+  /** `YYYY-MM`; `null` for every month added up. */
+  mes: string | null
+  /** The subtotal of the Suscripciones split. */
   total: number
-  criterio: CriterioAsignacion
+  /** `null` for every month added up, since each month is split on its own. */
+  criterio: CriterioAsignacion | null
   /** The Proyectos AI it is split across, by name. */
   filas: FilaAsignacion[]
   /** What no Proyecto takes: the whole pool when there is none. */
@@ -570,7 +571,7 @@ export interface AsignacionCosto {
 export interface FilaAsignacion {
   proyectoId: number
   nombre: string
-  /** Its tokens in the month; 0 in an even split. */
+  /** Its tokens in the months split by tokens; 0 in an even split. */
   tokens: number
   /** Its share of the pool, 0 to 1. */
   parte: number

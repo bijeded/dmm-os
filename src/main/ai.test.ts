@@ -615,6 +615,14 @@ describe('Asignación de costo', () => {
     expect(asignacion()).toEqual({ mes: '2026-09', total: 36_000, criterio: 'sin_proyectos', filas: [], sinAsignar: 36_000 })
   })
 
+  it('adds up Sin asignar across the months in Todo el tiempo', () => {
+    // No Proyecto AI was Abierto en el mes from April to June.
+    const aura = proyectoAi('Aura', { fechaInicio: '2026-07-01' })
+    const a = resumenAi(db, ajustes, DISCO, 'todo', HOY).asignacion
+    expect(a).toMatchObject({ mes: null, total: 6 * 36_000, criterio: null, sinAsignar: 3 * 36_000 })
+    expect(a.filas).toEqual([{ proyectoId: aura.id, nombre: 'Aura', tokens: 0, parte: 0.5, monto: 3 * 36_000 }])
+  })
+
   it('is empty with no Suscripciones this month', () => {
     reiniciarDb()
     proyectoAi('Aura')
@@ -635,11 +643,12 @@ describe('Asignación de costo', () => {
 
   describe('Costo real', () => {
     let aura: typeof proyectos.$inferSelect
+    let netdeckr: typeof proyectos.$inferSelect
 
     beforeEach(async () => {
       aura = proyectoAi('Aura', { contactoId: contacto('Hotel Aura').id, fechaInicio: '2026-04-10', ruta: 'Proyectos/Aura' })
-      proyectoAi('Netdeckr', { fechaInicio: '2026-09-01', ruta: 'Proyectos/Netdeckr' })
-      // Aura: 1,000 tokens on Aug 30 and 11,030 in September; Netdeckr: 1,000 in September.
+      netdeckr = proyectoAi('Netdeckr', { fechaInicio: '2026-09-01', ruta: 'Proyectos/Netdeckr' })
+      // Aura: 1,000 tokens on Aug 30 and 10,030 in September; Netdeckr: 1,000 in September.
       await leer()
     })
 
@@ -659,6 +668,22 @@ describe('Asignación de costo', () => {
       // April to July Aura was the only Proyecto AI Abierto en el mes, with no usage; August it was the only one with usage.
       expect(costoReal('Aura', 'todo')).toBe(4 * 36_000 + 36_000 + 32_736 + 5_000 + 7_000)
       expect(costoReal('Netdeckr', 'todo')).toBe(3_264)
+    })
+
+    it('adds up every month in Todo el tiempo, matching Costo real', () => {
+      // April to August Aura takes the whole pool; September is split 32,736 / 3,264.
+      const asignado = 5 * 36_000 + 32_736
+      expect(resumenAi(db, ajustes, DISCO, 'todo', HOY).asignacion).toEqual({
+        mes: null,
+        total: 6 * 36_000,
+        criterio: null,
+        filas: [
+          { proyectoId: aura.id, nombre: 'Aura', tokens: 1_000 + 10_030, parte: asignado / (6 * 36_000), monto: asignado },
+          { proyectoId: netdeckr.id, nombre: 'Netdeckr', tokens: 1_000, parte: 3_264 / (6 * 36_000), monto: 3_264 }
+        ],
+        sinAsignar: 0
+      })
+      expect(costoReal('Aura', 'todo')).toBe(asignado)
     })
 
     it('does not count a Suscripción linked to it twice', () => {

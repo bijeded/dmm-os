@@ -130,7 +130,10 @@ export function Ai() {
       )}
 
       {resumen && (
-        <Seccion id="ai-asignacion" titulo={`Asignación de costo · ${new Date(`${resumen.asignacion.mes}-01T12:00:00`).toLocaleDateString('es-MX', { month: 'short' })}`}>
+        <Seccion
+          id="ai-asignacion"
+          titulo={`Asignación de costo · ${resumen.asignacion.mes === null ? 'todo el tiempo' : new Date(`${resumen.asignacion.mes}-01T12:00:00`).toLocaleDateString('es-MX', { month: 'short' })}`}
+        >
           <TablaAsignacion asignacion={resumen.asignacion} />
         </Seccion>
       )}
@@ -477,6 +480,10 @@ function TablaSuscripciones({ filas }: { filas: FilaSuscripcion[] }) {
   )
 }
 
+/** For every month added up, where each month is split on its own. */
+const NOTA_POR_MES =
+  'Cada mes se reparte por separado: por uso de tokens; sin datos de uso, partes iguales entre los proyectos AI abiertos en el mes; sin ninguno, queda sin asignar.'
+
 const NOTAS_CRITERIO: Record<CriterioAsignacion, string> = {
   tokens: 'Por uso de tokens.',
   partes_iguales: 'Sin datos de uso: partes iguales entre los proyectos AI abiertos en el mes.',
@@ -484,11 +491,12 @@ const NOTAS_CRITERIO: Record<CriterioAsignacion, string> = {
 }
 
 /**
- * This month's Suscripciones split across Proyectos AI, as main works it out when read. Sin
- * asignar is only noted, never spread.
+ * The Suscripciones split across Proyectos AI, as main works it out when read: this month's, or
+ * every month's added up. Sin asignar is only noted, never spread.
  */
 function TablaAsignacion({ asignacion }: { asignacion: AsignacionCosto }) {
-  const porTokens = asignacion.criterio === 'tokens'
+  // An even split has no tokens behind it; added up, the months split by tokens do.
+  const conTokens = asignacion.criterio === 'tokens' || asignacion.criterio === null
   return (
     <>
       <table aria-labelledby="ai-asignacion" className="tbl w-full border-collapse text-[13px]">
@@ -507,7 +515,7 @@ function TablaAsignacion({ asignacion }: { asignacion: AsignacionCosto }) {
                 {f.nombre}
               </td>
               <td data-label="Tokens" className={`${celdaCls} text-right font-mono text-[12px]`}>
-                {porTokens ? tokens(f.tokens) : '—'}
+                {conTokens ? tokens(f.tokens) : '—'}
               </td>
               <td data-label="%" className={`${celdaCls} text-right font-mono text-[12px]`}>
                 {porcentaje(f.parte)}
@@ -533,7 +541,7 @@ function TablaAsignacion({ asignacion }: { asignacion: AsignacionCosto }) {
           </tr>
         </tbody>
       </table>
-      <p className="m-0 text-[12px] text-on-surface-muted">{NOTAS_CRITERIO[asignacion.criterio]}</p>
+      <p className="m-0 text-[12px] text-on-surface-muted">{asignacion.criterio === null ? NOTA_POR_MES : NOTAS_CRITERIO[asignacion.criterio]}</p>
     </>
   )
 }
