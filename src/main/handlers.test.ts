@@ -1,8 +1,8 @@
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDatabase, type Conexion } from './db'
 import { contactos, costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, vigenciasPrecio } from './db/schema'
 import { MENSAJE_SIN_PAGAR } from './ciclo-proyecto'
@@ -20,8 +20,18 @@ let conexion: Conexion
 let opciones: HandlersOptions
 let h: DmmHandlers
 
+/** Temp folders made by the current test, removed after it. */
+const temporales: string[] = []
+function temporal(prefijo: string) {
+  const dir = mkdtempSync(join(tmpdir(), prefijo))
+  temporales.push(dir)
+  return dir
+}
+// Runs after each describe's own afterEach, so the connections into these folders are closed first.
+afterEach(() => temporales.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })))
+
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'dmm-handlers-'))
+  root = temporal('dmm-handlers-')
   conexion = createDatabase(migrationsFolder).abrir(':memory:')
   opciones = {
     conexion,
@@ -46,7 +56,7 @@ beforeEach(() => {
 
 describe('el disco externo', () => {
   it('remembers the chosen drive, and the folder scan reads it', async () => {
-    const hdd = mkdtempSync(join(tmpdir(), 'dmm-hdd-'))
+    const hdd = temporal('dmm-hdd-')
     mkdirSync(join(hdd, 'Proyectos'))
     vi.mocked(opciones.elegirHdd).mockResolvedValue(hdd)
 
@@ -545,6 +555,8 @@ describe('Finanzas offers on each row exactly the actions its command accepts', 
   let mundo: { archivo: string; ids: Awaited<ReturnType<typeof sembrar>> } | undefined
   const abiertas: Conexion[] = []
   afterEach(() => abiertas.splice(0).forEach((c) => c.close()))
+  // The seeded data outlives each test, so it goes once they all have run.
+  afterAll(() => mundo && rmSync(dirname(mundo.archivo), { recursive: true, force: true }))
 
   /** The seeded rows' ids, seeding them the first time. */
   async function ids() {
@@ -559,7 +571,7 @@ describe('Finanzas offers on each row exactly the actions its command accepts', 
 
   /** Handlers on hoy, over a fresh copy of the seeded data. */
   function copia(): DmmHandlers {
-    const archivo = join(mkdtempSync(join(tmpdir(), 'dmm-copia-')), 'copia.db')
+    const archivo = join(temporal('dmm-copia-'), 'copia.db')
     copyFileSync(mundo!.archivo, archivo)
     const c = createDatabase(migrationsFolder).abrir(archivo)
     abiertas.push(c)
