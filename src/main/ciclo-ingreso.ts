@@ -1,5 +1,5 @@
 import type { ingresos } from './db/schema'
-import { monedaDe, montoEn } from './dinero'
+import { MENSAJE_REEMBOLSO_EXCEDIDO, monedaDe, montoEn } from './dinero'
 import type { AccionIngreso, FilaIngreso } from '../shared/dominio'
 
 export type Ingreso = typeof ingresos.$inferSelect
@@ -24,7 +24,7 @@ export function restante(i: Ingreso, reembolsos: Ingreso[]) {
   return { moneda, total: suma((r) => r.total), iva: suma((r) => r.iva), retenciones: suma((r) => r.retenciones), original: suma((r) => montoEn(r, moneda)) }
 }
 
-export const MENSAJE_REEMBOLSO_EXCEDIDO = 'No se puede reembolsar más de lo pagado'
+export { MENSAJE_REEMBOLSO_EXCEDIDO }
 
 /** Why the action is refused, or `null` when it is allowed. */
 function rechazo(accion: AccionIngreso, i: Ingreso, ctx: ContextoIngreso): string | null {
