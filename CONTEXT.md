@@ -113,6 +113,10 @@ Imported history is exempt from the lifecycle guards: a Proyecto may import as c
 **Asignación de costo**:
 The share of an AI subscription Costo attributed to a Proyecto in a month, by token usage (even split if no data). The Costo itself is never duplicated.
 
+**Costo real**:
+What an AI Proyecto cost in a period: its Asignación de costo plus the Costos linked to it, pending ones included. "Real" sets it against the approximate API cost; unlike Ingreso real, it does not mean paid.
+_Avoid_: costo pagado
+
 **Cancelación con pagos**:
 When a Proyecto/Cotización is cancelled, paid Ingresos stay paid, pending Ingresos become cancelled or uncollectible, pending estimated Costos are cancelled.
 
