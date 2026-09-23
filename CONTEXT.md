@@ -111,7 +111,7 @@ A run that brings existing files into the app: the folder scan (Cotizaciones PDF
 Imported history is exempt from the lifecycle guards: a Proyecto may import as completed without being fully paid, and a Cotización accepted by import creates no Ingresos or Costos (invoiced income arrives through the Facturas run; uninvoiced Ingresos, which carry no IVA, are entered by hand in Finanzas). See ADR-0002.
 
 **Asignación de costo**:
-The share of an AI subscription Costo attributed to a Proyecto in a month, by token usage (even split if no data). The Costo itself is never duplicated.
+A month's AI Suscripciones split across AI Proyectos: by token usage among those that used any, otherwise evenly among those open during the month. With no such Proyecto the whole amount is Sin asignar, never spread; derived when read and never stored, so the Costos are never duplicated.
 
 **Costo real**:
 What an AI Proyecto cost in a period: its Asignación de costo plus the Costos linked to it, pending ones included. "Real" sets it against the approximate API cost; unlike Ingreso real, it does not mean paid.
