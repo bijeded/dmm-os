@@ -7,7 +7,8 @@ import {
   type AgenteOSkill,
   type FilaSuscripcion,
   type PeriodoAi,
-  type ResumenAi
+  type ResumenAi,
+  type UsoModelo
 } from '../../../shared/dominio'
 import { dia, monto, pesos } from '../../../shared/formato'
 import { Aviso, Cifra, fecha, Seccion, useAccion } from './Seccion'
@@ -99,6 +100,16 @@ export function Ai() {
       )}
 
       {resumen && (
+        <Seccion id="ai-modelos" titulo="Uso de tokens por modelo">
+          {resumen.modelos.length === 0 ? (
+            <p className="m-0 text-[13px] text-on-surface-muted">Sin uso de tokens leído.</p>
+          ) : (
+            <GraficaModelos modelos={resumen.modelos} />
+          )}
+        </Seccion>
+      )}
+
+      {resumen && (
         <Seccion id="ai-suscripciones" titulo="Suscripciones">
           <p className="m-0 text-[12px] text-on-surface-muted">Vista filtrada de Costos · proveedor AI</p>
           <TablaSuscripciones filas={resumen.suscripciones} />
@@ -108,6 +119,85 @@ export function Ai() {
 
       <AgentesYSkills />
     </>
+  )
+}
+
+const ANCHO = 640
+const ALTO = 240
+const MARGEN = { izq: 48, der: 8, arr: 12, aba: 44 }
+const COLORES_PROVEEDOR = ['var(--color-chart-1)', 'var(--color-chart-2)', 'var(--color-chart-3)', 'var(--color-chart-4)', 'var(--color-chart-5)']
+
+/**
+ * Tokens per model family, one bar each, grouped by provider under its name. Every model ever
+ * used has a bar, empty when unused in the period. Hover shows its tokens and API cost.
+ */
+function GraficaModelos({ modelos }: { modelos: UsoModelo[] }) {
+  const [hover, setHover] = useState<number | null>(null)
+  const proveedores = [...new Set(modelos.map((m) => m.proveedor))]
+  const max = Math.max(1, ...modelos.map((m) => m.tokens))
+  const ancho = ANCHO - MARGEN.izq - MARGEN.der
+  const alto = ALTO - MARGEN.arr - MARGEN.aba
+  // One slot per bar, and half a slot between providers.
+  const paso = ancho / (modelos.length + (proveedores.length - 1) / 2)
+  const x = (k: number) => MARGEN.izq + (k + proveedores.indexOf(modelos[k].proveedor) / 2 + 0.5) * paso
+  const y = (v: number) => MARGEN.arr + (1 - v / max) * alto
+  const base = y(0)
+  const barra = Math.min(paso * 0.6, 64)
+  const color = (proveedor: string) => COLORES_PROVEEDOR[proveedores.indexOf(proveedor) % COLORES_PROVEEDOR.length]
+  const centro = (proveedor: string) => {
+    const ks = modelos.flatMap((m, k) => (m.proveedor === proveedor ? [x(k)] : []))
+    return (ks[0] + ks[ks.length - 1]) / 2
+  }
+
+  return (
+    <div className="relative">
+      <svg viewBox={`0 0 ${ANCHO} ${ALTO}`} className="w-full" role="img" aria-label="Tokens por modelo" onMouseLeave={() => setHover(null)}>
+        {[0.25, 0.5, 0.75, 1].map((f) => (
+          <g key={f}>
+            <line x1={MARGEN.izq} x2={ANCHO - MARGEN.der} y1={y(max * f)} y2={y(max * f)} stroke="currentColor" className="text-border" />
+            <text x={MARGEN.izq - 6} y={y(max * f) + 3} textAnchor="end" className="fill-on-surface-muted font-mono text-[10px]">
+              {tokens(Math.round(max * f))}
+            </text>
+          </g>
+        ))}
+        {modelos.map((m, k) => (
+          <g key={`${m.proveedor}·${m.familia}`}>
+            <rect x={x(k) - barra / 2} y={y(m.tokens)} width={barra} height={base - y(m.tokens)} rx="3" fill={color(m.proveedor)} opacity={hover === null || hover === k ? 1 : 0.6} />
+            <text x={x(k)} y={base + 14} textAnchor="middle" className="fill-on-surface-muted font-mono text-[10px]">
+              {m.familia}
+            </text>
+            <rect
+              aria-label={`${m.proveedor} · ${m.familia}`}
+              x={x(k) - paso / 2}
+              y={0}
+              width={paso}
+              height={base}
+              fill="transparent"
+              onMouseEnter={() => setHover(k)}
+            />
+          </g>
+        ))}
+        <line x1={MARGEN.izq} x2={ANCHO - MARGEN.der} y1={base} y2={base} stroke="currentColor" className="text-border-strong" />
+        {proveedores.map((p) => (
+          <text key={p} x={centro(p)} y={ALTO - 8} textAnchor="middle" className="fill-on-surface font-mono text-[11px]">
+            {p}
+          </text>
+        ))}
+      </svg>
+      {hover !== null && (
+        <div
+          role="tooltip"
+          className="pointer-events-none absolute top-2 flex flex-col gap-0.5 rounded-control border border-border-strong bg-surface-raised p-2 font-mono text-[11px] text-on-surface shadow"
+          style={{ left: `${(x(hover) / ANCHO) * 100}%`, transform: hover > modelos.length / 2 ? 'translateX(-105%)' : 'translateX(5%)' }}
+        >
+          <b>
+            {modelos[hover].proveedor} · {modelos[hover].familia}
+          </b>
+          <span>{tokens(modelos[hover].tokens)} tokens</span>
+          <span className="text-on-surface-muted">≈ {monto(modelos[hover].costoUsd, 'USD')} API</span>
+        </div>
+      )}
+    </div>
   )
 }
 

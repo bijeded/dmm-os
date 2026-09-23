@@ -190,6 +190,44 @@ describe('resumenAi', () => {
   })
 })
 
+describe('Tokens por modelo', () => {
+  beforeEach(() => leer())
+
+  const uso = (proveedor: string, modelo: string, dia: string, tokens: number, costoUsd: number) =>
+    db.insert(usoTokens).values({ dia, carpeta: '', proveedor, modelo, tokensEntrada: tokens, tokensSalida: 0, tokensCacheEscritura: 0, tokensCacheLectura: 0, costoUsd }).run()
+
+  it('lists every model ever seen by its family, with zero in a period it was not used', () => {
+    expect(resumenAi(db, ajustes, 'todo', HOY).modelos).toEqual([
+      { proveedor: 'claude', familia: 'haiku', tokens: 30, costoUsd: 0 },
+      { proveedor: 'claude', familia: 'sonnet', tokens: 1_000, costoUsd: 125 },
+      { proveedor: 'claude', familia: 'opus', tokens: 10_000 + 1_000, costoUsd: 1_050 + 210 }
+    ])
+    expect(resumenAi(db, ajustes, 'mes', HOY).modelos).toEqual([
+      { proveedor: 'claude', familia: 'haiku', tokens: 30, costoUsd: 0 },
+      { proveedor: 'claude', familia: 'sonnet', tokens: 0, costoUsd: 0 },
+      { proveedor: 'claude', familia: 'opus', tokens: 11_000, costoUsd: 1_260 }
+    ])
+  })
+
+  it('adds up a family’s versions and groups the models by provider', () => {
+    uso('openai', 'gpt-5', '2026-09-10', 400, 30)
+    uso('claude', 'claude-3-5-sonnet-20241022', '2026-09-10', 500, 40)
+    uso('claude', 'claude-fable-5-1', '2026-09-11', 700, 90)
+    expect(resumenAi(db, ajustes, 'mes', HOY).modelos).toEqual([
+      { proveedor: 'claude', familia: 'haiku', tokens: 30, costoUsd: 0 },
+      { proveedor: 'claude', familia: 'sonnet', tokens: 500, costoUsd: 40 },
+      { proveedor: 'claude', familia: 'opus', tokens: 11_000, costoUsd: 1_260 },
+      { proveedor: 'claude', familia: 'fable', tokens: 700, costoUsd: 90 },
+      { proveedor: 'openai', familia: 'gpt', tokens: 400, costoUsd: 30 }
+    ])
+  })
+
+  it('is empty before any usage is read', () => {
+    reiniciarDb()
+    expect(resumenAi(db, ajustes, 'todo', HOY).modelos).toEqual([])
+  })
+})
+
 describe('Suscripciones', () => {
   const nuevo = (cambios: Partial<CostoNuevo>) =>
     nuevoCosto(
