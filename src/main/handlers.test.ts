@@ -715,22 +715,23 @@ describe('Every ledger command works Al día', () => {
 // Finanzas. They must hold, figure for figure, through the money-module work of #143.
 describe('Montos registrados, como Finanzas los muestra hoy', () => {
   const montos = ({ subtotal, iva, retenciones, total }: FilaIngreso | FilaCosto) => ({ subtotal, iva, retenciones, total })
-  /** An Ingreso as Finanzas shows it, with the USD original it was recorded with. */
-  const ingreso = (f: FilaIngreso) => {
+  /** An Ingreso as Finanzas shows it, plus the USD original recorded on its row, which no screen shows. */
+  const pin = (f: FilaIngreso) => {
     const { montoOriginal, monedaOriginal } = conexion.db.select().from(ingresos).all().find((i) => i.id === f.id)!
     return { ...montos(f), moneda: f.moneda, reembolsable: f.reembolsable, montoOriginal, monedaOriginal }
   }
-  const ingresosDelMes = async () => (await h.finanzas.resumen('mes')).ingresos.map(ingreso)
+  const ingresosDelMes = async () => (await h.finanzas.resumen('mes')).ingresos.map(pin)
+  const nuevoIngreso = { facturado: false, contactoId: null, proyectoId: null, fecha: '2026-09-16', subtotal: 123_457, conIva: true, pagado: true, notas: null } as const
 
   it('a hand-entered invoice Ingreso with IVA gets 16% on its subtotal, rounded to the centavo', async () => {
-    await h.finanzas.nuevoIngreso({ categoria: 'factura', facturado: true, contactoId: null, proyectoId: null, fecha: '2026-09-16', subtotal: 123_457, conIva: true, pagado: true, notas: null })
+    await h.finanzas.nuevoIngreso({ ...nuevoIngreso, categoria: 'factura', facturado: true })
     expect(await ingresosDelMes()).toEqual([
       { subtotal: 123_457, iva: 19_753, retenciones: 0, total: 143_210, moneda: 'MXN', reembolsable: 143_210, montoOriginal: null, monedaOriginal: null }
     ])
   })
 
   it('an uninvoiced Ingreso carries no IVA, even asked for it', async () => {
-    await h.finanzas.nuevoIngreso({ categoria: 'sin_factura', facturado: false, contactoId: null, proyectoId: null, fecha: '2026-09-16', subtotal: 123_457, conIva: true, pagado: true, notas: null })
+    await h.finanzas.nuevoIngreso({ ...nuevoIngreso, categoria: 'sin_factura' })
     expect(await ingresosDelMes()).toEqual([
       { subtotal: 123_457, iva: 0, retenciones: 0, total: 123_457, moneda: 'MXN', reembolsable: 123_457, montoOriginal: null, monedaOriginal: null }
     ])
@@ -776,18 +777,17 @@ describe('Montos registrados, como Finanzas los muestra hoy', () => {
     // US$1,000 + IVA in thirds, the remainder to the first; each third converts on its own.
     const primera = { subtotal: 616_679, iva: 98_679, retenciones: 0, total: 715_358, moneda: 'USD', reembolsable: 0, montoOriginal: 38_668, monedaOriginal: 'USD' }
     const otra = { subtotal: 616_661, iva: 98_661, retenciones: 0, total: 715_322, moneda: 'USD', reembolsable: 0, montoOriginal: 38_666, monedaOriginal: 'USD' }
-    expect((await h.finanzas.resumen('mes')).cobranza.map(ingreso)).toEqual([primera, otra, otra])
+    expect((await h.finanzas.resumen('mes')).cobranza.map(pin)).toEqual([primera, otra, otra])
   })
 
   /** Imports a CFDI with retenciones and a USD CFDI, and returns them as Finanzas lists them. */
   async function importar() {
+    mkdirSync(join(root, 'Facturas', 'Emitidas', '2026'), { recursive: true })
     for (const [archivo, xml] of [
       ['retenciones.xml', cfdiXml({ uuid: '11111111-0000-4444-8888-99AABBCCDDEE', retenciones: '206.67' })],
       ['usd.xml', cfdiXml({ uuid: '22222222-0000-4444-8888-99AABBCCDDEE', moneda: 'USD', tipoCambio: '17.50' })]
-    ]) {
-      mkdirSync(join(root, 'Facturas', 'Emitidas', '2026'), { recursive: true })
+    ])
       writeFileSync(join(root, 'Facturas', 'Emitidas', '2026', archivo), xml)
-    }
     expect((await h.importacion.facturas()).importados).toBe(2)
     const importados = (await h.finanzas.resumen('todo')).ingresos
     return { conRetenciones: importados.find((i) => i.moneda === 'MXN')!, usd: importados.find((i) => i.moneda === 'USD')! }
@@ -795,14 +795,14 @@ describe('Montos registrados, como Finanzas los muestra hoy', () => {
 
   it('a Facturas import keeps the CFDI’s own figures, and a USD one its USD original', async () => {
     const { conRetenciones, usd } = await importar()
-    expect(ingreso(conRetenciones)).toEqual({ subtotal: 100_000, iva: 16_000, retenciones: 20_667, total: 95_333, moneda: 'MXN', reembolsable: 95_333, montoOriginal: null, monedaOriginal: null })
-    expect(ingreso(usd)).toEqual({ subtotal: 1_750_000, iva: 280_000, retenciones: 0, total: 2_030_000, moneda: 'USD', reembolsable: 116_000, montoOriginal: 116_000, monedaOriginal: 'USD' })
+    expect(pin(conRetenciones)).toEqual({ subtotal: 100_000, iva: 16_000, retenciones: 20_667, total: 95_333, moneda: 'MXN', reembolsable: 95_333, montoOriginal: null, monedaOriginal: null })
+    expect(pin(usd)).toEqual({ subtotal: 1_750_000, iva: 280_000, retenciones: 0, total: 2_030_000, moneda: 'USD', reembolsable: 116_000, montoOriginal: 116_000, monedaOriginal: 'USD' })
   })
 
   it('a partial Reembolso of the imported Ingreso takes its IVA and retenciones in proportion, and the final one the exact remainders', async () => {
     const { conRetenciones } = await importar()
-    const reembolsos = async () => (await h.finanzas.resumen('mes')).ingresos.filter((i) => i.reembolsoDeId === conRetenciones.id).map(ingreso)
-    const original = async () => ingreso((await h.finanzas.resumen('todo')).ingresos.find((i) => i.id === conRetenciones.id)!)
+    const reembolsos = async () => (await h.finanzas.resumen('mes')).ingresos.filter((i) => i.reembolsoDeId === conRetenciones.id).map(pin)
+    const original = async () => pin((await h.finanzas.resumen('todo')).ingresos.find((i) => i.id === conRetenciones.id)!)
 
     await h.finanzas.reembolsar(conRetenciones.id, 30_000)
     const parcial = { subtotal: -31_469, iva: -5_035, retenciones: -6_504, total: -30_000, moneda: 'MXN', reembolsable: 0, montoOriginal: null, monedaOriginal: null }
@@ -819,6 +819,6 @@ describe('Montos registrados, como Finanzas los muestra hoy', () => {
     const { usd } = await importar()
     await h.finanzas.reembolsar(usd.id, 5_000)
     const [reembolso] = (await h.finanzas.resumen('mes')).ingresos.filter((i) => i.reembolsoDeId === usd.id)
-    expect(ingreso(reembolso)).toEqual({ subtotal: -75_431, iva: -12_069, retenciones: 0, total: -87_500, moneda: 'USD', reembolsable: 0, montoOriginal: -5_000, monedaOriginal: 'USD' })
+    expect(pin(reembolso)).toEqual({ subtotal: -75_431, iva: -12_069, retenciones: 0, total: -87_500, moneda: 'USD', reembolsable: 0, montoOriginal: -5_000, monedaOriginal: 'USD' })
   })
 })
