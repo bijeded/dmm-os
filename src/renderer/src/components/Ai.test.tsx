@@ -68,6 +68,18 @@ const ASIGNACION: AsignacionCosto = {
   sinAsignar: 0
 }
 
+/** Every month's split added up: $2,700 since April, $270 of it Sin asignar. */
+const ASIGNACION_TODO: AsignacionCosto = {
+  mes: null,
+  total: 270_000,
+  criterio: null,
+  filas: [
+    { proyectoId: 1, nombre: 'Aura', tokens: 30_000_000, parte: 0.7, monto: 189_000 },
+    { proyectoId: 3, nombre: 'Netdeckr', tokens: 16_000_000, parte: 0.2, monto: 54_000 }
+  ],
+  sinAsignar: 27_000
+}
+
 const resumen = (periodo: PeriodoAi, cambios: Partial<ResumenAi> = {}): ResumenAi => ({
   periodo,
   tokens: periodo === 'mes' ? 15_700_000 : 48_200_000,
@@ -83,7 +95,7 @@ const resumen = (periodo: PeriodoAi, cambios: Partial<ResumenAi> = {}): ResumenA
   ingresoAi: periodo === 'mes' ? 1_800_000 : 7_450_000,
   proyectos: PROYECTOS[periodo],
   sinProyecto: periodo === 'mes' ? { tokens: 500_000, costoUsd: 900, costoApiMxn: 16_560 } : { tokens: 1_800_000, costoUsd: 3_100, costoApiMxn: null },
-  asignacion: ASIGNACION,
+  asignacion: periodo === 'mes' ? ASIGNACION : ASIGNACION_TODO,
   ultimoEscaneo: ESCANEO,
   avisos: [],
   ...cambios
@@ -462,11 +474,16 @@ describe('Asignación de costo', () => {
     expect(screen.getByText('Ningún proyecto AI abierto en el mes: todo queda sin asignar.')).toBeTruthy()
   })
 
-  it('keeps showing this month’s split in Todo el tiempo', async () => {
+  it('adds up the whole history in Todo el tiempo', async () => {
     montar()
     await screen.findByRole('table', { name: /Asignación de costo · sep/ })
     fireEvent.click(screen.getByRole('button', { name: 'Todo el tiempo' }))
-    await screen.findByText('48.2 M')
-    expect(filasAsignacion()[0]).toEqual(['Aura', '9.1 M', '58%', '$313.00'])
+    await screen.findByRole('table', { name: /Asignación de costo · todo el tiempo/ })
+    expect(filasAsignacion()).toEqual([
+      ['Aura', '30.0 M', '70%', '$1,890.00'],
+      ['Netdeckr', '16.0 M', '20%', '$540.00'],
+      ['Sin asignar', '—', '—', '$270.00']
+    ])
+    expect(screen.getByText('Cada mes se reparte por separado: por uso de tokens; sin datos de uso, partes iguales entre los proyectos AI abiertos en el mes; sin ninguno, queda sin asignar.')).toBeTruthy()
   })
 })

@@ -10,7 +10,7 @@ import { rangos } from './finanzas'
 import { alDia } from './ledger'
 import { clave } from './nombres'
 import { carpetaEntre, referenciaProyecto } from './proyectos'
-import type { AsignacionCosto, FilaSuscripcion, LecturaUso, PeriodoAi, Rango, ResumenAi, UsoModelo, UsoTokens } from '../shared/dominio'
+import type { AsignacionCosto, FilaAsignacion, FilaSuscripcion, LecturaUso, PeriodoAi, Rango, ResumenAi, UsoModelo, UsoTokens } from '../shared/dominio'
 
 /**
  * AI: token usage imported from CC Usage (tokens and approximate API cost) and RTK (tokens
@@ -457,13 +457,44 @@ function asignar(mes: string, total: number, tokens: Map<number, number>, ai: Pr
 }
 
 /**
- * Asignación de costo, worked out when read and never stored as Costos: this month's, and each
- * Proyecto AI's Costo real over `rango`, which is what it was assigned in each month plus the
- * Costos linked to it. A month's pool is its rows in `filas` (the period's Suscripciones), so
- * this month's runs to `hoy`, as Este mes does. A Suscripción linked to a Proyecto counts in the
- * pool only, never twice.
+ * Every month's Asignación de costo added up, for Todo el tiempo: each Proyecto AI's tokens and
+ * amount over the months it took part in, by name. Shares are of the whole pool, so they and Sin
+ * asignar's make up all of it. Each month was split on its own, so there is no single criterio.
  */
-function asignaciones(db: Db, { enlazar, ai }: Enlace, rango: Rango, filas: FilaSuscripcion[], hoy: string): { asignacion: AsignacionCosto; costoReal: Map<number, number> } {
+function sumarMeses(meses: AsignacionCosto[], ai: ProyectoAi[]): AsignacionCosto {
+  const total = meses.reduce((s, a) => s + a.total, 0)
+  const suyas = new Map<number, Pick<FilaAsignacion, 'tokens' | 'monto'>>()
+  for (const f of meses.flatMap((a) => a.filas)) {
+    const suya = suyas.get(f.proyectoId) ?? { tokens: 0, monto: 0 }
+    suyas.set(f.proyectoId, { tokens: suya.tokens + f.tokens, monto: suya.monto + f.monto })
+  }
+  return {
+    mes: null,
+    total,
+    criterio: null,
+    filas: ai.flatMap(({ p }) => {
+      const suya = suyas.get(p.id)
+      return suya ? [{ proyectoId: p.id, nombre: p.nombre, ...suya, parte: total === 0 ? 0 : suya.monto / total }] : []
+    }),
+    sinAsignar: meses.reduce((s, a) => s + a.sinAsignar, 0)
+  }
+}
+
+/**
+ * Asignación de costo, worked out when read and never stored as Costos: for Este mes this
+ * month's, for Todo el tiempo every month's added up; and each Proyecto AI's Costo real over
+ * `rango`, which is what it was assigned in each month plus the Costos linked to it. A month's
+ * pool is its rows in `filas` (the period's Suscripciones), so this month's runs to `hoy`, as
+ * Este mes does. A Suscripción linked to a Proyecto counts in the pool only, never twice.
+ */
+function asignaciones(
+  db: Db,
+  { enlazar, ai }: Enlace,
+  periodo: PeriodoAi,
+  rango: Rango,
+  filas: FilaSuscripcion[],
+  hoy: string
+): { asignacion: AsignacionCosto; costoReal: Map<number, number> } {
   const mesActual = hoy.slice(0, 7)
   const pools = new Map<string, number>([[mesActual, 0]])
   for (const s of filas) pools.set(s.fecha.slice(0, 7), (pools.get(s.fecha.slice(0, 7)) ?? 0) + s.monto)
@@ -486,12 +517,9 @@ function asignaciones(db: Db, { enlazar, ai }: Enlace, rango: Rango, filas: Fila
 
   const costoReal = new Map<number, number>()
   const sumar = (proyectoId: number, monto: number) => costoReal.set(proyectoId, (costoReal.get(proyectoId) ?? 0) + monto)
-  let asignacion: AsignacionCosto | undefined
-  for (const [mes, total] of pools) {
-    const a = asignar(mes, total, tokens.get(mes) ?? new Map(), ai)
-    if (mes === mesActual) asignacion = a
-    for (const f of a.filas) sumar(f.proyectoId, f.monto)
-  }
+  const meses = [...pools].map(([mes, total]) => asignar(mes, total, tokens.get(mes) ?? new Map(), ai))
+  for (const f of meses.flatMap((a) => a.filas)) sumar(f.proyectoId, f.monto)
+  const asignacion = periodo === 'mes' ? meses.find((a) => a.mes === mesActual)! : sumarMeses(meses, ai)
 
   const enPool = new Set(filas.map((s) => s.id))
   const ligados = db
@@ -500,7 +528,7 @@ function asignaciones(db: Db, { enlazar, ai }: Enlace, rango: Rango, filas: Fila
     .where(and(isNotNull(costos.proyectoId), ne(costos.estado, 'cancelado'), gte(costos.fecha, rango.desde), lte(costos.fecha, rango.hasta)))
     .all()
   for (const c of ligados) if (deAiIds.has(c.proyectoId!) && !enPool.has(c.id)) sumar(c.proyectoId!, c.subtotal)
-  return { asignacion: asignacion!, costoReal }
+  return { asignacion, costoReal }
 }
 
 /**
@@ -561,7 +589,7 @@ export function resumenAi(db: Db, ajustes: Ajustes, root: string, periodo: Perio
   const filas = suscripciones(db, rango)
   const ubicaciones = db.select().from(ubicacionesArchivo).all()
   const enlace = { ubicaciones, enlazar: enlazarUso(ubicaciones), ai: deAi(db) }
-  const { asignacion, costoReal } = asignaciones(db, enlace, rango, filas, hoy)
+  const { asignacion, costoReal } = asignaciones(db, enlace, periodo, rango, filas, hoy)
   return {
     periodo,
     tokens: uso.tokens,
