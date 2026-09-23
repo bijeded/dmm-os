@@ -10,7 +10,7 @@ import { rangos } from './finanzas'
 import { alDia } from './ledger'
 import { clave } from './nombres'
 import { carpetaEntre, referenciaProyecto } from './proyectos'
-import type { FilaSuscripcion, LecturaUso, PeriodoAi, Rango, ResumenAi, UsoModelo, UsoTokens } from '../shared/dominio'
+import type { AsignacionCosto, FilaSuscripcion, LecturaUso, PeriodoAi, Rango, ResumenAi, UsoModelo, UsoTokens } from '../shared/dominio'
 
 /**
  * AI: token usage imported from CC Usage (tokens and approximate API cost) and RTK (tokens
@@ -320,19 +320,36 @@ function enlazarUso(ubicaciones: Ubicacion[]): (carpeta: string) => number | nul
   return (carpeta) => suyas.find((u) => carpeta === u.carpeta || carpeta.startsWith(`${u.carpeta}-`))?.proyectoId ?? null
 }
 
+type ProyectoAi = { p: typeof proyectos.$inferSelect; contacto: string | null }
+
+/** The AI Proyectos, with their Contacto's name, by name. */
+const deAi = (db: Db): ProyectoAi[] =>
+  db
+    .select({ p: proyectos, contacto: contactos.nombre })
+    .from(proyectos)
+    .leftJoin(contactos, eq(contactos.id, proyectos.contactoId))
+    .where(eq(proyectos.categoria, 'ai'))
+    .all()
+    .sort((a, b) => a.p.nombre.localeCompare(b.p.nombre, 'es'))
+
 /**
- * The AI Proyectos by name, each with the period's usage at or under its folder, and the usage
- * no Proyecto's folder holds. Linked here, when read, so a moved or renamed folder re-links.
- * API cost is also given in pesos at `tipoCambio`, as the Costo API aprox. card gives it.
+ * The AI Proyectos, each with the period's usage at or under its folder and its `costoReal`, and
+ * the usage no Proyecto's folder holds. Linked here, when read, so a moved or renamed folder
+ * re-links. API cost is also given in pesos at `tipoCambio`, as the Costo API aprox. card gives it.
  */
-function proyectosAi(db: Db, root: string, enPeriodo: SQL | undefined, tipoCambio: number | null): Pick<ResumenAi, 'proyectos' | 'sinProyecto'> {
+function proyectosAi(
+  db: Db,
+  root: string,
+  { ubicaciones, enlazar, ai }: Enlace,
+  enPeriodo: SQL | undefined,
+  tipoCambio: number | null,
+  costoReal: Map<number, number>
+): Pick<ResumenAi, 'proyectos' | 'sinProyecto'> {
   const conPesos = (tokens = 0, costoUsd = 0): UsoTokens => ({
     tokens,
     costoUsd,
     costoApiMxn: tipoCambio === null ? null : convertir(costoUsd, 'USD', 'MXN', tipoCambio)
   })
-  const ubicaciones = db.select().from(ubicacionesArchivo).all()
-  const enlazar = enlazarUso(ubicaciones)
   const usos = new Map<number | null, { tokens: number; costoUsd: number; modelos: { proveedor: string; familia: string }[] }>()
   const filas = db
     .select({
@@ -355,16 +372,9 @@ function proyectosAi(db: Db, root: string, enPeriodo: SQL | undefined, tipoCambi
     usos.set(proyectoId, uso)
   }
 
-  const deAi = db
-    .select({ p: proyectos, contacto: contactos.nombre })
-    .from(proyectos)
-    .leftJoin(contactos, eq(contactos.id, proyectos.contactoId))
-    .where(eq(proyectos.categoria, 'ai'))
-    .all()
-    .sort((a, b) => a.p.nombre.localeCompare(b.p.nombre, 'es'))
   const sinProyecto = usos.get(null)
   return {
-    proyectos: deAi.map(({ p, contacto }) => {
+    proyectos: ai.map(({ p, contacto }) => {
       const uso = usos.get(p.id)
       const personal = p.etiqueta === 'personal'
       return {
@@ -380,11 +390,117 @@ function proyectosAi(db: Db, root: string, enPeriodo: SQL | undefined, tipoCambi
         estado: p.estado,
         carpeta: carpetaEntre(root, ubicaciones.filter((u) => u.proyectoId === p.id)),
         modelos: [...new Set((uso?.modelos ?? []).sort(compararModelos).map((m) => m.familia))],
-        ...conPesos(uso?.tokens, uso?.costoUsd)
+        ...conPesos(uso?.tokens, uso?.costoUsd),
+        costoReal: costoReal.get(p.id) ?? 0
       }
     }),
     sinProyecto: conPesos(sinProyecto?.tokens, sinProyecto?.costoUsd)
   }
+}
+
+/** What the usage is linked with: the recorded folders, which Proyecto a usage folder is, and the AI Proyectos. */
+interface Enlace {
+  ubicaciones: Ubicacion[]
+  enlazar: (carpeta: string) => number | null
+  ai: ProyectoAi[]
+}
+
+/**
+ * Splits `total` centavos in proportion to `pesos`, in whole centavos that add up to it: each
+ * takes its share rounded down, and the centavos left go one each to the largest remainders (the
+ * first on a tie).
+ */
+function mayorResto(total: number, pesos: number[]): number[] {
+  const suma = BigInt(pesos.reduce((s, p) => s + p, 0))
+  if (suma === 0n) return pesos.map(() => 0)
+  const exactos = pesos.map((p) => BigInt(Math.abs(total)) * BigInt(p))
+  const montos = exactos.map((e) => Number(e / suma))
+  let faltan = Math.abs(total) - montos.reduce((s, m) => s + m, 0)
+  const restos = exactos.map((e, k) => ({ k, resto: e % suma })).sort((a, b) => (a.resto === b.resto ? a.k - b.k : a.resto > b.resto ? -1 : 1))
+  for (const { k } of restos) {
+    if (faltan-- <= 0) break
+    montos[k]++
+  }
+  return montos.map((m) => Math.sign(total) * m || 0)
+}
+
+/**
+ * Whether `p` was open during month `mes`: started on or before its end (or with no start date),
+ * and not completed or cancelled before it began. A closed one with no end date recorded
+ * (imported history) is taken as closed before.
+ */
+function abiertoEn(p: ProyectoAi['p'], mes: string) {
+  if (p.fechaInicio !== null && p.fechaInicio > `${mes}-31`) return false
+  if (p.estado !== 'completado' && p.estado !== 'cancelado') return true
+  return p.fechaFin !== null && p.fechaFin >= `${mes}-01`
+}
+
+/**
+ * Month `mes`'s Asignación de costo of `total`: by tokens across the AI Proyectos with usage in
+ * it; with none, evenly across those open during it; with none of those, all Sin asignar.
+ */
+function asignar(mes: string, total: number, tokens: Map<number, number>, ai: ProyectoAi[]): AsignacionCosto {
+  const conUso = ai.filter(({ p }) => (tokens.get(p.id) ?? 0) > 0)
+  const abiertos = ai.filter(({ p }) => abiertoEn(p, mes))
+  const criterio = conUso.length > 0 ? 'tokens' : abiertos.length > 0 ? 'partes_iguales' : 'sin_proyectos'
+  const entre = criterio === 'tokens' ? conUso : abiertos
+  const pesos = entre.map(({ p }) => (criterio === 'tokens' ? tokens.get(p.id)! : 1))
+  const suma = pesos.reduce((s, x) => s + x, 0)
+  const montos = mayorResto(total, pesos)
+  return {
+    mes,
+    total,
+    criterio,
+    filas: entre.map(({ p }, k) => ({ proyectoId: p.id, nombre: p.nombre, tokens: tokens.get(p.id) ?? 0, parte: pesos[k] / suma, monto: montos[k] })),
+    sinAsignar: total - montos.reduce((s, m) => s + m, 0)
+  }
+}
+
+/**
+ * Asignación de costo, worked out when read and never stored as Costos: this month's, and each
+ * AI Proyecto's Costo real over `rango`, which is what it was assigned in each month plus the
+ * Costos linked to it. A month's pool is its rows in `filas` (the period's Suscripciones), so
+ * this month's runs to `hoy`, as Este mes does. A Suscripción linked to a Proyecto counts in the
+ * pool only, never twice.
+ */
+function asignaciones(db: Db, { enlazar, ai }: Enlace, rango: Rango, filas: FilaSuscripcion[], hoy: string): { asignacion: AsignacionCosto; costoReal: Map<number, number> } {
+  const mesActual = hoy.slice(0, 7)
+  const pools = new Map<string, number>([[mesActual, 0]])
+  for (const s of filas) pools.set(s.fecha.slice(0, 7), (pools.get(s.fecha.slice(0, 7)) ?? 0) + s.monto)
+
+  const deAiIds = new Set(ai.map(({ p }) => p.id))
+  const tokens = new Map<string, Map<number, number>>()
+  const usos = db
+    .select({ mes: sql<string>`substr(${usoTokens.dia}, 1, 7)`, carpeta: usoTokens.carpeta, tokens: sql<number>`sum(${TOKENS})` })
+    .from(usoTokens)
+    .where(and(gte(usoTokens.dia, rango.desde), lte(usoTokens.dia, rango.hasta)))
+    .groupBy(sql`1`, usoTokens.carpeta)
+    .all()
+  for (const u of usos) {
+    const proyectoId = enlazar(u.carpeta)
+    if (proyectoId === null || !deAiIds.has(proyectoId)) continue
+    const delMes = tokens.get(u.mes) ?? new Map<number, number>()
+    delMes.set(proyectoId, (delMes.get(proyectoId) ?? 0) + u.tokens)
+    tokens.set(u.mes, delMes)
+  }
+
+  const costoReal = new Map<number, number>()
+  const sumar = (proyectoId: number, monto: number) => costoReal.set(proyectoId, (costoReal.get(proyectoId) ?? 0) + monto)
+  let asignacion: AsignacionCosto | undefined
+  for (const [mes, total] of pools) {
+    const a = asignar(mes, total, tokens.get(mes) ?? new Map(), ai)
+    if (mes === mesActual) asignacion = a
+    for (const f of a.filas) sumar(f.proyectoId, f.monto)
+  }
+
+  const enPool = new Set(filas.map((s) => s.id))
+  const ligados = db
+    .select({ id: costos.id, proyectoId: costos.proyectoId, subtotal: costos.subtotal })
+    .from(costos)
+    .where(and(isNotNull(costos.proyectoId), ne(costos.estado, 'cancelado'), gte(costos.fecha, rango.desde), lte(costos.fecha, rango.hasta)))
+    .all()
+  for (const c of ligados) if (deAiIds.has(c.proyectoId!) && !enPool.has(c.id)) sumar(c.proyectoId!, c.subtotal)
+  return { asignacion: asignacion!, costoReal }
 }
 
 /**
@@ -443,6 +559,9 @@ export function resumenAi(db: Db, ajustes: Ajustes, root: string, periodo: Perio
   // Todo el tiempo ends today too, as in Finanzas.
   const rango = { desde: periodo === 'mes' ? desde : '', hasta }
   const filas = suscripciones(db, rango)
+  const ubicaciones = db.select().from(ubicacionesArchivo).all()
+  const enlace = { ubicaciones, enlazar: enlazarUso(ubicaciones), ai: deAi(db) }
+  const { asignacion, costoReal } = asignaciones(db, enlace, rango, filas, hoy)
   return {
     periodo,
     tokens: uso.tokens,
@@ -455,7 +574,8 @@ export function resumenAi(db: Db, ajustes: Ajustes, root: string, periodo: Perio
     suscripciones: filas,
     suscripcionesTotal: filas.reduce((s, f) => s + f.monto, 0),
     ...ingresosAi(db, periodo, rango, tipoCambio),
-    ...proyectosAi(db, root, enPeriodo(usoTokens.dia), tipoCambio),
+    ...proyectosAi(db, root, enlace, enPeriodo(usoTokens.dia), tipoCambio, costoReal),
+    asignacion,
     ...ultimaLectura(ajustes)
   }
 }
