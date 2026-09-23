@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import type { AgenteOSkill, FilaSuscripcion, PeriodoAi, ResumenAi, UsoModelo } from '../../../shared/dominio'
+import { createMemoryRouter, RouterProvider } from 'react-router'
+import type { AgenteOSkill, FilaProyectoAi, FilaSuscripcion, PeriodoAi, ResumenAi, UsoModelo } from '../../../shared/dominio'
 import type { DmmApi } from '../../../shared/contrato'
 import { dia, monto } from '../../../shared/formato'
 import { fecha } from './Seccion'
@@ -22,6 +23,38 @@ const MODELOS: Record<PeriodoAi, UsoModelo[]> = {
   todo: [modelo('claude', 'haiku', 2_100_000, 280), modelo('claude', 'sonnet', 21_000_000, 12_500), modelo('claude', 'opus', 24_100_000, 18_270), modelo('openai', 'gpt', 1_000_000, 0)]
 }
 
+const proyectoAi = (id: number, nombre: string, cambios: Partial<FilaProyectoAi> = {}): FilaProyectoAi => ({
+  id,
+  referencia: `PRY-00${id}`,
+  nombre,
+  etiqueta: 'cliente',
+  contactoId: 20 + id,
+  contacto: 'Hotel Aura',
+  clienteFinal: null,
+  categoria: 'ai',
+  fechaInicio: '2026-04-10',
+  estado: 'en_curso',
+  carpeta: { estado: 'disponible', ruta: `Proyectos/${nombre}`, abrible: true },
+  modelos: [],
+  tokens: 0,
+  costoUsd: 0,
+  costoApiMxn: null,
+  ...cambios
+})
+
+const PROYECTOS: Record<PeriodoAi, FilaProyectoAi[]> = {
+  mes: [
+    proyectoAi(1, 'Aura', { estado: 'completado', modelos: ['sonnet', 'opus'], tokens: 9_100_000, costoUsd: 5_326, costoApiMxn: 98_000, carpeta: { estado: 'archivado', ruta: 'Archivo/Proyectos/Aura', abrible: false } }),
+    proyectoAi(4, 'Chatbot Terra', { contacto: 'Grupo Terra', clienteFinal: 'Terra Norte', fechaInicio: '2025-11-02', estado: 'pausado', costoApiMxn: 0, carpeta: { estado: 'no_disponible', ruta: 'Proyectos/Chatbot Terra', abrible: false } }),
+    proyectoAi(3, 'Netdeckr', { referencia: null, etiqueta: 'personal', contactoId: null, contacto: null, modelos: ['opus'], tokens: 6_600_000, costoUsd: 3_315, costoApiMxn: 61_000 })
+  ],
+  todo: [
+    proyectoAi(1, 'Aura', { estado: 'completado', modelos: ['haiku', 'sonnet', 'opus'], tokens: 30_000_000, costoUsd: 250_000 }),
+    proyectoAi(4, 'Chatbot Terra', { contacto: 'Grupo Terra', fechaInicio: '2025-11-02', estado: 'pausado', modelos: ['haiku'], tokens: 400_000, costoUsd: 2_200 }),
+    proyectoAi(3, 'Netdeckr', { referencia: null, etiqueta: 'personal', contactoId: null, contacto: null, modelos: ['opus'], tokens: 16_000_000, costoUsd: 60_000 })
+  ]
+}
+
 const resumen = (periodo: PeriodoAi, cambios: Partial<ResumenAi> = {}): ResumenAi => ({
   periodo,
   tokens: periodo === 'mes' ? 15_700_000 : 48_200_000,
@@ -33,6 +66,10 @@ const resumen = (periodo: PeriodoAi, cambios: Partial<ResumenAi> = {}): ResumenA
   modelos: MODELOS[periodo],
   suscripciones: periodo === 'mes' ? SUSCRIPCIONES_MES : [...SUSCRIPCIONES_MES, SUSCRIPCION_AGOSTO],
   suscripcionesTotal: periodo === 'mes' ? 54_000 : 90_000,
+  ingresoProyectos: periodo === 'mes' ? 5_800_000 : 12_300_000,
+  ingresoAi: periodo === 'mes' ? 1_800_000 : 7_450_000,
+  proyectos: PROYECTOS[periodo],
+  sinProyecto: periodo === 'mes' ? { tokens: 500_000, costoUsd: 900, costoApiMxn: 16_560 } : { tokens: 1_800_000, costoUsd: 3_100, costoApiMxn: null },
   ultimoEscaneo: ESCANEO,
   avisos: [],
   ...cambios
@@ -45,6 +82,8 @@ const AGENTES: AgenteOSkill[] = [
 ]
 
 let api: DmmApi['ai']
+let abrirCarpeta: DmmApi['proyectos']['abrirCarpeta']
+let router: ReturnType<typeof createMemoryRouter>
 
 const montar = (ai: Partial<DmmApi['ai']> = {}) => {
   api = {
@@ -54,9 +93,26 @@ const montar = (ai: Partial<DmmApi['ai']> = {}) => {
     abrir: vi.fn(async () => {}),
     ...ai
   }
-  window.dmm = { ai: api } as unknown as DmmApi
-  render(<Ai />)
+  abrirCarpeta = vi.fn(async () => {})
+  window.dmm = { ai: api, proyectos: { abrirCarpeta } } as unknown as DmmApi
+  router = createMemoryRouter(
+    [
+      { path: '/ai', element: <Ai /> },
+      { path: '/proyectos/:id', element: <p>Ficha del proyecto</p> }
+    ],
+    { initialEntries: ['/ai'] }
+  )
+  render(<RouterProvider router={router} />)
 }
+
+/** The AI Proyectos table's rows, each as its cells' text. */
+const filasProyectos = () =>
+  within(screen.getByRole('table', { name: 'AI Proyectos' }))
+    .getAllByRole('row')
+    .slice(1)
+    .map((f) => within(f).getAllByRole('cell').map((c) => c.textContent))
+
+const filaProyecto = (nombre: string) => within(screen.getByRole('table', { name: 'AI Proyectos' })).getByText(nombre).closest('tr') as HTMLElement
 
 const agente = (nombre: string) => within(screen.getByRole('list', { name: 'Agentes y Skills' })).getByText(nombre).closest('li') as HTMLElement
 
@@ -222,5 +278,126 @@ describe('AI', () => {
   it('says when AI/ has no agents or skills', async () => {
     montar({ agentesYSkills: vi.fn(async () => []) })
     expect(await screen.findByText('Ningún agente ni skill en AI/.')).toBeTruthy()
+  })
+})
+
+describe('Ingreso cards', () => {
+  it('shows what AI Proyectos were quoted and what AI income was collected, for each period', async () => {
+    montar()
+    await screen.findByText('15.7 M')
+    expect(tarjeta(/Ingreso proyectos AI/).textContent).toContain('$58,000.00')
+    expect(tarjeta(/Ingreso proyectos AI/).textContent).toContain('cotizado')
+    expect(tarjeta(/^Ingreso AI$/).textContent).toContain('$18,000.00')
+    expect(tarjeta(/^Ingreso AI$/).textContent).toContain('cobrado')
+    fireEvent.click(screen.getByRole('button', { name: 'Todo el tiempo' }))
+    await screen.findByText('48.2 M')
+    expect(tarjeta(/Ingreso proyectos AI/).textContent).toContain('$123,000.00')
+    expect(tarjeta(/^Ingreso AI$/).textContent).toContain('$74,500.00')
+  })
+})
+
+describe('AI Proyectos', () => {
+  it('lists the AI Proyectos in the order given, with models, tokens and API cost', async () => {
+    montar()
+    await screen.findByRole('table', { name: 'AI Proyectos' })
+    expect(filasProyectos()).toEqual([
+      ['Aura', 'PRY-001', 'Hotel Aura', 'sonnet, opus', '9.1 M', '$980.00', 'Completado', 'Archivado'],
+      ['Chatbot Terra', 'PRY-004', 'Grupo Terra · Terra Norte', '—', '0', '$0.00', 'Pausado', 'No disponible'],
+      ['Netdeckr', '—', 'Personal', 'opus', '6.6 M', '$610.00', 'En curso', 'Abrir'],
+      ['Sin proyecto', '', '', '', '500.0 K', '$165.60', '', '']
+    ])
+  })
+
+  it('shows the period’s usage', async () => {
+    montar()
+    await screen.findByRole('table', { name: 'AI Proyectos' })
+    fireEvent.click(screen.getByRole('button', { name: 'Todo el tiempo' }))
+    await screen.findByText('48.2 M')
+    expect(filaProyecto('Aura').textContent).toContain('haiku, sonnet, opus')
+    expect(filaProyecto('Aura').textContent).toContain('30.0 M')
+    expect(filaProyecto('Sin proyecto').textContent).toContain('1.8 M')
+  })
+
+  it('shows the API cost in USD when the app has no tipo de cambio', async () => {
+    montar()
+    await screen.findByRole('table', { name: 'AI Proyectos' })
+    fireEvent.click(screen.getByRole('button', { name: 'Todo el tiempo' }))
+    await screen.findByText('48.2 M')
+    expect(filaProyecto('Aura').textContent).toContain(monto(250_000, 'USD'))
+    expect(filaProyecto('Sin proyecto').textContent).toContain(monto(3_100, 'USD'))
+  })
+
+  const nombres = () => filasProyectos().map((f) => f[0])
+  const elegir = (filtro: string, valor: string) => fireEvent.change(screen.getByRole('combobox', { name: filtro }), { target: { value: valor } })
+
+  it('filters by cliente, including Personal', async () => {
+    montar()
+    await screen.findByRole('table', { name: 'AI Proyectos' })
+    elegir('Cliente', '24')
+    expect(nombres()).toEqual(['Chatbot Terra'])
+    elegir('Cliente', 'personal')
+    expect(nombres()).toEqual(['Netdeckr'])
+  })
+
+  it('filters by referencia, año, categoría, token usage and estado', async () => {
+    montar()
+    await screen.findByRole('table', { name: 'AI Proyectos' })
+    fireEvent.change(screen.getByPlaceholderText('Buscar ref., proyecto AI…'), { target: { value: 'pry-004' } })
+    expect(nombres()).toEqual(['Chatbot Terra'])
+    fireEvent.change(screen.getByPlaceholderText('Buscar ref., proyecto AI…'), { target: { value: '' } })
+    elegir('Año', '2025')
+    expect(nombres()).toEqual(['Chatbot Terra'])
+    elegir('Año', '')
+    elegir('Categoría', 'personal')
+    expect(nombres()).toEqual(['Netdeckr'])
+    elegir('Categoría', 'cliente')
+    expect(nombres()).toEqual(['Aura', 'Chatbot Terra'])
+    elegir('Categoría', '')
+    elegir('Uso tokens', 'sin_uso')
+    expect(nombres()).toEqual(['Chatbot Terra'])
+    elegir('Uso tokens', 'con_uso')
+    expect(nombres()).toEqual(['Aura', 'Netdeckr'])
+    elegir('Uso tokens', '')
+    elegir('Estado', 'completado')
+    expect(nombres()).toEqual(['Aura'])
+  })
+
+  it('says when no AI Proyecto matches', async () => {
+    montar()
+    await screen.findByRole('table', { name: 'AI Proyectos' })
+    elegir('Estado', 'cancelado')
+    expect(screen.getByText('Ningún proyecto AI coincide.')).toBeTruthy()
+  })
+
+  it('opens the Proyecto record from its row', async () => {
+    montar()
+    await screen.findByRole('table', { name: 'AI Proyectos' })
+    fireEvent.click(filaProyecto('Netdeckr'))
+    await screen.findByText('Ficha del proyecto')
+    expect(router.state.location.pathname).toBe('/proyectos/3')
+  })
+
+  it('opens an available folder through the API, and shows Archivado and No disponible as they are', async () => {
+    montar()
+    await screen.findByRole('table', { name: 'AI Proyectos' })
+    fireEvent.click(within(filaProyecto('Netdeckr')).getByRole('button', { name: 'Abrir' }))
+    await waitFor(() => expect(abrirCarpeta).toHaveBeenCalledWith(3))
+    expect(router.state.location.pathname).toBe('/ai')
+    expect(within(filaProyecto('Aura')).queryByRole('button', { name: 'Abrir' })).toBeNull()
+    expect(within(filaProyecto('Chatbot Terra')).queryByRole('button', { name: 'Abrir' })).toBeNull()
+  })
+
+  it('says why a folder could not be opened', async () => {
+    montar()
+    await screen.findByRole('table', { name: 'AI Proyectos' })
+    vi.mocked(abrirCarpeta).mockRejectedValueOnce(new Error('La carpeta está No disponible'))
+    fireEvent.click(within(filaProyecto('Netdeckr')).getByRole('button', { name: 'Abrir' }))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('La carpeta está No disponible'))
+  })
+
+  it('says when there are no AI Proyectos', async () => {
+    montar({ resumen: vi.fn(async (p: PeriodoAi) => resumen(p, { proyectos: [], sinProyecto: { tokens: 0, costoUsd: 0, costoApiMxn: null } })) })
+    expect(await screen.findByText('Ningún proyecto en la categoría AI.')).toBeTruthy()
+    expect(screen.queryByRole('table', { name: 'AI Proyectos' })).toBeNull()
   })
 })
