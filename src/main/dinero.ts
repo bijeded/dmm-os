@@ -1,4 +1,5 @@
 import type { Moneda } from '../shared/dominio'
+import { ivaDe } from '../shared/montos'
 import type { ingresos } from './db/schema'
 
 type Montos = Pick<typeof ingresos.$inferSelect, 'total' | 'montoOriginal' | 'monedaOriginal'>
@@ -28,26 +29,40 @@ export function montoEn(i: Montos, moneda: Moneda, tipoCambio?: number | null) {
   return tipoCambio ? convertir(i.total, 'MXN', 'USD', tipoCambio) : 0
 }
 
-/** An amount as recorded: subtotal, IVA and total in MXN, and the USD total it came from, if any. */
+/** An amount as recorded: subtotal, IVA, retenciones and total in MXN, and the USD total it came from, if any. */
 export interface MontosRegistrados {
   subtotal: number
   iva: number
+  retenciones: number
   total: number
   montoOriginal: number | null
   monedaOriginal: 'USD' | null
 }
 
 /**
- * `subtotal` and `iva` as recorded. With `tasaUsd` they are in USD: each converts at the rate and
- * their USD total is kept as the original, which Cobros compares against. Without one they are pesos.
+ * The one constructor for recorded amounts. `iva` is whether 16% IVA applies on `subtotal`, or the
+ * IVA itself; the total is subtotal + IVA − retenciones. With `tasaUsd` the inputs are USD cents:
+ * each part converts at the rate and their USD total is kept as the original, which Cobros compares
+ * against. Without one they are centavos.
  */
-export function enMxn(subtotal: number, iva: number, tasaUsd: number | null): MontosRegistrados {
+export function montos(
+  subtotal: number,
+  { iva, retenciones = 0, tasaUsd = null }: { iva: boolean | number; retenciones?: number; tasaUsd?: number | null }
+): MontosRegistrados {
+  const impuesto = typeof iva === 'number' ? iva : ivaDe(subtotal, iva)
   const mxn = (n: number) => (tasaUsd === null ? n : convertir(n, 'USD', 'MXN', tasaUsd))
   return {
     subtotal: mxn(subtotal),
-    iva: mxn(iva),
-    total: mxn(subtotal) + mxn(iva),
-    montoOriginal: tasaUsd === null ? null : subtotal + iva,
+    iva: mxn(impuesto),
+    retenciones: mxn(retenciones),
+    total: mxn(subtotal) + mxn(impuesto) - mxn(retenciones),
+    montoOriginal: tasaUsd === null ? null : subtotal + impuesto - retenciones,
     monedaOriginal: tasaUsd === null ? null : 'USD'
   }
+}
+
+/** Splits `total` into `n` parts that add up to it, the remainder going to the first. */
+export function repartir(total: number, n: number) {
+  const parte = Math.floor(total / n)
+  return Array.from({ length: n }, (_, i) => (i === 0 ? total - parte * (n - 1) : parte))
 }

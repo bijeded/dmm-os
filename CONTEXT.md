@@ -55,6 +55,9 @@ Revenue, costs and profit KPIs use the subtotal (before IVA). IVA is tracked and
 **Retenciones**:
 Taxes the payer withholds from an invoice (TotalImpuestosRetenidos), kept apart from IVA (TotalImpuestosTrasladados). The total is what the bank sees: subtotal + IVA − retenciones. Only imported CFDIs and their Reembolsos carry them; everything else has zero. Shown next to IVA in Finanzas; KPIs still use the subtotal.
 
+**Montos**:
+The recorded amounts of an Ingreso or Costo: subtotal, IVA, retenciones, total (subtotal + IVA − retenciones), and the USD original when there is one. Built only by the money module (`dinero`), which also splits an amount into parts that add up. The 16% IVA rule sits beside it in the shared money rules (`shared/montos`) so the Cotización preview uses the same one.
+
 **Folio** assignment:
 A Cotización receives its Folio when marked sent. Drafts have none.
 

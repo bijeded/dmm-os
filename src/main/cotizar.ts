@@ -11,7 +11,8 @@ import { plantillaCotizacion } from './plantilla-cotizacion'
 import { planCobro } from './plan-cobro'
 import { crearCarpeta } from './proyectos'
 import { CATEGORIAS, CATEGORIAS_COSTO, FACTURACIONES, type Categoria, type CotizacionNueva, type EstadoCotizacion, type FichaCotizacion, type ListaCotizaciones, type PartidaCotizacion } from '../shared/dominio'
-import { folioDmm, totalesCotizacion } from '../shared/formato'
+import { folioDmm } from '../shared/formato'
+import { totalesCotizacion } from '../shared/montos'
 import { sumarDias } from '../shared/fechas'
 
 /** Prints a page of HTML to PDF bytes; in the app, Electron's `printToPDF`. */
