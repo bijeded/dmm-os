@@ -76,16 +76,13 @@ describe('Agentes y Skills', () => {
     // A code repo inside the Proyecto keeps its own .claude.
     proyecto('Aura', 'Proyectos/Aura Maristany')
     archivo('Proyectos/Aura Maristany/App/.claude/agents/code-reviewer.md')
-    // Archived to Archivo/, still on disk.
-    proyecto('Versa', 'Archivo/Proyectos/Versa', 'archivo')
-    archivo('Archivo/Proyectos/Versa/.claude/agents/code-reviewer.md')
     // Another agent's copy, and a Proyecto whose folder isn't on disk.
     proyecto('Sonríeme', 'Proyectos/Sonríeme')
     archivo('Proyectos/Sonríeme/.claude/agents/otro.md')
     proyecto('Hospital Jardín', 'Proyectos/Hospital Jardín')
 
     expect(agentesYSkills(db, root).map((a) => [a.nombre, a.usadoEn])).toEqual([
-      ['code-reviewer', ['Aura', 'Netdeckr', 'Versa']],
+      ['code-reviewer', ['Aura', 'Netdeckr']],
       ['newsletter-writer', ['Netdeckr']]
     ])
   })
@@ -95,6 +92,9 @@ describe('Agentes y Skills', () => {
     archivo('Proyectos/Netdeckr/.claude/agents/code-reviewer.md')
     // A folder with the skill's name but no SKILL.md is not a copy.
     archivo('Proyectos/Netdeckr/.claude/skills/newsletter-writer/notas.md')
+    // An archived Proyecto is done; its folder is deleted once backed up.
+    proyecto('Versa', 'Archivo/Proyectos/Versa', 'archivo')
+    archivo('Archivo/Proyectos/Versa/.claude/skills/newsletter-writer/SKILL.md')
     expect(agentesYSkills(db, root).find((a) => a.tipo === 'skill')?.usadoEn).toEqual([])
   })
 
