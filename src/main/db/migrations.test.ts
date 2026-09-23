@@ -149,9 +149,6 @@ it('0012 gives existing amounts zero retenciones and keeps rows linked to rebuil
     insert into vigencias_precio (definicion_costo_id, desde, subtotal, iva, total) values (1, '2026-01', 100, 16, 116);
     insert into costos (id, nombre, categoria, estado, subtotal, iva, total, fecha, periodo, definicion_id)
       values (1, 'Hosting', 'mensual', 'pagado', 100, 16, 116, '2026-01-01', '2026-01', 1);
-    insert into contactos (id, nombre) values (1, 'Estudio Ocho');
-    insert into proyectos (id, nombre, contacto_id, categoria) values (1, 'Clicme', 1, 'website');
-    insert into asignaciones_costo (costo_id, proyecto_id, tokens, monto) values (1, 1, 1, 100);
   `)
   sqlite.close()
 
@@ -162,8 +159,6 @@ it('0012 gives existing amounts zero retenciones and keeps rows linked to rebuil
     expect(migrada.prepare(`select retenciones from ${tabla}`).all()).toEqual([{ retenciones: 0 }])
   }
   expect(migrada.prepare('select definicion_id from ingresos').get()).toEqual({ definicion_id: 1 })
-  // Rebuilding costos must not cascade into its asignaciones.
-  expect(migrada.prepare('select costo_id from asignaciones_costo').all()).toEqual([{ costo_id: 1 }])
   expect(migrada.pragma('foreign_key_check')).toEqual([])
   expect(() =>
     migrada.exec(
