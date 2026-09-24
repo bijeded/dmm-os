@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { tituloCls } from './components/estilos'
 import type { DmmApi } from '../../shared/contrato'
@@ -58,6 +58,34 @@ describe('app shell', () => {
     expect(ruta().textContent).toBe('DMM OS / Proyectos / Nuevo')
     expect(within(ruta()).getByRole('link', { name: 'Proyectos' }).getAttribute('href')).toBe('/proyectos')
     expect(screen.getAllByRole('navigation', { name: 'Ruta' })).toHaveLength(1)
+  })
+
+  it('drops a record’s tail when leaving it, so a revisit never shows a stale one', async () => {
+    sinDatos()
+    const ficha = {
+      contacto: { id: 7, nombre: 'Hotel Aura', empresa: null, rfc: null, email: null, telefono: null, direccion: null, notas: null, creadoEn: '2019-03-14T10:00:00.000Z' },
+      estado: 'cliente_activo',
+      valor: 0,
+      porCobrar: 0,
+      proyectos: 0,
+      cotizaciones: { total: 0, aceptadas: 0 },
+      historial: [],
+      carpeta: null,
+      archivos: []
+    }
+    // The first visit loads the Contacto; the revisit is still loading.
+    let visitas = 0
+    const pendiente = window.dmm.contactos
+    window.dmm = new Proxy({} as DmmApi, {
+      get: (_, k) =>
+        k === 'contactos' ? new Proxy(pendiente, { get: (p, m) => (m === 'ficha' ? () => (visitas++ ? new Promise(() => {}) : Promise.resolve(ficha)) : Reflect.get(p, m)) }) : pendiente
+    })
+    const router = createMemoryRouter(routes, { initialEntries: ['/contactos/7'] })
+    render(<RouterProvider router={router} />)
+    await waitFor(() => expect(ruta().textContent).toBe('DMM OS / Contactos / Hotel Aura'))
+    await act(() => router.navigate('/contactos'))
+    await act(() => router.navigate('/contactos/7'))
+    expect(ruta().textContent).toBe('DMM OS / Contactos')
   })
 
   it('goes back to the section from the header path', async () => {

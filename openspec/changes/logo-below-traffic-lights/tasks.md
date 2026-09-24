@@ -20,7 +20,7 @@
 
 ## 4. Review and final checks
 
-- [ ] 4.1 Run `/code-review` on the branch diff and fix what it confirms
-- [ ] 4.2 Run `/security-review` (the change touches Electron window settings in `src/main/index.ts`) and fix what it confirms
-- [ ] 4.3 Confirm no CONTEXT.md term or ADR is needed (none expected: no domain term or hard-to-reverse decision is involved)
-- [ ] 4.4 Run `npm run typecheck`, `npm run lint` and `npm test`; all pass
+- [x] 4.1 Run `/code-review` on the branch diff and fix what it confirms
+- [x] 4.2 Run `/security-review` (the change touches Electron window settings in `src/main/index.ts`) and fix what it confirms
+- [x] 4.3 Confirm no CONTEXT.md term or ADR is needed (none expected: no domain term or hard-to-reverse decision is involved)
+- [x] 4.4 Run `npm run typecheck`, `npm run lint` and `npm test`; all pass
