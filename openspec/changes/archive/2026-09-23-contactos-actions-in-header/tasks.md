@@ -11,7 +11,7 @@
 
 ## 3. Visual check
 
-- [ ] 3.1 Run the app (`npm run dev`) and take screenshots of Contactos and Finanzas scrolled to the top. The buttons should sit right-aligned on the title line, the logo should still be level with the title caps (`barra-lateral`), and `Nuevo costo` and `Exportar CSV` should look alike. Ask before using browser or screen automation to take them
+- [x] 3.1 Run the app (`npm run dev`) and take screenshots of Contactos and Finanzas scrolled to the top. The buttons should sit right-aligned on the title line, the logo should still be level with the title caps (`barra-lateral`), and `Nuevo costo` and `Exportar CSV` should look alike. Ask before using browser or screen automation to take them
 
 ## 4. Review and final checks
 
