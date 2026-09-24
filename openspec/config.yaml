@@ -61,6 +61,14 @@ rules:
     - Tests that create temp folders remove them
     - End with `npm run typecheck`, `npm run lint`, and `npm test`
     - Add a task to update CONTEXT.md or write an ADR when the change resolves a term or decision
+    - Add a code review task after implementation (/code-review on the branch diff), and fix
+      what it confirms before the final checks
+    - Add a security review task (/security-review) when the change touches a sensitive area —
+      the IPC surface (src/preload, src/shared/contrato.ts, src/main/handlers.ts), Electron
+      window or shell settings (src/main/index.ts), file system reads and writes or path
+      resolution (rutas, carpetas, lab, importacion), external input parsing (cfdi.ts, CFDI XML,
+      imported PDFs and folders), the AI module reading local files (ai.ts), or the database,
+      migrations, Respaldo and Restauración (src/main/db, backup.ts)
 
 operations:
   apply:
