@@ -168,6 +168,33 @@ function anotarConocido(mapa: Mapa, nombre: string, contactoId: number, origen: 
   if (fila && mapa.contactoDe(fila) === undefined) mapa.anotar(fila, contactoId)
 }
 
+/**
+ * A folder already imported under its own name: the Contacto of that name, and for a Proyectos
+ * folder its Proyecto of that name too. Such a folder keeps what it was imported as.
+ */
+function importadoSinMapa(tx: Tx, nombre: string, conProyecto = true): { contactoId: number; nombre: string } | undefined {
+  const contacto = tx.select().from(contactos).all().find((c) => clave(c.nombre) === clave(nombre))
+  if (!contacto || !conProyecto) return contacto && { contactoId: contacto.id, nombre: contacto.nombre }
+  const proyecto = tx
+    .select()
+    .from(proyectos)
+    .where(eq(proyectos.contactoId, contacto.id))
+    .all()
+    .find((p) => clave(p.nombre) === clave(nombre))
+  return proyecto && { contactoId: contacto.id, nombre: proyecto.nombre }
+}
+
+/**
+ * A `Clientes/` folder names a Contacto only. One already imported under its own name keeps
+ * that Contacto; its map row, if added since, only counts as found.
+ */
+export function contactoDeCarpetaCliente(tx: Tx, mapa: Mapa, nombre: string): ResultadoContacto {
+  const previo = importadoSinMapa(tx, nombre, false)
+  if (!previo) return atribuir(tx, mapa, nombre, 'clientes')
+  anotarConocido(mapa, nombre, previo.contactoId, 'clientes')
+  return resolverSinFila(tx, mapa, nombre)
+}
+
 /** The Cliente final the map gives a legacy quote, found again from its PDF's name. */
 function clienteFinalDeCotizacion(mapa: Mapa, c: { pdfRutaRelativa: string | null }): string | null {
   const nombre = c.pdfRutaRelativa ? leerNombreArchivo(posix.basename(c.pdfRutaRelativa))?.nombre : undefined
@@ -275,7 +302,13 @@ export function importarCarpetaProyecto(
       return { proyectoId: conocida.proyectoId, creado: false, contactosCreados: [], sugerencias: 0 }
     }
 
-    const { contactoId, proyecto: mapeado, clienteFinal, ...aportes } = atribuir(tx, mapa, entrada.nombre, 'proyectos')
+    // The same folder imported earlier from another root, before a map row said otherwise, is
+    // that Proyecto: the map applies only on first import.
+    const previo = entrada.nombre.includes('/') ? undefined : importadoSinMapa(tx, entrada.nombre)
+    if (previo) anotarConocido(mapa, entrada.nombre, previo.contactoId, 'proyectos')
+    const { contactoId, proyecto: mapeado, clienteFinal, ...aportes } = previo
+      ? { ...resolverSinFila(tx, mapa, entrada.nombre), proyecto: previo.nombre, clienteFinal: null }
+      : atribuir(tx, mapa, entrada.nombre, 'proyectos')
     const nombre = mapeado ?? posix.basename(entrada.nombre)
     // Matched by Nombre canónico, so the same Proyecto foldered `Sonrieme` in one root and
     // `Sonríeme` in another is one Proyecto with two locations, not two Proyectos.

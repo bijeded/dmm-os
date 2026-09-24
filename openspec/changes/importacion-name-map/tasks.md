@@ -30,6 +30,6 @@
 
 ## 5. Review and final checks
 
-- [ ] 5.1 Run `/code-review` on the branch diff and fix what it confirms
-- [ ] 5.2 Run `/security-review`. The change adds an IPC channel, reads and parses a user file (CSV) from the `DMM OS` folder, builds stored paths from subfolder names, and opens a database copy. Fix what it confirms
-- [ ] 5.3 Run `npm run typecheck`, `npm run lint` and `npm test`; all pass
+- [x] 5.1 Run `/code-review` on the branch diff and fix what it confirms
+- [x] 5.2 Run `/security-review`. The change adds an IPC channel, reads and parses a user file (CSV) from the `DMM OS` folder, builds stored paths from subfolder names, and opens a database copy. Fix what it confirms
+- [x] 5.3 Run `npm run typecheck`, `npm run lint` and `npm test`; all pass

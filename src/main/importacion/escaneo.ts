@@ -8,7 +8,7 @@ import { contactos, proyectos } from '../db/schema'
 import { hoy as hoyLocal } from '../../shared/fechas'
 import { carpetaDeProyectos, rutaDeProyecto, type TipoCarpetaProyecto } from '../paths'
 import {
-  atribuir,
+  contactoDeCarpetaCliente,
   importarCarpetaProyecto,
   importarCotizacion,
   marcarHddNoDisponible,
@@ -215,7 +215,7 @@ function contactosDeDisco(db: Db, root: string, corrida: Corrida): void {
   }
   for (const nombre of nombres) {
     try {
-      const { contactosCreados, sugerencias } = db.transaction((tx) => atribuir(tx, corrida.mapa, nombre, 'clientes'))
+      const { contactosCreados, sugerencias } = db.transaction((tx) => contactoDeCarpetaCliente(tx, corrida.mapa, nombre))
       sumar(corrida, { contactosCreados, sugerencias }, 'clientes')
     } catch (e) {
       corrida.log.errores.push({ archivo: posix.join('Clientes', nombre), error: mensaje(e) })

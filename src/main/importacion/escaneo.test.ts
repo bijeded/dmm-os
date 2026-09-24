@@ -658,6 +658,30 @@ describe('el mapa aplica solo al importar por primera vez', () => {
     expect(nombresDeContactos()).toEqual(['Frida Comunicacion'])
     expect(log.filasMapa).toEqual([])
   })
+
+  it('keeps a Clientes folder on the Contacto it was imported as', () => {
+    carpeta(root, 'Clientes', 'Frida Comunicacion')
+    escanearCarpetas(db, root)
+    mapa(root, `${CABECERA}Frida Comunicacion,Frida,,\n`)
+
+    const log = escanearCarpetas(db, root)
+    expect(nombresDeContactos()).toEqual(['Frida Comunicacion'])
+    expect(log.nuevos.contactos).toEqual([])
+    expect(log.filasMapa).toEqual([])
+  })
+
+  it('records a Proyecto folder found in a new place on the Proyecto it was imported as', () => {
+    carpeta(root, 'Proyectos', 'Frida Comunicacion')
+    escanearCarpetas(db, root)
+    mapa(root, `${CABECERA}Frida Comunicacion,Frida,Sitio,\n`)
+    carpeta(hdd, 'Proyectos', 'Frida Comunicacion')
+
+    const log = escanearCarpetas(db, root, hdd)
+    expect(nombresDeContactos()).toEqual(['Frida Comunicacion'])
+    expect(db.select().from(proyectos).all().map((p) => p.nombre)).toEqual(['Frida Comunicacion'])
+    expect(db.select().from(ubicacionesArchivo).all().map((u) => u.tipo).sort()).toEqual(['hdd_externo', 'proyectos'])
+    expect(log.nuevos).toEqual({ contactos: [], proyectos: [], rfcs: [] })
+  })
 })
 
 describe('el RFC desde el mapa', () => {
