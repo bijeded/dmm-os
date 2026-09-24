@@ -125,6 +125,14 @@ describe('Finanzas', () => {
     await waitFor(() => expect(api.resumen).toHaveBeenCalledWith('anio'))
   })
 
+  it('shows Nuevo costo as secondary and Nuevo ingreso as primary in the title row', async () => {
+    montar()
+    await screen.findByRole('list', { name: 'Resumen' })
+    const fila = screen.getByRole('heading', { level: 1 }).parentElement!
+    expect(within(fila).getByRole('button', { name: 'Nuevo costo' }).className).toContain('border-border-strong')
+    expect(within(fila).getByRole('button', { name: 'Nuevo ingreso' }).className).toContain('bg-primary')
+  })
+
   it('shows subtotal KPIs with IVA apart, and profit against a year without costs as Sin datos', async () => {
     montar()
     const kpis = await screen.findByRole('list', { name: 'Resumen' })

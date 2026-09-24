@@ -52,6 +52,17 @@ describe('Contactos', () => {
     expect(within(stats).getByText('Total contactos').nextSibling?.textContent).toBe('13')
   })
 
+  it('puts Exportar CSV and Nuevo contacto in the title row, one secondary and one primary', async () => {
+    await screen.findByText('Clínica Sol')
+    const fila = screen.getByRole('heading', { level: 1 }).parentElement!
+    const [exportar, nuevo] = within(fila).getAllByRole('button')
+    expect([exportar.textContent, nuevo.textContent]).toEqual(['Exportar CSV', 'Nuevo contacto'])
+    expect(exportar.className).toContain('border-border-strong')
+    expect(nuevo.className).toContain('bg-primary')
+    const tarjeta = screen.getByRole('table').closest('section')!
+    expect(within(tarjeta).getAllByRole('button').map((b) => b.textContent)).toEqual(['Anterior', 'Siguiente'])
+  })
+
   it('pages the table ten at a time', async () => {
     await screen.findByText('Clínica Sol')
     expect(filas()).toHaveLength(10)
