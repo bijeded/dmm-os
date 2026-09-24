@@ -35,9 +35,9 @@ See proposal.md for the motivation, and the `importacion` spec delta for the beh
 
 This is a new module, `src/main/importacion/mapa.ts`, with no fs access:
 
-- `leerMapa(texto): Mapa | ErrorMapa` parses the header and rows. It handles the delimiter (`,` or `;`, whichever the header line uses) and double-quoted fields with `""` escapes, and strips a BOM, because Numbers and Excel write one. A header missing `en disco` or `contacto` returns `ErrorMapa`. Row problems (a missing required field, a duplicate key) are collected with their 1-based line numbers, and the first row with a given key wins.
+- `leerMapa(texto): Mapa | ErrorMapa` parses the header and rows. It handles the delimiter (`,` or `;`, whichever the header line uses) and double-quoted fields with `""` escapes, and strips a BOM, because Numbers and Excel write one. A header missing `en disco` or `contacto` returns `ErrorMapa`. Unknown columns are dropped, and short rows are padded with empty fields. Row problems (a missing `contacto`, neither `en disco` nor `rfc`, a duplicate key) are collected with their 1-based line numbers, and the first row with a given key wins.
 - `Mapa.buscar(nombre)` looks up rows keyed by `clave(en disco)`. `Mapa.subcarpetas(carpeta)` returns the declared subfolder rows of a folder, keyed by `clave(carpeta)` plus `clave(subcarpeta)`, split at the first `/`.
-- Every hit marks its row used, and `Mapa.sinUso()` lists the rows never hit, for the Log.
+- Every hit marks its row used, and `Mapa.sinUso()` lists the rows never hit, for the Log. RFC-only rows (no `en disco`) are never "sin uso"; they are applied by the RFC pass (decision 8).
 
 `escaneo.ts` reads `Clientes/_nombres.csv` once at the start of `escanearCarpetas` and passes the `Mapa` down. A missing file (ENOENT) gives an empty map and `log.mapa = 'ausente'`. Any other read error, or an `ErrorMapa`, returns a log carrying that error before any pass runs, so nothing is imported.
 
@@ -50,7 +50,7 @@ This is a new module, `src/main/importacion/mapa.ts`, with no fs access:
 `carpetas.ts` gains `atribuir(tx, mapa, nombre, origen)`. It returns `{ contactoId, proyecto: string | null, clienteFinal: string | null }` and applies the rules in this order:
 
 1. A map row: `resolverContacto(tx, fila.contacto, { canonico: true })`. With `canonico` set, a `clave` match renames the Contacto to the map's spelling, bypassing `mejorEscrito`, and a new Contacto gets that spelling.
-2. Legacy Cotización only, when the name contains ` - `: the Contacto is resolved from the part before the dash, and `proyecto` is the part after it.
+2. Legacy Cotización only, when the name contains ` - `: the part before the dash goes back through step 1 as a name (so `Sublime` → "Sublime Inspiración" applies), falling back to `resolverContacto`; `proyecto` is the part after the dash.
 3. Otherwise, today's behavior.
 
 `importarCotizacion` (old format) and `importarCarpetaProyecto` call `atribuir`. `contactosDeDisco` calls it only for the Contacto, and ignores `proyecto` and `clienteFinal` for a `Clientes/` folder.
@@ -79,7 +79,8 @@ For each folder in a Proyectos root, the scan asks `mapa.subcarpetas(nombre)`:
 - `mapa: 'ausente' | 'leido' | { error: string }`
 - `filasMapa: { linea: number; problema: 'sin uso' | 'incompleta' | 'duplicada'; enDisco: string }[]`
 - `subcarpetasSinProyecto: string[]`
-- `nuevos: { contactos: { nombre: string; origen: Origen }[]; proyectos: { nombre: string; contacto: string; origen: Origen }[] }`, where `Origen` is `'clientes' | 'proyectos' | 'cotizacion'`
+- `nuevos: { contactos: { nombre: string; origen: Origen }[]; proyectos: { nombre: string; contacto: string; origen: Origen }[]; rfcs: { contacto: string; rfc: string }[] }`, where `Origen` is `'clientes' | 'proyectos' | 'cotizacion' | 'mapa'` (`mapa` for a Contacto created by an RFC-only row)
+- `filasMapa[].problema` also takes `'rfc invalido' | 'rfc generico' | 'rfc de otro contacto' | 'contacto con otro rfc'`
 
 `nuevos` is collected through `Aportes`, the same way `contactosCreados` is today. Names are re-read by id at the end of the run, because a later file may rename a Contacto to a better spelling. The real scan fills these fields too. Logs shows `nuevos` only for Vista previa, to keep the scan result short.
 
@@ -99,12 +100,29 @@ The new channel is `importacion.vistaPrevia: canal<[], LogCarpetas>()` in `src/s
 
 `Logs.tsx` adds `Vista previa` as a secondary button beside `Re-escanear carpetas`. Its result renders below the buttons with the same counts `Corridas` shows. It adds the new Contactos and Proyectos grouped by origen, the map problems, the undeclared subfolders, and a note that nothing was saved. `Re-escanear carpetas` also shows the map error and the map problems when it gets them.
 
+### 8. RFCs are applied in one pass at the end of the scan
+
+After every pass (including the new-format quotes and the accepted-quotes pass), `asignarRfcs(db, mapa, usadas)` runs in one transaction:
+
+1. It collects the rows with `rfc`. For a row with `en disco`, the Contacto is the one `atribuir` resolved when the name was found (recorded on the hit), and the row is skipped if the name was never found. For a row without `en disco`, the Contacto is `resolverContacto(tx, fila.contacto, { canonico: true })`, which creates it when missing, with `origen: 'mapa'`.
+2. It normalises the RFC (uppercase, no spaces) and checks it against `^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$`. It rejects `XAXX010101000` and `XEXX010101000`.
+3. It groups by Contacto and by RFC. The first row wins in each group, and later conflicting rows are reported.
+4. It writes only where `contactos.rfc` is null and no other Contacto holds the RFC. The unique index `contactos_rfc_unique` is the backstop, and the check before it turns a would-be constraint error into a reported row.
+
+Running it at the end means any name that resolves to the Contacto, in any pass, can carry its RFC. Applying it on every scan does not re-attribute anything: it only fills a null column, which is why the "first import only" rule can make this one exception.
+
+*Alternative considered:* an RFC field in the Contacto form. That is still worth having, but the map covers the 46 historical RFCs in one file, and the preview checks them before anything is written.
+
+*Why the Facturas run is unchanged:* `importarCfdi` already links by `contactos.rfc`. Ordering (folder scan, then Importar facturas) is enough for the first import. Re-linking invoices imported earlier is the follow-up change.
+
 ## Risks / Trade-offs
 
 - **The split misreads a name that contains ` - ` but is not `Cliente - Proyecto`.** → Vista previa lists the resulting Contacto, and a map row overrides the split.
 - **The map spelling renames an existing Contacto when a row's `contacto` differs only in accents or case.** → This is intended: the map is the user's word. Only `clave`-equal names are renamed. A different name creates a different Contacto, which the preview shows.
 - **The in-memory copy doubles memory for the database's size.** → The database holds a small business's records (MBs). The copy lives only for one call.
 - **A declared parent's undeclared subfolders are not imported, so files could look lost.** → They stay on disk untouched. The Log and the preview list each one, and adding a row imports it next scan.
+- **Invoices imported before their Contacto had an RFC stay unlinked.** → Vista previa and the Logs make the order visible. The follow-up Facturas change re-links them. Today the database is empty, so the first run in the right order avoids it.
+- **A Contacto that invoices under two RFCs keeps only one.** → The second is reported. Multiple RFCs per Contacto need a schema change and belong to the Facturas change.
 - **The map is applied only at first import.** → That is accepted by design (spec). The preview is the way to iterate, and the database is empty today.
 
 ## Migration Plan
@@ -113,6 +131,6 @@ No schema change. The user's steps:
 
 1. Write `Clientes/_nombres.csv`.
 2. Run Vista previa until the counts look right.
-3. Run Re-escanear carpetas once.
+3. Run Re-escanear carpetas once, then Importar facturas.
 
 Rollback is the Respaldo taken before the scan, or Restauración.
