@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { useNavigate, useParams } from 'react-router'
 import { CATEGORIAS, CATEGORIAS_COSTO, FACTURACIONES, NOMBRES_CATEGORIA, NOMBRES_CATEGORIA_COSTO, NOMBRES_FACTURACION, type ConceptoCatalogo, type CotizacionNueva, type FilaContacto } from '../../../shared/dominio'
 import { pesos } from '../../../shared/formato'
 import { totalesCotizacion } from '../../../shared/montos'
@@ -7,6 +7,7 @@ import { hoy } from '../../../shared/fechas'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { campoCls, celdaCls, etiquetaCls, tituloCls } from './estilos'
+import { useRuta } from './ruta'
 
 const numCls = `${campoCls} w-28 font-mono text-[12px]`
 
@@ -85,14 +86,10 @@ export function NuevaCotizacion() {
       navigate(`/cotizaciones/${f.id}`)
     })
 
+  useRuta(editando ? 'Editar borrador' : 'Nueva')
+
   return (
     <>
-      <nav aria-label="Ruta" className="font-mono text-[10px] tracking-[.12em] text-on-surface-muted uppercase">
-        <Link to="/cotizaciones" className="text-primary-text">
-          Cotizaciones
-        </Link>{' '}
-        / {editando ? 'Editar borrador' : 'Nueva'}
-      </nav>
       <div className="acts flex flex-wrap items-center justify-between gap-3">
         <h1 className={tituloCls}>{editando ? 'Editar cotización' : 'Nueva cotización'}</h1>
         <div className="flex gap-2">

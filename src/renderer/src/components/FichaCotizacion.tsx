@@ -5,6 +5,7 @@ import { dia, folioDmm, pesos } from '../../../shared/formato'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { celdaCls, etiquetaCls, tituloCls } from './estilos'
+import { useRuta } from './ruta'
 
 /** The quote's record: its data, its PDF and what can happen to it next. */
 export function FichaCotizacion() {
@@ -23,14 +24,10 @@ export function FichaCotizacion() {
   const api = window.dmm.cotizaciones
   const f = ficha
 
+  useRuta(f?.folio ? folioDmm(f.folio) : 'Borrador')
+
   return (
     <>
-      <nav aria-label="Ruta" className="font-mono text-[10px] tracking-[.12em] text-on-surface-muted uppercase">
-        <Link to="/cotizaciones" className="text-primary-text">
-          Cotizaciones
-        </Link>{' '}
-        / {f?.folio ? folioDmm(f.folio) : 'Borrador'}
-      </nav>
       <div className="acts flex flex-wrap items-center justify-between gap-3">
         <h1 className={tituloCls}>{f?.nombre || 'Cotización'}</h1>
         {f && (

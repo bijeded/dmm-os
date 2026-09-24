@@ -12,9 +12,11 @@
 - [x] 2.2 Restructure the `aside` in `AppShell.tsx`: a full-width `app-drag` row of `h-topbar` holding nothing, then a logo row at `mt-page-top` as tall as the title line with the logo `--title-cap-top` down and `--title-cap` tall, left edge level with the nav icons, then the nav; verify with a test in `App.test.tsx` that the logo is not inside the drag row and the nav order is unchanged
 - [x] 2.3 Check the current Electron docs (context7) for `trafficLightPosition` with `hiddenInset`, then set it in `src/main/index.ts` (starting from about `{ x: 18, y: 17 }`); verify `npm run typecheck`
 
+- [x] 2.4 Add `RutaContext` and `useRuta(cola)`; make the header render `DMM OS / <sección> / <cola>` with the section as a link when the current page set a tail; remove the `<nav aria-label="Ruta">` from `FichaContacto`, `FichaProyecto`, `FichaCotizacion`, `NuevoProyecto`, `NuevaCotizacion` and `NuevoMovimiento` and call `useRuta` instead; verify with tests in `App.test.tsx` that a form page's header reads `DMM OS / Proyectos / Nuevo`, the section links back, and no path sits above the title, and that the page tests still pass
+
 ## 3. Visual check
 
-- [ ] 3.1 Run the app (`npm run dev`) and take screenshots of Inicio, Contactos, Configuración and one Proyecto page, scrolled to the top: the logo's top and bottom are level with the title caps' top and baseline, the controls are centered on the `DMM OS / <sección>` line, and nothing sits beside the controls. Adjust `trafficLightPosition` until they line up. Ask before using browser or screen automation to take them
+- [x] 3.1 Run the app (`npm run dev`) and take screenshots of Inicio, Contactos, Configuración and one Proyecto page, scrolled to the top: the logo's top and bottom are level with the title caps' top and baseline, the controls are centered on the `DMM OS / <sección>` line, and nothing sits beside the controls. Adjust `trafficLightPosition` until they line up. Ask before using browser or screen automation to take them
 
 ## 4. Review and final checks
 

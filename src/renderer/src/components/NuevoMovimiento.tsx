@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { useNavigate } from 'react-router'
 import { CATEGORIAS_COSTO, NOMBRES_CATEGORIA_COSTO, type CategoriaCosto, type FilaContacto, type FilaProyecto } from '../../../shared/dominio'
 import { hoy } from '../../../shared/fechas'
 import { centavosDe } from '../../../shared/montos'
@@ -7,17 +7,14 @@ import { Campo } from './NuevaCotizacion'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { campoCls, tituloCls } from './estilos'
+import { useRuta } from './ruta'
 
 function Formulario({ titulo, accion, ocupado, guardar, error, children }: { titulo: string; accion: string; ocupado: boolean; guardar: () => void; error: string | null; children: ReactNode }) {
   const navigate = useNavigate()
+  useRuta(titulo)
+
   return (
     <>
-      <nav aria-label="Ruta" className="font-mono text-[10px] tracking-[.12em] text-on-surface-muted uppercase">
-        <Link to="/finanzas" className="text-primary-text">
-          Finanzas
-        </Link>{' '}
-        / {titulo}
-      </nav>
       <div className="acts flex flex-wrap items-center justify-between gap-3">
         <h1 className={tituloCls}>{titulo}</h1>
         <div className="flex gap-2">

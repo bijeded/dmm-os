@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { useNavigate, useParams } from 'react-router'
 import { CATEGORIAS, NOMBRES_CATEGORIA, type Categoria, type FilaContacto, type ProyectoNuevo } from '../../../shared/dominio'
 import { Campo } from './NuevaCotizacion'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { campoCls, tituloCls } from './estilos'
+import { useRuta } from './ruta'
 
 const vacio = (): ProyectoNuevo => ({
   nombre: '',
@@ -53,14 +54,10 @@ export function NuevoProyecto() {
       navigate(`/proyectos/${f.id}`)
     })
 
+  useRuta(editando ? 'Editar' : 'Nuevo')
+
   return (
     <>
-      <nav aria-label="Ruta" className="font-mono text-[10px] tracking-[.12em] text-on-surface-muted uppercase">
-        <Link to="/proyectos" className="text-primary-text">
-          Proyectos
-        </Link>{' '}
-        / {editando ? 'Editar' : 'Nuevo'}
-      </nav>
       <div className="acts flex flex-wrap items-center justify-between gap-3">
         <h1 className={tituloCls}>{editando ? 'Editar proyecto' : 'Nuevo proyecto'}</h1>
         <div className="flex gap-2">

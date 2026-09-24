@@ -6,6 +6,7 @@ import { NOMBRES_CARPETA } from './Proyectos'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { tituloCls } from './estilos'
+import { useRuta } from './ruta'
 
 /** The Proyecto's record: its data, its folder, what is still owed and what can happen to it next. */
 export function FichaProyecto() {
@@ -25,14 +26,10 @@ export function FichaProyecto() {
   const puede = (a: Ficha['acciones'][number]) => f?.acciones.includes(a)
   const fecha = (d: string | null) => (d ? dia(d) : '—')
 
+  useRuta(f?.referencia)
+
   return (
     <>
-      <nav aria-label="Ruta" className="font-mono text-[10px] tracking-[.12em] text-on-surface-muted uppercase">
-        <Link to="/proyectos" className="text-primary-text">
-          Proyectos
-        </Link>{' '}
-        / {f?.referencia}
-      </nav>
       <div className="acts flex flex-wrap items-center justify-between gap-3">
         <h1 className={tituloCls}>{f?.nombre || 'Proyecto'}</h1>
         {f && (

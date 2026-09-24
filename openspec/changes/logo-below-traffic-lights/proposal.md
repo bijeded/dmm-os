@@ -12,6 +12,7 @@ The DMM logo sits in the same 48px row as the macOS window controls, a few point
 - The header height, page top padding and page title size become shared tokens, so the sidebar and the page area can't drift apart.
 - `SectionPage` and `Configuracion` use the shared title style (`tituloCls`) instead of copies of its classes.
 - The sidebar nav moves down by the height of the logo row.
+- Record and form pages drop the path above their title; the header shows it instead (`DMM OS / PROYECTOS / NUEVO`), so their title starts where a section page's does.
 
 ## Non-goals
 
@@ -37,4 +38,5 @@ None. No specs exist yet.
 - `src/renderer/src/index.css`: shared layout tokens.
 - `src/renderer/src/components/estilos.ts`, `SectionPage.tsx`, `Configuracion.tsx`: one title style.
 - `src/main/index.ts`: `trafficLightPosition` on the `BrowserWindow`.
+- `FichaContacto`, `FichaProyecto`, `FichaCotizacion`, `NuevoProyecto`, `NuevaCotizacion`, `NuevoMovimiento`: in-page path removed, tail handed to the header.
 - No CONTEXT.md terms are touched and no new term is introduced. No ADR is affected.

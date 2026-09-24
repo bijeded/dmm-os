@@ -43,6 +43,21 @@ The DMM logo SHALL sit in the sidebar below the window-controls row, above the n
 - **WHEN** the user scrolls a page down
 - **THEN** the title scrolls away under the header and the logo stays where it is in the sidebar
 
+### Requirement: Record and form pages show their path in the header
+A record or form page SHALL show where it sits in the header path, as `DMM OS / <sección> / <registro>`, with `<sección>` linking back to the section. The page SHALL NOT repeat that path above its title. A section page SHALL keep showing `DMM OS / <sección>`.
+
+#### Scenario: A Contacto's path
+- **WHEN** the user opens a Contacto named Hospital Jardín
+- **THEN** the header reads `DMM OS / CONTACTOS / HOSPITAL JARDÍN`, `CONTACTOS` links to Contactos, and no path appears above the title
+
+#### Scenario: A form's path
+- **WHEN** the user opens Nuevo proyecto
+- **THEN** the header reads `DMM OS / PROYECTOS / NUEVO` and the title is the first thing on the page
+
+#### Scenario: Back to a section page
+- **WHEN** the user follows `PROYECTOS` in the header from Nuevo proyecto
+- **THEN** Proyectos opens and the header reads `DMM OS / PROYECTOS`
+
 ### Requirement: The nav follows the logo
 The section nav SHALL start below the logo row, in the same order as before, with Configuración still pinned to the bottom of the sidebar.
 
