@@ -1,6 +1,8 @@
-import { NavLink, Outlet, useLocation } from 'react-router'
+import { useState } from 'react'
+import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { sections } from '../sections'
 import { Logo } from './Logo'
+import { type Ruta, RutaContext } from './ruta'
 
 export function AppShell() {
   const { pathname } = useLocation()
@@ -8,14 +10,20 @@ export function AppShell() {
   const current = sections.find((s) => s.path !== '/' && (pathname === s.path || pathname.startsWith(`${s.path}/`))) ?? sections[0]
   const main = sections.slice(0, -1)
   const settings = sections[sections.length - 1]
+  // A record or form page adds its own tail; it only shows while that page is open.
+  const [ruta, setRuta] = useState<Ruta | null>(null)
+  const cola = ruta?.path === pathname ? ruta.cola : null
 
   return (
     <div className="flex min-h-screen w-full bg-surface text-on-surface">
-      <aside className="sb sticky top-0 flex h-screen w-[186px] shrink-0 flex-col gap-[3px] self-start overflow-y-auto border-r border-border px-3 py-[18px]">
-        <div className="app-drag -mt-[18px] mb-6 flex h-12 items-center px-1.5 pl-[72px]">
-          <Logo />
+      <aside className="sb sticky top-0 flex h-screen w-[186px] shrink-0 flex-col self-start overflow-y-auto border-r border-border px-3 pb-[18px]">
+        {/* The window controls get this row to themselves. */}
+        <div className="app-drag -mx-3 h-topbar shrink-0" />
+        {/* Level with the page title: the logo spans its capital letters. */}
+        <div className="mt-page-top mb-6 h-title-line shrink-0 px-3 pt-title-cap-top">
+          <Logo className="h-title-cap w-auto" />
         </div>
-        <nav className="flex flex-1 flex-col gap-[3px]">
+        <nav aria-label="Secciones" className="flex flex-1 flex-col gap-[3px]">
           {main.map((s) => (
             <NavItem key={s.path} {...s} />
           ))}
@@ -25,13 +33,25 @@ export function AppShell() {
         </nav>
       </aside>
       <main className="shell-main relative isolate flex min-w-0 flex-1 flex-col">
-        <header className="hd app-drag sticky top-0 z-10 flex h-12 items-center justify-between gap-3 border-b border-border px-[30px] backdrop-blur-[14px]">
-          <div className="font-mono text-[10px] tracking-[.12em] text-on-surface-muted uppercase">
-            DMM OS <span className="text-primary-text">/</span> {current.label}
-          </div>
+        <header className="hd app-drag sticky top-0 z-10 flex h-topbar items-center justify-between gap-3 border-b border-border px-[30px] backdrop-blur-[14px]">
+          <nav aria-label="Ruta" className="font-mono text-[10px] tracking-[.12em] text-on-surface-muted uppercase">
+            DMM OS <span className="text-primary-text">/</span>{' '}
+            {cola ? (
+              <>
+                <Link to={current.path} className="text-primary-text">
+                  {current.label}
+                </Link>{' '}
+                <span className="text-primary-text">/</span> {cola}
+              </>
+            ) : (
+              current.label
+            )}
+          </nav>
         </header>
-        <div className="pg flex flex-col gap-[18px] px-[30px] pt-6 pb-9">
-          <Outlet />
+        <div className="pg flex flex-col gap-[18px] px-[30px] pt-page-top pb-9">
+          <RutaContext value={setRuta}>
+            <Outlet />
+          </RutaContext>
         </div>
       </main>
     </div>

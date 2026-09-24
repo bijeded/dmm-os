@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { useNavigate, useParams } from 'react-router'
 import { NOMBRES_ESTADO_CONTACTO, type FichaContacto as Ficha, type Movimiento } from '../../../shared/dominio'
 import { dia, pesos } from '../../../shared/formato'
 import { FormContacto } from './FormContacto'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { celdaCls, etiquetaCls, tituloCls } from './estilos'
+import { useRuta } from './ruta'
 
 const tipos: Record<Movimiento['tipo'], string> = { cotizacion: 'Cotización', proyecto: 'Proyecto', pago: 'Pago' }
 const filtros = [
@@ -67,14 +68,10 @@ export function FichaContacto() {
   const historial = ficha?.historial.filter((m) => filtro === 'todo' || m.tipo === filtro) ?? []
   const conversion = ficha && ficha.cotizaciones.total > 0 ? Math.round((ficha.cotizaciones.aceptadas / ficha.cotizaciones.total) * 100) : 0
 
+  useRuta(c?.nombre)
+
   return (
     <>
-      <nav aria-label="Ruta" className="font-mono text-[10px] tracking-[.12em] text-on-surface-muted uppercase">
-        <Link to="/contactos" className="text-primary-text">
-          Contactos
-        </Link>{' '}
-        / {c?.nombre}
-      </nav>
       <div className="acts flex flex-wrap items-center justify-between gap-3">
         <h1 className={tituloCls}>{c?.nombre ?? 'Contacto'}</h1>
         {ficha && (

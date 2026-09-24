@@ -30,6 +30,20 @@
   --font-sans: 'Asap', 'Open Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 
+  /* Page title; the sidebar logo lines up with its capital letters */
+  --text-title: 29px;
+  --text-title--line-height: 1.22;
+
+  /* Shell layout, shared by the sidebar and the page area */
+  --spacing-topbar: 48px;
+  --spacing-page-top: 24px;
+  --spacing-title-line: calc(var(--text-title) * var(--text-title--line-height));
+  /* Antonio 700 metrics (antonio-latin-700-normal.woff): 2048 units/em, ascent 2365, descent 285, cap height 1760 */
+  --spacing-title-cap: calc(var(--text-title) * 1760 / 2048);
+  --spacing-title-cap-top: calc(
+    (var(--spacing-title-line) - var(--text-title) * (2365 + 285) / 2048) / 2 + var(--text-title) * (2365 - 1760) / 2048
+  );
+
   --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-control: 10px;
