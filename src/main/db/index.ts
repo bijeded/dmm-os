@@ -19,6 +19,8 @@ export interface Conexion {
   ajustes: Ajustes
   /** Writes a consistent single-file copy of the database, WAL contents included. */
   copiarA(path: string): void
+  /** A throwaway in-memory copy with the live schema: writes to it never reach the database. */
+  copiaEnMemoria(): { db: Db; close(): void }
   close(): void
 }
 
@@ -77,6 +79,16 @@ export function createDatabase(migrationsFolder: string) {
       },
       copiarA: (path) => {
         sqlite.prepare('VACUUM INTO ?').run(path)
+      },
+      copiaEnMemoria: () => {
+        const contenido = sqlite.serialize()
+        // Header bytes 18-19 say WAL (2), which an in-memory database cannot open; the copy
+        // becomes a plain rollback-journal database (1). The live file is untouched.
+        contenido[18] = 1
+        contenido[19] = 1
+        const copia = new Database(contenido)
+        copia.pragma('foreign_keys = ON')
+        return { db: drizzle(copia, { schema }), close: () => copia.close() }
       },
       close: () => sqlite.close()
     }

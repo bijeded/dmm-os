@@ -1,5 +1,14 @@
-import { useEffect, useState } from 'react'
-import type { Corrida, EstadoImportacion, LogCarpetas, LogImportacion, RespuestaSugerencia, Sugerencia } from '../../../shared/dominio'
+import { useEffect, useState, type ReactNode } from 'react'
+import type {
+  Corrida,
+  EstadoImportacion,
+  LogCarpetas,
+  LogImportacion,
+  OrigenImportado,
+  ProblemaFilaMapa,
+  RespuestaSugerencia,
+  Sugerencia
+} from '../../../shared/dominio'
 import { Aviso, Seccion, fecha, mensaje, useAccion } from './Seccion'
 import { Button } from './ui/button'
 
@@ -12,6 +21,7 @@ export function Logs() {
   const api = window.dmm.importacion
   const [estado, setEstado] = useState<EstadoImportacion>({ facturas: null, carpetas: null })
   const [sugerencias, setSugerencias] = useState<Sugerencia[]>([])
+  const [vista, setVista] = useState<LogCarpetas | null>(null)
   const { error, setError, ocupado, correr } = useAccion()
 
   useEffect(() => {
@@ -31,16 +41,28 @@ export function Logs() {
   const contestar = (id: number, respuesta: RespuestaSugerencia) =>
     correr(async () => setSugerencias(await api.responder(id, respuesta)))
 
+  // A real scan makes the last preview stale.
+  const escanear = () => importar(async () => {
+    setVista(null)
+    await api.carpetas()
+  })
+  const previsualizar = () => correr(async () => setVista(await api.vistaPrevia()))
+
   return (
     <Seccion id="logs" titulo="Logs">
       <div className="flex flex-wrap gap-2">
-        <Button disabled={ocupado} onClick={() => importar(() => api.carpetas())}>
+        <Button disabled={ocupado} onClick={escanear}>
           Re-escanear carpetas
+        </Button>
+        <Button variant="secondary" disabled={ocupado} onClick={previsualizar}>
+          Vista previa
         </Button>
         <Button variant="secondary" disabled={ocupado} onClick={() => importar(() => api.facturas())}>
           Importar facturas
         </Button>
       </div>
+
+      {vista && <VistaPrevia log={vista} />}
 
       <Corridas estado={estado} />
 
@@ -94,7 +116,11 @@ function Corridas({ estado }: { estado: EstadoImportacion }) {
   }
   return (
     <div className="flex flex-col gap-3">
-      {estado.carpetas && <CorridaVista titulo="Carpetas" corrida={estado.carpetas} lineas={lineasCarpetas(estado.carpetas.log)} />}
+      {estado.carpetas && (
+        <CorridaVista titulo="Carpetas" corrida={estado.carpetas} lineas={lineasCarpetas(estado.carpetas.log)}>
+          <DetalleMapa log={estado.carpetas.log} />
+        </CorridaVista>
+      )}
       {estado.facturas && <CorridaVista titulo="Facturas" corrida={estado.facturas} lineas={lineasFacturas(estado.facturas.log)} />}
     </div>
   )
@@ -103,11 +129,13 @@ function Corridas({ estado }: { estado: EstadoImportacion }) {
 function CorridaVista<L extends { errores: { archivo: string; error: string }[]; noDisponibles: string[] }>({
   titulo,
   corrida,
-  lineas
+  lineas,
+  children
 }: {
   titulo: string
   corrida: Corrida<L>
   lineas: string[]
+  children?: ReactNode
 }) {
   return (
     <div className="flex flex-col gap-1 border-t border-border pt-2 text-[13px]">
@@ -127,7 +155,97 @@ function CorridaVista<L extends { errores: { archivo: string; error: string }[];
           {e.archivo}: {e.error}
         </span>
       ))}
+      {children}
     </div>
+  )
+}
+
+const ORIGENES: Record<OrigenImportado, string> = {
+  clientes: 'Clientes/',
+  proyectos: 'Proyectos/',
+  cotizacion: 'Cotizaciones',
+  mapa: 'Mapa de nombres'
+}
+
+const PROBLEMAS: Record<ProblemaFilaMapa, string> = {
+  'sin uso': 'no coincide con nada en disco',
+  incompleta: 'incompleta: falta "contacto", o "en disco" y "rfc"',
+  duplicada: 'repite "en disco" de una fila anterior',
+  'rfc invalido': 'RFC inválido',
+  'rfc generico': 'RFC genérico',
+  'rfc de otro contacto': 'el RFC ya es de otro Contacto',
+  'contacto con otro rfc': 'el Contacto ya tiene otro RFC'
+}
+
+/**
+ * Vista previa: what a real scan would add to the database as it is now. Nothing of it was
+ * saved, and it never replaces the last real run below.
+ */
+function VistaPrevia({ log }: { log: LogCarpetas }) {
+  const { contactos, proyectos, rfcs } = log.nuevos
+  return (
+    <div className="flex flex-col gap-1 border-t border-border pt-2 text-[13px]">
+      <span className="text-on-surface-muted">Vista previa · Nada se guardó.</span>
+      {typeof log.mapa !== 'object' && (
+        <>
+          {lineasCarpetas(log).map((l) => (
+            <span key={l}>{l}</span>
+          ))}
+          <PorOrigen titulo="Contactos nuevos" items={contactos.map((c) => ({ texto: c.nombre, origen: c.origen }))} />
+          <PorOrigen
+            titulo="Proyectos nuevos"
+            items={proyectos.map((p) => ({ texto: `${p.nombre} (${p.contacto})`, origen: p.origen }))}
+          />
+          {rfcs.length > 0 && <span>RFC a asignar: {rfcs.map((r) => `${r.contacto} ${r.rfc}`).join(', ')}</span>}
+          {log.noDisponibles.map((n) => (
+            <span key={n} className="text-on-surface-muted">
+              No disponible: {n}
+            </span>
+          ))}
+          {log.errores.map((e) => (
+            <span key={e.archivo} className="text-error-text">
+              {e.archivo}: {e.error}
+            </span>
+          ))}
+        </>
+      )}
+      <DetalleMapa log={log} />
+    </div>
+  )
+}
+
+function PorOrigen({ titulo, items }: { titulo: string; items: { texto: string; origen: OrigenImportado }[] }) {
+  const origenes = (Object.keys(ORIGENES) as OrigenImportado[]).filter((o) => items.some((i) => i.origen === o))
+  return origenes.map((o) => {
+    const deOrigen = items.filter((i) => i.origen === o)
+    return (
+      <span key={`${titulo}-${o}`}>
+        <span className="text-on-surface-muted">
+          {titulo} · {ORIGENES[o]} ({deOrigen.length}):
+        </span>{' '}
+        {deOrigen.map((i) => i.texto).join(', ')}
+      </span>
+    )
+  })
+}
+
+/** What the Mapa de nombres did not apply, and the subfolders left out because of it. */
+function DetalleMapa({ log }: { log: LogCarpetas }) {
+  return (
+    <>
+      {typeof log.mapa === 'object' && <span className="text-error-text">{log.mapa.error}</span>}
+      {log.filasMapa.map((f) => (
+        <span key={`${f.linea}-${f.problema}`} className="text-error-text">
+          Mapa de nombres, línea {f.linea}
+          {f.enDisco && ` (${f.enDisco})`}: {PROBLEMAS[f.problema]}
+        </span>
+      ))}
+      {log.subcarpetasSinProyecto.map((s) => (
+        <span key={s} className="text-on-surface-muted">
+          Subcarpeta sin Proyecto: {s}
+        </span>
+      ))}
+    </>
   )
 }
 

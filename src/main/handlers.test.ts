@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { eq } from 'drizzle-orm'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDatabase, type Conexion } from './db'
-import { contactos, costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, vigenciasPrecio } from './db/schema'
+import { contactos, costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, sugerenciasImportacion, vigenciasPrecio } from './db/schema'
 import { MENSAJE_SIN_PAGAR } from './ciclo-proyecto'
 import { MENSAJE_REEMBOLSO_EXCEDIDO } from './dinero'
 import { crearHandlers, type HandlersOptions } from './handlers'
@@ -82,6 +82,54 @@ describe('Logs', () => {
     expect(await h.importacion.estado()).toEqual({ facturas: null, carpetas: null })
     const log = await h.importacion.facturas()
     expect(await h.importacion.estado()).toEqual({ facturas: { corridoEn: '2026-09-16T10:00:00.000Z', log }, carpetas: null })
+  })
+})
+
+describe('Vista previa', () => {
+  const enDisco = () => {
+    mkdirSync(join(root, 'Clientes', 'Sublime'), { recursive: true })
+    mkdirSync(join(root, 'Clientes', 'Sublime Inspiración'), { recursive: true })
+    mkdirSync(join(root, 'Proyectos', 'Clicme'), { recursive: true })
+    mkdirSync(join(root, 'Cotizaciones', '2023'), { recursive: true })
+    writeFileSync(join(root, 'Cotizaciones', '2023', 'DMM - 312 - Appleseed Plataforma.pdf'), '%PDF-1.4')
+    writeFileSync(join(root, 'Clientes', '_nombres.csv'), 'en disco,contacto,proyecto\nAppleseed Plataforma,Appleseed,Plataforma\n')
+  }
+  const cuenta = () =>
+    [contactos, cotizaciones, proyectos, sugerenciasImportacion].map((t) => conexion.db.select().from(t).all().length)
+
+  it('reports what a scan would add and writes nothing', async () => {
+    enDisco()
+    const log = await h.importacion.vistaPrevia()
+    expect(log).toMatchObject({
+      mapa: 'leido',
+      cotizaciones: { importadas: 1 },
+      contactos: { creados: 4 },
+      proyectos: { creados: 1 },
+      sugerencias: 1
+    })
+    expect(log.nuevos.contactos.map((c) => c.nombre)).toEqual(['Appleseed', 'Sublime', 'Sublime Inspiración', 'Clicme'])
+    expect(cuenta()).toEqual([0, 0, 0, 0])
+    expect(await h.importacion.estado()).toEqual({ facturas: null, carpetas: null })
+  })
+
+  it('leaves the last real scan in Logs, and finds nothing new after it', async () => {
+    enDisco()
+    const real = await h.importacion.carpetas()
+    const antes = cuenta()
+
+    const log = await h.importacion.vistaPrevia()
+    expect(log.nuevos).toEqual({ contactos: [], proyectos: [], rfcs: [] })
+    expect(log).toMatchObject({ cotizaciones: { importadas: 0, duplicadas: 1 }, contactos: { creados: 0 }, sugerencias: 0 })
+    expect(cuenta()).toEqual(antes)
+    expect((await h.importacion.estado()).carpetas).toEqual({ corridoEn: '2026-09-16T10:00:00.000Z', log: real })
+  })
+
+  it('shows the same error a real scan would for a broken map', async () => {
+    enDisco()
+    writeFileSync(join(root, 'Clientes', '_nombres.csv'), 'nombre,cliente\n')
+    const log = await h.importacion.vistaPrevia()
+    expect(log.mapa).toEqual({ error: expect.stringContaining('_nombres.csv') })
+    expect(log.nuevos.contactos).toEqual([])
   })
 })
 
@@ -797,7 +845,7 @@ describe('Every ledger command works Al día', () => {
   // Every entry of every section over the ledger. Typed against the handlers, so a new entry does not compile until it is listed here.
   const entradas: { [S in 'importacion' | 'contactos' | 'cotizaciones' | 'proyectos' | 'finanzas' | 'inicio' | 'ai']: Record<keyof DmmHandlers[S], Uso> } = {
     // Imported history is exempt (ADR-0002): the importer writes through the connection, and the next call brings it Al día.
-    importacion: { facturas: 'fuera', carpetas: 'fuera', estado: 'fuera', sugerencias: 'fuera', responder: 'fuera' },
+    importacion: { facturas: 'fuera', carpetas: 'fuera', vistaPrevia: 'fuera', estado: 'fuera', sugerencias: 'fuera', responder: 'fuera' },
     contactos: { listar: () => h.contactos.listar(), ficha: (a) => h.contactos.ficha(a.contactoId), guardar: 'orden', borrar: 'orden', csv: () => h.contactos.csv() },
     cotizaciones: {
       listar: () => h.cotizaciones.listar(),

@@ -72,7 +72,32 @@ export interface LogCarpetas {
   errores: { archivo: string; error: string }[]
   /** Folders the app knows but could not read on this run (No disponible). */
   noDisponibles: string[]
+  /** The Mapa de nombres: missing, read, or unreadable (and then nothing was imported). */
+  mapa: 'ausente' | 'leido' | { error: string }
+  /** Map rows that matched nothing on disk or could not be applied, by line number. */
+  filasMapa: { linea: number; problema: ProblemaFilaMapa; enDisco: string }[]
+  /** Subfolders of a folder whose other subfolders the map declares Proyectos; not imported. */
+  subcarpetasSinProyecto: string[]
+  /** What this run created, named as it ended up, and where each came from. */
+  nuevos: {
+    contactos: { nombre: string; origen: OrigenImportado }[]
+    proyectos: { nombre: string; contacto: string; origen: OrigenImportado }[]
+    rfcs: { contacto: string; rfc: string }[]
+  }
 }
+
+/** Why a row of the Mapa de nombres did nothing. */
+export type ProblemaFilaMapa =
+  | 'sin uso'
+  | 'incompleta'
+  | 'duplicada'
+  | 'rfc invalido'
+  | 'rfc generico'
+  | 'rfc de otro contacto'
+  | 'contacto con otro rfc'
+
+/** Where the folder scan found a name: a `mapa` Contacto came from an RFC-only map row. */
+export type OrigenImportado = 'clientes' | 'proyectos' | 'cotizacion' | 'mapa'
 
 /** One import run, kept so Logs still shows what it found after the run itself is over. */
 export interface Corrida<L> {

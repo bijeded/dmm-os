@@ -112,6 +112,15 @@ Something the importer guessed that waits in Logs for a one-time accept/reject. 
 **Importación**:
 A run that brings existing files into the app: the folder scan (Cotizaciones PDFs, Clientes and Proyectos folders) or the Facturas run (CFDI XML). Each file imports in one transaction, and a Sugerencia de importación is asked only once. A rejected Sugerencia undoes exactly what its guess changed.
 Imported history is exempt from the lifecycle guards: a Proyecto may import as completed without being fully paid, and a Cotización accepted by import creates no Ingresos or Costos (invoiced income arrives through the Facturas run; uninvoiced Ingresos, which carry no IVA, are entered by hand in Finanzas). See ADR-0002.
+The folder scan follows the Mapa de nombres only when a file or folder is first imported: editing the map later moves, renames or removes nothing already imported. The one exception is an RFC, which a later scan still gives to a Contacto that has none.
+
+**Mapa de nombres**:
+`Clientes/_nombres.csv`, edited by the user, telling the folder scan what each name on disk means: its Contacto and, optionally, its Proyecto, Cliente final and the Contacto's RFC. A row keyed `<folder>/<subfolder>` makes that subfolder a Proyecto of its own. A map that exists but cannot be read stops the scan, and rows that matched nothing are reported in Logs.
+_Avoid_: alias file, mapping
+
+**Vista previa**:
+A folder scan run on a throwaway copy of the database, from Configuración → Logs. It shows what a real scan would create and the map's problems, and saves nothing.
+_Avoid_: dry run, simulación
 
 **Proyecto AI**:
 A Proyecto in the `ai` categoría, client or personal.

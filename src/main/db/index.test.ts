@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path'
 import Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createDatabase } from './index'
-import { settings } from './schema'
+import { proyectos, settings } from './schema'
 
 const migrationsFolder = resolve(import.meta.dirname, '../../../drizzle')
 const database = createDatabase(migrationsFolder)
@@ -94,6 +94,32 @@ describe('ajustes', () => {
     ajustes.escribir('k', '2')
     expect(ajustes.leer('k')).toBe('2')
     close()
+  })
+})
+
+describe('copiaEnMemoria', () => {
+  it('copies the live data, WAL included, and keeps writes to the copy away from it', () => {
+    const conexion = database.abrir(join(dir, 'app.db'))
+    conexion.db.insert(settings).values({ key: 'a', value: '1' }).run()
+
+    const copia = conexion.copiaEnMemoria()
+    expect(copia.db.select().from(settings).all()).toEqual([{ key: 'a', value: '1' }])
+    copia.db.insert(settings).values({ key: 'b', value: '2' }).run()
+    expect(copia.db.select().from(settings).all()).toHaveLength(2)
+    copia.close()
+
+    expect(conexion.db.select().from(settings).all()).toEqual([{ key: 'a', value: '1' }])
+    conexion.close()
+  })
+
+  it('enforces foreign keys on the copy', () => {
+    const conexion = database.abrir(join(dir, 'app.db'))
+    const copia = conexion.copiaEnMemoria()
+    expect(() =>
+      copia.db.insert(proyectos).values({ nombre: 'x', contactoId: 999, categoria: 'other' }).run()
+    ).toThrow(/FOREIGN KEY/)
+    copia.close()
+    conexion.close()
   })
 })
 

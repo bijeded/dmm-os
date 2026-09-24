@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { importarFacturas } from '.'
+import { escanearCarpetas, importarFacturas } from '.'
 import { resumenFinanzas } from '../finanzas'
 import { contactos, costos, cotizaciones, ingresos, proyectos, sugerenciasImportacion } from '../db/schema'
 import { contacto, cotizacionAceptada, db, proyecto, reiniciarDb } from '../db/test-db'
@@ -268,5 +268,21 @@ describe('una factura con retenciones', () => {
     expect(r.actual).toMatchObject({ ingresos: 100_000, ivaIngresos: 16_000, retencionesIngresos: 20_667, costos: 100_000, retencionesCostos: 10_000 })
     expect(r.ingresos[0]).toMatchObject({ iva: 16_000, retenciones: 20_667, total: 95_333 })
     expect(r.costos[0]).toMatchObject({ retenciones: 10_000 })
+  })
+})
+
+describe('después del escaneo de carpetas', () => {
+  it('Invoices link after the scan', () => {
+    escribir('Clientes/_nombres.csv', 'en disco,contacto,proyecto,cliente final,rfc\n,Sublime Inspiración,,,SIA161024H91\n')
+    for (const letra of ['A', 'B', 'C']) {
+      const uuid = `${letra}1111111-0000-4444-8888-99AABBCCDDEE`
+      escribir(`Facturas/Emitidas/2026/${letra}.xml`, cfdiXml({ uuid, receptor: 'SIA161024H91' }))
+    }
+
+    escanearCarpetas(db, root)
+    importarFacturas(db, root)
+    const sublime = db.select().from(contactos).all().find((c) => c.nombre === 'Sublime Inspiración')!
+    expect(sublime.rfc).toBe('SIA161024H91')
+    expect(db.select().from(ingresos).all().map((i) => i.contactoId)).toEqual([sublime.id, sublime.id, sublime.id])
   })
 })
