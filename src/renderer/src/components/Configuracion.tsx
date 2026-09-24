@@ -1,5 +1,6 @@
 import { Catalogo } from './Catalogo'
 import { Exportar } from './Exportar'
+import { tituloCls } from './estilos'
 import { Logs } from './Logs'
 import { Ubicacion } from './Ubicacion'
 
@@ -7,7 +8,7 @@ import { Ubicacion } from './Ubicacion'
 export function Configuracion() {
   return (
     <>
-      <h1 className="m-0 font-display text-[29px] leading-[1.22] font-bold tracking-[-.01em] text-on-surface uppercase">Configuración</h1>
+      <h1 className={tituloCls}>Configuración</h1>
       <Ubicacion />
       <Catalogo />
       <Logs />

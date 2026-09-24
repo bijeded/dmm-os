@@ -1,6 +1,8 @@
-export function Logo() {
+import { cn } from '../lib/utils'
+
+export function Logo({ className }: { className?: string }) {
   return (
-    <svg height="24" width="65" className="block shrink-0" viewBox="0 0 284 104" fillRule="evenodd" clipRule="evenodd" role="img" aria-label="DMM Studios">
+    <svg className={cn('block shrink-0', className)} viewBox="0 2 284 100" fillRule="evenodd" clipRule="evenodd" role="img" aria-label="DMM Studios">
       <g transform="matrix(2,0,0,2,93.3519,2)">
         <path d="M0,50L-42,50C-44.209,50 -46,48.209 -46,46L-46,4C-46,1.791 -44.209,0 -42,0L0,0C2.209,0 4,1.791 4,4L4,46C4,48.209 2.209,50 0,50" fill="#EBA51C" />
       </g>

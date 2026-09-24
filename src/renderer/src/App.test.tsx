@@ -2,7 +2,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
+import { tituloCls } from './components/estilos'
+import type { DmmApi } from '../../shared/contrato'
 import { routes } from './routes'
+import { sections } from './sections'
 
 afterEach(cleanup)
 
@@ -20,5 +23,19 @@ describe('app shell', () => {
     renderAt('/finanzas')
     expect(screen.getByRole('link', { name: 'Finanzas' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Finanzas')
+  })
+
+  it('keeps the logo out of the window controls row', () => {
+    renderAt('/')
+    expect(screen.getByRole('img', { name: 'DMM Studios' }).closest('.app-drag')).toBeNull()
+  })
+
+  // The sidebar logo is placed from the title tokens, so every page title has to use them.
+  it.each(sections)('titles $label in the shared title style', ({ path }) => {
+    // Pages that load data get calls that never settle; only the title matters here.
+    const pendiente = new Proxy({}, { get: () => () => new Promise(() => {}) })
+    window.dmm = new Proxy({}, { get: () => pendiente }) as DmmApi
+    renderAt(path)
+    expect(screen.getByRole('heading', { level: 1 }).className).toBe(tituloCls)
   })
 })

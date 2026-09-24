@@ -28,6 +28,8 @@ function createWindow(): void {
     show: false,
     backgroundColor: '#0A0A0B',
     titleBarStyle: 'hiddenInset',
+    // Centered on the header's 48px row, level with the DMM OS / <sección> path
+    trafficLightPosition: { x: 18, y: 17 },
     webPreferences: { preload: join(import.meta.dirname, '../preload/index.mjs'), sandbox: false }
   })
   win.once('ready-to-show', () => win.show())
