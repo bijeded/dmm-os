@@ -75,6 +75,11 @@ export const contrato = {
      * external HDD as a secondary source. Safe to run again at any time.
      */
     carpetas: canal<[], LogCarpetas>(),
+    /**
+     * Vista previa: the same folder scan on a throwaway copy of the database. It reports what
+     * a real scan would add and writes nothing, not even the last run Logs shows.
+     */
+    vistaPrevia: canal<[], LogCarpetas>(),
     /** What the last run of each importer found, so Logs survives leaving the screen. */
     estado: canal<[], EstadoImportacion>(),
     /** The Sugerencias de importación still waiting for an accept/reject. */

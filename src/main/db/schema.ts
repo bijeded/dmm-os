@@ -105,7 +105,10 @@ export const cotizaciones = sqliteTable(
     // Two quotes may share a Folio and be told apart by a letter (`475a`, `475b`). Empty,
     // never null, so the Folio stays a single unique key.
     folioSufijo: text('folio_sufijo').notNull().default(''),
-    /** What the quote is for, as its archived PDF names it. A legacy one may list several. */
+    /**
+     * What the quote is for, as its archived PDF names it. A legacy one may list several, and
+     * holds the Proyecto that the Mapa de nombres or its `Cliente - Proyecto` name gives it.
+     */
     nombre: text('nombre'),
     contactoId: integer('contacto_id')
       .notNull()
@@ -386,7 +389,7 @@ export const ahorroTokens = sqliteTable('ahorro_tokens', {
  */
 export interface DeshacerSugerencia {
   cotizacion?: { estado: (typeof cotizaciones.$inferSelect)['estado'] }
-  proyecto?: { notasAntes: string | null; notasEscritas: string | null }
+  proyecto?: { notasAntes: string | null; notasEscritas: string | null; clienteFinalEscrito?: string }
 }
 
 // Sugerencia de importación: a link the importer guessed, waiting in Logs for a one-time

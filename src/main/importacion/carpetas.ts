@@ -1,10 +1,12 @@
+import { posix } from 'node:path'
 import { and, eq, isNull } from 'drizzle-orm'
-import { nombresDeProyecto, type NombreCotizacion } from '../cotizaciones'
+import { leerNombreArchivo, nombresDeProyecto, type NombreCotizacion } from '../cotizaciones'
 import { hoy as hoyLocal } from '../../shared/fechas'
 import { clave, mejorEscrito, parecidos } from '../nombres'
 import type { Db } from '../db'
 import { proponer } from '../sugerencias'
 import { contactos, cotizaciones, proyectos, ubicacionesArchivo } from '../db/schema'
+import { mapaVacio, type Mapa } from './mapa'
 
 /**
  * Importing what the folders say: a Cotización per archived PDF (keyed by its Folio), a
@@ -21,7 +23,8 @@ type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 
 /** What one file or folder added, summed into the run's log. */
 export interface Aportes {
-  contactosCreados: number
+  /** Ids, so the log can name them once the run has settled every spelling. */
+  contactosCreados: number[]
   sugerencias: number
 }
 
@@ -48,6 +51,7 @@ export interface EntradaCotizacion extends NombreCotizacion {
 }
 
 export interface EntradaCarpeta {
+  /** The folder's name, or `<carpeta>/<subcarpeta>` for a subfolder the map declares a Proyecto. */
   nombre: string
   tipo: TipoUbicacion
   rutaRelativa: string
@@ -74,19 +78,22 @@ function repartirNombres(
  * punctuation, and the better-written spelling becomes the stored Nombre canónico. A name
  * that is merely *close* to an existing one gets its own Contacto and a merge suggestion:
  * near-duplicates are merged only after the suggestion is accepted.
+ *
+ * `canonico` is for a name the user wrote in the Mapa de nombres: its spelling is the Nombre
+ * canónico as given, and it is never flagged as a near-duplicate.
  */
-export function resolverContacto(db: Tx, nombre: string): ResultadoContacto {
+export function resolverContacto(db: Tx, nombre: string, { canonico = false } = {}): ResultadoContacto {
   const todos = db.select().from(contactos).all()
   const igual = todos.find((c) => clave(c.nombre) === clave(nombre))
   if (igual) {
-    const mejor = mejorEscrito(igual.nombre, nombre)
+    const mejor = canonico ? nombre : mejorEscrito(igual.nombre, nombre)
     if (mejor !== igual.nombre) {
       db.update(contactos).set({ nombre: mejor }).where(eq(contactos.id, igual.id)).run()
     }
-    return { contactoId: igual.id, contactosCreados: 0, sugerencias: 0 }
+    return { contactoId: igual.id, contactosCreados: [], sugerencias: 0 }
   }
 
-  const parecido = todos.find((c) => parecidos(c.nombre, nombre))
+  const parecido = canonico ? undefined : todos.find((c) => parecidos(c.nombre, nombre))
   const creado = db.insert(contactos).values({ nombre }).returning().get()
   const sugerido =
     parecido !== undefined &&
@@ -97,7 +104,101 @@ export function resolverContacto(db: Tx, nombre: string): ResultadoContacto {
       contactoId: parecido.id,
       motivo: `nombre parecido a "${parecido.nombre}"`
     })
-  return { contactoId: creado.id, contactosCreados: 1, sugerencias: sugerido ? 1 : 0 }
+  return { contactoId: creado.id, contactosCreados: [creado.id], sugerencias: sugerido ? 1 : 0 }
+}
+
+/** Where a name was found on disk, which decides how it may be read. */
+export type OrigenNombre = 'cotizacion' | 'clientes' | 'proyectos'
+
+export interface Atribucion extends ResultadoContacto {
+  /** The Proyecto the name delivers, when a map row or a `Cliente - Proyecto` name gives it. */
+  proyecto: string | null
+  clienteFinal: string | null
+}
+
+/** A legacy quote named `Cliente - Proyecto`, split at the first dash with a space on each side. */
+function partirNombre(nombre: string): { contacto: string; proyecto: string } | null {
+  const i = nombre.indexOf(' - ')
+  return i === -1 ? null : { contacto: nombre.slice(0, i).trim(), proyecto: nombre.slice(i + 3).trim() }
+}
+
+/**
+ * A name no row maps is still spelled as the map spells its Contacto, if the map names one
+ * with that `clave`: the map is the user's word, and a better-accented folder must not undo it.
+ */
+function resolverSinFila(tx: Tx, mapa: Mapa, nombre: string): ResultadoContacto {
+  const delMapa = mapa.filas.find((f) => clave(f.contacto) === clave(nombre))?.contacto
+  return delMapa ? resolverContacto(tx, delMapa, { canonico: true }) : resolverContacto(tx, nombre)
+}
+
+function contactoDeFila(tx: Tx, mapa: Mapa, fila: Mapa['filas'][number]): ResultadoContacto {
+  const r = resolverContacto(tx, fila.contacto, { canonico: true })
+  mapa.anotar(fila, r.contactoId)
+  return r
+}
+
+/**
+ * Which Contacto, Proyecto and Cliente final a name found on disk means, in this order: its
+ * row in the Mapa de nombres; for a legacy quote, the `Cliente - Proyecto` split, with the
+ * Contacto part itself looked up in the map; otherwise the name as the disk writes it.
+ */
+export function atribuir(tx: Tx, mapa: Mapa, nombre: string, origen: OrigenNombre): Atribucion {
+  const fila = mapa.buscar(nombre)
+  if (fila) return { ...contactoDeFila(tx, mapa, fila), proyecto: fila.proyecto, clienteFinal: fila.clienteFinal }
+
+  const partido = origen === 'cotizacion' ? partirNombre(nombre) : null
+  if (partido) {
+    const filaContacto = mapa.buscar(partido.contacto)
+    const r = filaContacto ? contactoDeFila(tx, mapa, filaContacto) : resolverSinFila(tx, mapa, partido.contacto)
+    return { ...r, proyecto: partido.proyecto, clienteFinal: null }
+  }
+
+  // A legacy quote naming several projects is still one Contacto's: the first name says whose.
+  const nombreContacto = origen === 'cotizacion' ? (nombresDeProyecto(nombre)[0] ?? nombre) : nombre
+  return { ...resolverSinFila(tx, mapa, nombreContacto), proyecto: null, clienteFinal: null }
+}
+
+/**
+ * A name already imported keeps its Contacto (the map applies only on first import), but its
+ * row still counts as found, and the Contacto it holds is the one an RFC on that row goes to.
+ */
+function anotarConocido(mapa: Mapa, nombre: string, contactoId: number, origen: OrigenNombre): void {
+  const partido = origen === 'cotizacion' ? partirNombre(nombre) : null
+  const fila = mapa.buscar(nombre) ?? (partido ? mapa.buscar(partido.contacto) : undefined)
+  if (fila && mapa.contactoDe(fila) === undefined) mapa.anotar(fila, contactoId)
+}
+
+/**
+ * A folder already imported under its own name: the Contacto of that name, and for a Proyectos
+ * folder its Proyecto of that name too. Such a folder keeps what it was imported as.
+ */
+function importadoSinMapa(tx: Tx, nombre: string, conProyecto = true): { contactoId: number; nombre: string } | undefined {
+  const contacto = tx.select().from(contactos).all().find((c) => clave(c.nombre) === clave(nombre))
+  if (!contacto || !conProyecto) return contacto && { contactoId: contacto.id, nombre: contacto.nombre }
+  const proyecto = tx
+    .select()
+    .from(proyectos)
+    .where(eq(proyectos.contactoId, contacto.id))
+    .all()
+    .find((p) => clave(p.nombre) === clave(nombre))
+  return proyecto && { contactoId: contacto.id, nombre: proyecto.nombre }
+}
+
+/**
+ * A `Clientes/` folder names a Contacto only. One already imported under its own name keeps
+ * that Contacto; its map row, if added since, only counts as found.
+ */
+export function contactoDeCarpetaCliente(tx: Tx, mapa: Mapa, nombre: string): ResultadoContacto {
+  const previo = importadoSinMapa(tx, nombre, false)
+  if (!previo) return atribuir(tx, mapa, nombre, 'clientes')
+  anotarConocido(mapa, nombre, previo.contactoId, 'clientes')
+  return resolverSinFila(tx, mapa, nombre)
+}
+
+/** The Cliente final the map gives a legacy quote, found again from its PDF's name. */
+function clienteFinalDeCotizacion(mapa: Mapa, c: { pdfRutaRelativa: string | null }): string | null {
+  const nombre = c.pdfRutaRelativa ? leerNombreArchivo(posix.basename(c.pdfRutaRelativa))?.nombre : undefined
+  return (nombre && mapa.consultar(nombre)?.clienteFinal) || null
 }
 
 /**
@@ -118,15 +219,19 @@ function contactoDeProyecto(db: Tx, nombre: string): ResultadoContacto {
   if (contactoIds.size !== 1) {
     throw new Error(`no se sabe de qué Contacto es el Proyecto "${nombre}"; regístralo y vuelve a escanear`)
   }
-  return { contactoId: [...contactoIds][0], contactosCreados: 0, sugerencias: 0 }
+  return { contactoId: [...contactoIds][0], contactosCreados: [], sugerencias: 0 }
 }
 
 /**
  * One archived PDF as a Cotización, keyed by its Folio (and the letter that tells two quotes
  * sharing a Folio apart). A PDF exists, so the quote was at least sent: that is the weakest
  * status its Folio allows. Re-importing the same Folio changes nothing.
+ *
+ * A legacy quote's Contacto comes through `atribuir`. When the map or the `Cliente - Proyecto`
+ * split names the Proyecto it delivers, that name is stored as the Cotización's `nombre`, which
+ * is what links it to a folder and names its Proyecto; the full name stays in the PDF's path.
  */
-export function importarCotizacion(db: Db, entrada: EntradaCotizacion): ResultadoCotizacion {
+export function importarCotizacion(db: Db, entrada: EntradaCotizacion, mapa: Mapa = mapaVacio()): ResultadoCotizacion {
   return db.transaction((tx) => {
   const sufijo = entrada.sufijo ?? ''
   const existente = tx
@@ -135,15 +240,16 @@ export function importarCotizacion(db: Db, entrada: EntradaCotizacion): Resultad
     .where(and(eq(cotizaciones.folio, entrada.folio), eq(cotizaciones.folioSufijo, sufijo)))
     .get()
   if (existente) {
-    return { resultado: 'duplicado', cotizacionId: existente.id, contactosCreados: 0, sugerencias: 0 }
+    if (entrada.fecha === null) anotarConocido(mapa, entrada.nombre, existente.contactoId, 'cotizacion')
+    return { resultado: 'duplicado', cotizacionId: existente.id, contactosCreados: [], sugerencias: 0 }
   }
 
   // The old filenames carry no date; the year the file is filed under is all the disk knows.
   const fecha = entrada.fecha ?? `${entrada.anio}-01-01`
-  const { contactoId, ...aportes } =
+  const { contactoId, proyecto, ...aportes } =
     entrada.fecha === null
-      ? resolverContacto(tx, nombresDeProyecto(entrada.nombre)[0] ?? entrada.nombre)
-      : contactoDeProyecto(tx, entrada.nombre)
+      ? atribuir(tx, mapa, entrada.nombre, 'cotizacion')
+      : { ...contactoDeProyecto(tx, entrada.nombre), proyecto: null }
   const cotizacion = tx
     .insert(cotizaciones)
     .values({
@@ -154,20 +260,31 @@ export function importarCotizacion(db: Db, entrada: EntradaCotizacion): Resultad
       estado: 'enviada',
       fecha,
       pdfRutaRelativa: entrada.rutaRelativa,
-      nombre: entrada.nombre
+      nombre: proyecto ?? entrada.nombre
     })
     .returning()
     .get()
-  return { resultado: 'importado', cotizacionId: cotizacion.id, ...aportes }
+  return {
+    resultado: 'importado',
+    cotizacionId: cotizacion.id,
+    contactosCreados: aportes.contactosCreados,
+    sugerencias: aportes.sugerencias
+  }
   })
 }
 
 /**
  * One folder as a Proyecto. A folder still in `Proyectos/` is En curso; one that has left for
  * `Archivo/` or the external HDD is a finished Proyecto. The same Proyecto may be found in
- * several places, and each is recorded as its own location.
+ * several places, and each is recorded as its own location. Its Contacto, name and Cliente
+ * final come through `atribuir`; with no map row it is named after its folder.
  */
-export function importarCarpetaProyecto(db: Db, entrada: EntradaCarpeta, hoy = hoyLocal()): ResultadoCarpeta {
+export function importarCarpetaProyecto(
+  db: Db,
+  entrada: EntradaCarpeta,
+  hoy = hoyLocal(),
+  mapa: Mapa = mapaVacio()
+): ResultadoCarpeta {
   return db.transaction((tx) => {
     // A folder the app scaffolded (or already knows) is its Proyecto's, whatever its name says.
     const conocida = tx
@@ -180,10 +297,19 @@ export function importarCarpetaProyecto(db: Db, entrada: EntradaCarpeta, hoy = h
         .set({ disponible: true, verificadoEn: hoy })
         .where(eq(ubicacionesArchivo.id, conocida.id))
         .run()
-      return { proyectoId: conocida.proyectoId, creado: false, contactosCreados: 0, sugerencias: 0 }
+      const contactoId = tx.select().from(proyectos).where(eq(proyectos.id, conocida.proyectoId)).get()?.contactoId
+      if (contactoId != null) anotarConocido(mapa, entrada.nombre, contactoId, 'proyectos')
+      return { proyectoId: conocida.proyectoId, creado: false, contactosCreados: [], sugerencias: 0 }
     }
 
-    const { contactoId, ...aportes } = resolverContacto(tx, entrada.nombre)
+    // The same folder imported earlier from another root, before a map row said otherwise, is
+    // that Proyecto: the map applies only on first import.
+    const previo = entrada.nombre.includes('/') ? undefined : importadoSinMapa(tx, entrada.nombre)
+    if (previo) anotarConocido(mapa, entrada.nombre, previo.contactoId, 'proyectos')
+    const { contactoId, proyecto: mapeado, clienteFinal, ...aportes } = previo
+      ? { ...resolverSinFila(tx, mapa, entrada.nombre), proyecto: previo.nombre, clienteFinal: null }
+      : atribuir(tx, mapa, entrada.nombre, 'proyectos')
+    const nombre = mapeado ?? posix.basename(entrada.nombre)
     // Matched by Nombre canónico, so the same Proyecto foldered `Sonrieme` in one root and
     // `Sonríeme` in another is one Proyecto with two locations, not two Proyectos.
     const existente = tx
@@ -191,15 +317,16 @@ export function importarCarpetaProyecto(db: Db, entrada: EntradaCarpeta, hoy = h
       .from(proyectos)
       .where(eq(proyectos.contactoId, contactoId))
       .all()
-      .find((p) => clave(p.nombre) === clave(entrada.nombre))
+      .find((p) => clave(p.nombre) === clave(nombre))
 
     const proyecto =
       existente ??
       tx
         .insert(proyectos)
         .values({
-          nombre: entrada.nombre,
+          nombre,
           contactoId,
+          clienteFinal,
           categoria: 'other',
           estado: entrada.tipo === 'proyectos' ? 'en_curso' : 'completado'
         })
@@ -220,7 +347,7 @@ export function importarCarpetaProyecto(db: Db, entrada: EntradaCarpeta, hoy = h
       })
       .run()
 
-    const vinculada = !existente && vincularCotizacion(tx, proyecto.id, contactoId, entrada.nombre)
+    const vinculada = !existente && vincularCotizacion(tx, mapa, proyecto.id, contactoId, nombre)
     return {
       proyectoId: proyecto.id,
       creado: !existente,
@@ -234,8 +361,9 @@ export function importarCarpetaProyecto(db: Db, entrada: EntradaCarpeta, hoy = h
  * A folder delivering a quote of the same name means that quote was accepted. The oldest
  * unlinked match is taken. The inference *is* written — that is what "inferred status" means
  * here — and a Sugerencia records that it was inferred, so rejecting it can undo the link.
+ * The quote's Cliente final from the map goes onto a Proyecto that has none.
  */
-function vincularCotizacion(db: Tx, proyectoId: number, contactoId: number, nombre: string): boolean {
+function vincularCotizacion(db: Tx, mapa: Mapa, proyectoId: number, contactoId: number, nombre: string): boolean {
   const candidata = db
     .select()
     .from(cotizaciones)
@@ -247,13 +375,17 @@ function vincularCotizacion(db: Tx, proyectoId: number, contactoId: number, nomb
     .find((c) => repartirNombres(c, nombre).nombre !== undefined)
   if (!candidata) return false
 
-  const notasAntes = db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()?.notas ?? null
+  const antes = db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()
+  const notasAntes = antes?.notas ?? null
   const notasEscritas = repartirNombres(candidata, nombre).notas
+  // The folder's own Cliente final wins: the folder is the Proyecto.
+  const clienteFinal = antes?.clienteFinal ? null : clienteFinalDeCotizacion(mapa, candidata)
   db.update(cotizaciones).set({ estado: 'aceptada' }).where(eq(cotizaciones.id, candidata.id)).run()
   db.update(proyectos)
     .set({
       cotizacionId: candidata.id,
-      notas: notasEscritas
+      notas: notasEscritas,
+      ...(clienteFinal && { clienteFinal })
     })
     .where(eq(proyectos.id, proyectoId))
     .run()
@@ -265,7 +397,7 @@ function vincularCotizacion(db: Tx, proyectoId: number, contactoId: number, nomb
     motivo: `carpeta "${nombre}" con el mismo nombre`,
     deshacer: {
       cotizacion: { estado: candidata.estado },
-      proyecto: { notasAntes, notasEscritas }
+      proyecto: { notasAntes, notasEscritas, ...(clienteFinal && { clienteFinalEscrito: clienteFinal }) }
     }
   })
 }
@@ -273,9 +405,13 @@ function vincularCotizacion(db: Tx, proyectoId: number, contactoId: number, nomb
 /**
  * An accepted Cotización with no folder anywhere was still delivered: it becomes a completed
  * Proyecto whose files are somewhere the app cannot see. Whether that is Archivado or No
- * disponible is the one thing the disk cannot say, so it is asked once.
+ * disponible is the one thing the disk cannot say, so it is asked once. Returns the ids of the
+ * Proyectos it created.
  */
-export function proyectosDeCotizacionesAceptadas(db: Db): { proyectos: number; sugerencias: number } {
+export function proyectosDeCotizacionesAceptadas(
+  db: Db,
+  mapa: Mapa = mapaVacio()
+): { proyectos: number[]; sugerencias: number } {
   const huerfanas = db
     .select()
     .from(cotizaciones)
@@ -285,6 +421,7 @@ export function proyectosDeCotizacionesAceptadas(db: Db): { proyectos: number; s
     .map((r) => r.cotizaciones)
 
   let sugerencias = 0
+  const creados: number[] = []
   for (const c of huerfanas) {
     db.transaction((tx) => {
     const { nombre, notas } = repartirNombres(c)
@@ -294,12 +431,14 @@ export function proyectosDeCotizacionesAceptadas(db: Db): { proyectos: number; s
         nombre: nombre ?? `Cotización ${c.folio}`,
         contactoId: c.contactoId,
         cotizacionId: c.id,
+        clienteFinal: clienteFinalDeCotizacion(mapa, c),
         categoria: c.categoria,
         estado: 'completado',
         notas
       })
       .returning()
       .get()
+    creados.push(proyecto.id)
     const sugerido = proponer(tx, {
       entidad: 'proyecto',
       entidadId: proyecto.id,
@@ -309,7 +448,7 @@ export function proyectosDeCotizacionesAceptadas(db: Db): { proyectos: number; s
     if (sugerido) sugerencias++
     })
   }
-  return { proyectos: huerfanas.length, sugerencias }
+  return { proyectos: creados, sugerencias }
 }
 
 /**

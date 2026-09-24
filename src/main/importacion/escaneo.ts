@@ -1,24 +1,29 @@
-import { readdirSync, type Dirent } from 'node:fs'
+import { readdirSync, readFileSync, type Dirent } from 'node:fs'
 import { join, posix } from 'node:path'
-import type { LogCarpetas } from '../../shared/dominio'
+import { inArray } from 'drizzle-orm'
+import type { LogCarpetas, OrigenImportado } from '../../shared/dominio'
 import { leerNombreArchivo } from '../cotizaciones'
 import type { Db } from '../db'
+import { contactos, proyectos } from '../db/schema'
 import { hoy as hoyLocal } from '../../shared/fechas'
 import { carpetaDeProyectos, rutaDeProyecto, type TipoCarpetaProyecto } from '../paths'
 import {
+  contactoDeCarpetaCliente,
   importarCarpetaProyecto,
   importarCotizacion,
   marcarHddNoDisponible,
   proyectosDeCotizacionesAceptadas,
-  resolverContacto,
   type Aportes
 } from './carpetas'
+import { esErrorMapa, leerMapa, mapaVacio, RUTA_MAPA, type Mapa } from './mapa'
+import { asignarRfcs } from './rfcs'
 
 /**
  * The rescan: reads `Cotizaciones/`, `Clientes/`, `Proyectos/` and `Archivo/Proyectos/` into
  * the database, with the external HDD as a secondary source. Every import is keyed (Folio for
  * a Cotización, Nombre canónico for a Contacto or Proyecto), so running it again changes
- * nothing. A folder that cannot be read is No disponible, never empty.
+ * nothing. A folder that cannot be read is No disponible, never empty. The Mapa de nombres
+ * decides what a name on disk means the first time it is imported.
  */
 
 /**
@@ -47,14 +52,52 @@ function logVacio(): LogCarpetas {
     sugerencias: 0,
     hddConectado: false,
     errores: [],
-    noDisponibles: []
+    noDisponibles: [],
+    mapa: 'ausente',
+    filasMapa: [],
+    subcarpetasSinProyecto: [],
+    nuevos: { contactos: [], proyectos: [], rfcs: [] }
   }
 }
 
+/** One run: its log, its map, and the ids of what it created, named once the run is over. */
+interface Corrida {
+  log: LogCarpetas
+  mapa: Mapa
+  contactos: { id: number; origen: OrigenImportado }[]
+  proyectos: { id: number; origen: OrigenImportado }[]
+}
+
 /** A Contacto or Sugerencia may come from any file or folder, so each adds its share here. */
-function sumar(log: LogCarpetas, aportes: Aportes): void {
-  log.contactos.creados += aportes.contactosCreados
-  log.sugerencias += aportes.sugerencias
+function sumar(corrida: Corrida, aportes: Aportes, origen: OrigenImportado): void {
+  corrida.log.contactos.creados += aportes.contactosCreados.length
+  corrida.log.sugerencias += aportes.sugerencias
+  for (const id of aportes.contactosCreados) corrida.contactos.push({ id, origen })
+}
+
+/**
+ * The Mapa de nombres, or `null` when it exists but cannot be used: then the scan imports
+ * nothing rather than import without it.
+ */
+function leerMapaDe(root: string, log: LogCarpetas): Mapa | null {
+  let texto: string
+  try {
+    texto = readFileSync(join(root, RUTA_MAPA), 'utf8')
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+      log.mapa = 'ausente'
+      return mapaVacio()
+    }
+    log.mapa = { error: `No se pudo leer ${RUTA_MAPA}: ${mensaje(e)}` }
+    return null
+  }
+  const mapa = leerMapa(texto)
+  if (esErrorMapa(mapa)) {
+    log.mapa = mapa
+    return null
+  }
+  log.mapa = 'leido'
+  return mapa
 }
 
 /**
@@ -63,28 +106,71 @@ function sumar(log: LogCarpetas, aportes: Aportes): void {
  */
 export function escanearCarpetas(db: Db, root: string, hddRoot?: string, hoy = hoyLocal()): LogCarpetas {
   const log = logVacio()
+  const mapa = leerMapaDe(root, log)
+  if (!mapa) return log
+  const corrida: Corrida = { log, mapa, contactos: [], proyectos: [] }
 
-  cotizacionesDeDisco(db, root, log, 'antiguo')
-  contactosDeDisco(db, root, log)
-  proyectosDeDisco(db, root, 'proyectos', log, hoy)
-  proyectosDeDisco(db, root, 'archivo', log, hoy)
+  cotizacionesDeDisco(db, root, corrida, 'antiguo')
+  contactosDeDisco(db, root, corrida)
+  proyectosDeDisco(db, root, 'proyectos', corrida, hoy)
+  proyectosDeDisco(db, root, 'archivo', corrida, hoy)
 
   if (hddRoot) {
-    const encontrados = proyectosDeDisco(db, hddRoot, 'hdd_externo', log, hoy)
+    const encontrados = proyectosDeDisco(db, hddRoot, 'hdd_externo', corrida, hoy)
     log.hddConectado = encontrados !== null
     if (!log.hddConectado) marcarHddNoDisponible(db)
   }
 
   // A new-format quote names its Proyecto, so it waits until every folder is known.
-  cotizacionesDeDisco(db, root, log, 'nuevo')
-  const sinCarpeta = proyectosDeCotizacionesAceptadas(db)
-  log.proyectosSinCarpeta = sinCarpeta.proyectos
+  cotizacionesDeDisco(db, root, corrida, 'nuevo')
+  const sinCarpeta = proyectosDeCotizacionesAceptadas(db, mapa)
+  log.proyectosSinCarpeta = sinCarpeta.proyectos.length
   log.sugerencias += sinCarpeta.sugerencias
+  for (const id of sinCarpeta.proyectos) corrida.proyectos.push({ id, origen: 'cotizacion' })
+
+  // Last, so a row's name may have been found by any pass.
+  const rfcs = asignarRfcs(db, mapa)
+  sumar(corrida, { contactosCreados: rfcs.contactosCreados, sugerencias: 0 }, 'mapa')
+
+  log.filasMapa = [
+    ...mapa.descartadas,
+    ...mapa.sinUso().map((f) => ({ linea: f.linea, problema: 'sin uso' as const, enDisco: f.enDisco ?? '' })),
+    ...rfcs.problemas
+  ].sort((a, b) => a.linea - b.linea)
+  nombrarNuevos(db, corrida, rfcs.asignados)
   return log
 }
 
+/**
+ * Names are read once the run is over: a later file may have renamed a Contacto to a better
+ * spelling after it was created.
+ */
+function nombrarNuevos(db: Db, corrida: Corrida, rfcs: { contactoId: number; rfc: string }[]): void {
+  const ids = [...corrida.contactos.map((c) => c.id), ...rfcs.map((r) => r.contactoId)]
+  const proyectoIds = corrida.proyectos.map((p) => p.id)
+  const leidos = proyectoIds.length > 0 ? db.select().from(proyectos).where(inArray(proyectos.id, proyectoIds)).all() : []
+  ids.push(...leidos.flatMap((p) => (p.contactoId === null ? [] : [p.contactoId])))
+  const nombres = new Map(
+    (ids.length > 0 ? db.select().from(contactos).where(inArray(contactos.id, ids)).all() : []).map((c) => [c.id, c.nombre])
+  )
+  const proyectoDe = new Map(leidos.map((p) => [p.id, p]))
+
+  corrida.log.nuevos = {
+    contactos: corrida.contactos.flatMap(({ id, origen }) => {
+      const nombre = nombres.get(id)
+      return nombre === undefined ? [] : [{ nombre, origen }]
+    }),
+    proyectos: corrida.proyectos.flatMap(({ id, origen }) => {
+      const p = proyectoDe.get(id)
+      return p ? [{ nombre: p.nombre, contacto: (p.contactoId !== null && nombres.get(p.contactoId)) || '', origen }] : []
+    }),
+    rfcs: rfcs.map(({ contactoId, rfc }) => ({ contacto: nombres.get(contactoId) ?? '', rfc }))
+  }
+}
+
 /** `Cotizaciones/<year>/DMM - <folio> - <Nombre>.pdf`, every year the folder holds. */
-function cotizacionesDeDisco(db: Db, root: string, log: LogCarpetas, formato: 'antiguo' | 'nuevo'): void {
+function cotizacionesDeDisco(db: Db, root: string, corrida: Corrida, formato: 'antiguo' | 'nuevo'): void {
+  const { log } = corrida
   const anios = subcarpetas(root, 'Cotizaciones')
   if (anios === null) {
     if (formato === 'antiguo') log.noDisponibles.push('Cotizaciones')
@@ -97,14 +183,18 @@ function cotizacionesDeDisco(db: Db, root: string, log: LogCarpetas, formato: 'a
       // Only the new format carries a date.
       if (!nombre || (nombre.fecha === null) !== (formato === 'antiguo')) continue
       try {
-        const r = importarCotizacion(db, {
-          ...nombre,
-          anio: Number(anio) || new Date().getFullYear(),
-          rutaRelativa: posix.join(carpeta, archivo)
-        })
+        const r = importarCotizacion(
+          db,
+          {
+            ...nombre,
+            anio: Number(anio) || new Date().getFullYear(),
+            rutaRelativa: posix.join(carpeta, archivo)
+          },
+          corrida.mapa
+        )
         if (r.resultado === 'importado') log.cotizaciones.importadas++
         else log.cotizaciones.duplicadas++
-        sumar(log, r)
+        sumar(corrida, r, 'cotizacion')
       } catch (e) {
         log.errores.push({ archivo: posix.join(carpeta, archivo), error: mensaje(e) })
       }
@@ -112,49 +202,75 @@ function cotizacionesDeDisco(db: Db, root: string, log: LogCarpetas, formato: 'a
   }
 }
 
-/** A folder under `Clientes/` is a Contacto, whether or not it ever had a Cotización. */
-function contactosDeDisco(db: Db, root: string, log: LogCarpetas): void {
+/**
+ * A folder under `Clientes/` is a Contacto, whether or not it ever had a Cotización. The map
+ * may name its Contacto; a row's Proyecto and Cliente final mean nothing for a Clientes folder.
+ * The map file itself sits in `Clientes/` and is never read as one: only folders are.
+ */
+function contactosDeDisco(db: Db, root: string, corrida: Corrida): void {
   const nombres = subcarpetas(root, 'Clientes')
   if (nombres === null) {
-    log.noDisponibles.push('Clientes')
+    corrida.log.noDisponibles.push('Clientes')
     return
   }
   for (const nombre of nombres) {
     try {
-      // A Cliente folder names a Contacto only; it must not invent a Proyecto for it.
-      sumar(log, db.transaction((tx) => resolverContacto(tx, nombre)))
+      const { contactosCreados, sugerencias } = db.transaction((tx) => contactoDeCarpetaCliente(tx, corrida.mapa, nombre))
+      sumar(corrida, { contactosCreados, sugerencias }, 'clientes')
     } catch (e) {
-      log.errores.push({ archivo: posix.join('Clientes', nombre), error: mensaje(e) })
+      corrida.log.errores.push({ archivo: posix.join('Clientes', nombre), error: mensaje(e) })
     }
   }
 }
 
-/** Returns `null` when the folder could not be read at all (No disponible). */
+/**
+ * Returns `null` when the folder could not be read at all (No disponible). A folder whose
+ * subfolders the map declares is not a Proyecto itself: each declared subfolder is, and the
+ * others are listed, not imported.
+ */
 function proyectosDeDisco(
   db: Db,
   root: string,
   tipo: TipoCarpetaProyecto,
-  log: LogCarpetas,
+  corrida: Corrida,
   hoy: string
 ): string[] | null {
+  const { log, mapa } = corrida
   const rutaRelativa = carpetaDeProyectos(tipo)
+  const enHdd = (ruta: string) => (tipo === 'hdd_externo' ? `${ruta} (HDD externo)` : ruta)
   const nombres = subcarpetas(root, rutaRelativa)
   if (nombres === null) {
-    log.noDisponibles.push(tipo === 'hdd_externo' ? `${rutaRelativa} (HDD externo)` : rutaRelativa)
+    log.noDisponibles.push(enHdd(rutaRelativa))
     return null
   }
-  for (const nombre of nombres) {
+
+  const importar = (nombre: string) => {
     try {
-      const r = importarCarpetaProyecto(db, {
-        nombre,
-        tipo,
-        rutaRelativa: rutaDeProyecto(tipo, nombre)
-      }, hoy)
-      if (r.creado) log.proyectos.creados++
-      else log.proyectos.actualizados++
-      sumar(log, r)
+      const r = importarCarpetaProyecto(db, { nombre, tipo, rutaRelativa: rutaDeProyecto(tipo, nombre) }, hoy, mapa)
+      if (r.creado) {
+        log.proyectos.creados++
+        corrida.proyectos.push({ id: r.proyectoId, origen: 'proyectos' })
+      } else log.proyectos.actualizados++
+      sumar(corrida, r, 'proyectos')
     } catch (e) {
       log.errores.push({ archivo: posix.join(rutaRelativa, nombre), error: mensaje(e) })
+    }
+  }
+
+  for (const nombre of nombres) {
+    if (mapa.subcarpetas(nombre).length === 0) {
+      importar(nombre)
+      continue
+    }
+    const subs = subcarpetas(root, posix.join(rutaRelativa, nombre))
+    if (subs === null) {
+      log.noDisponibles.push(enHdd(posix.join(rutaRelativa, nombre)))
+      continue
+    }
+    for (const sub of subs) {
+      const declarada = `${nombre}/${sub}`
+      if (mapa.consultar(declarada)) importar(declarada)
+      else log.subcarpetasSinProyecto.push(enHdd(posix.join(rutaRelativa, declarada)))
     }
   }
   return nombres

@@ -14,7 +14,11 @@ const logCarpetas = {
   sugerencias: 0,
   hddConectado: false,
   errores: [],
-  noDisponibles: []
+  noDisponibles: [],
+  mapa: 'ausente' as const,
+  filasMapa: [],
+  subcarpetasSinProyecto: [],
+  nuevos: { contactos: [], proyectos: [], rfcs: [] }
 }
 
 const rutas = { dmmOsRoot: '/root', hddRoot: null, hddConectado: false, entrada: 0 }
@@ -35,6 +39,7 @@ function handlers() {
     importacion: {
       facturas: vi.fn(() => log),
       carpetas: vi.fn(() => logCarpetas),
+      vistaPrevia: vi.fn(() => logCarpetas),
       estado: vi.fn(() => ({ facturas: null, carpetas: null })),
       sugerencias: vi.fn(() => []),
       responder: vi.fn(() => [])

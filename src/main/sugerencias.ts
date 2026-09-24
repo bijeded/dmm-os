@@ -134,7 +134,12 @@ function vincular(tx: Tx, s: Fila, respuesta: RespuestaSugerencia): void {
     // user's, and so is everything when no undo was recorded.
     const previo = s.deshacer?.proyecto
     const notas = previo && proyecto?.notas === previo.notasEscritas ? previo.notasAntes : (proyecto?.notas ?? null)
-    tx.update(proyectos).set({ cotizacionId: null, notas }).where(eq(proyectos.id, proyectoId)).run()
+    // A Cliente final the link brought from the quote's map row goes too, unless edited since.
+    const clienteFinal =
+      previo?.clienteFinalEscrito !== undefined && proyecto?.clienteFinal === previo.clienteFinalEscrito
+        ? null
+        : (proyecto?.clienteFinal ?? null)
+    tx.update(proyectos).set({ cotizacionId: null, notas, clienteFinal }).where(eq(proyectos.id, proyectoId)).run()
   }
 }
 

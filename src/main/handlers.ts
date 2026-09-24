@@ -117,6 +117,14 @@ export function crearHandlers({
         ultimo.carpetas = { corridoEn: ahora(), log }
         return log
       },
+      vistaPrevia: () => {
+        const copia = conexion.copiaEnMemoria()
+        try {
+          return escanearCarpetas(copia.db, info.dmmOsRoot, hddRoot(), hoy())
+        } finally {
+          copia.close()
+        }
+      },
       estado: () => ultimo,
       sugerencias: () => pendientes(conexion.db),
       responder: (id, respuesta) => {
