@@ -121,7 +121,7 @@ export function Finanzas() {
       <div className="acts flex flex-wrap items-center justify-between gap-3">
         <h1 className={tituloCls}>Finanzas</h1>
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={() => navigate('/finanzas/costos/nuevo')}>
+          <Button variant="secondary" onClick={() => navigate('/finanzas/costos/nuevo')}>
             Nuevo costo
           </Button>
           <Button onClick={() => navigate('/finanzas/ingresos/nuevo')}>Nuevo ingreso</Button>

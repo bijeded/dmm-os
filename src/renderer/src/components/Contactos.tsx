@@ -59,7 +59,15 @@ export function Contactos() {
 
   return (
     <>
-      <h1 className={tituloCls}>Contactos</h1>
+      <div className="acts flex flex-wrap items-center justify-between gap-3">
+        <h1 className={tituloCls}>Contactos</h1>
+        <div className="flex gap-2">
+          <Button variant="secondary" disabled={ocupado || !lista} onClick={exportar}>
+            Exportar CSV
+          </Button>
+          <Button onClick={() => setNuevo(true)}>Nuevo contacto</Button>
+        </div>
+      </div>
       {nuevo && <FormContacto onGuardado={(id) => navigate(`/contactos/${id}`)} onCerrar={() => setNuevo(false)} />}
 
       {lista && (
@@ -102,11 +110,6 @@ export function Contactos() {
                 </option>
               ))}
             </select>
-            <div className="flex-1" />
-            <Button variant="secondary" disabled={ocupado || !lista} onClick={exportar}>
-              Exportar CSV
-            </Button>
-            <Button onClick={() => setNuevo(true)}>Nuevo contacto</Button>
           </div>
 
           <table className="tbl w-full border-collapse text-[13px]">
