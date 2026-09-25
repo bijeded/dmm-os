@@ -372,26 +372,24 @@ function deshacerCotizacion(tx: Tx, s: Fila): void {
   const estado = s.deshacer?.cotizacion?.estado ?? 'enviada'
   tx.update(cotizaciones).set({ estado }).where(eq(cotizaciones.id, s.entidadId)).run()
   const proyecto = tx.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()
+  if (!proyecto) return
   // The note goes back only if it is still what the link wrote; anything written since is the
   // user's, and so is everything when no undo was recorded.
   const previo = s.deshacer?.proyecto
-  const notas = previo && proyecto?.notas === previo.notasEscritas ? previo.notasAntes : (proyecto?.notas ?? null)
-  // A Cliente final the link brought from the quote's map row goes too, unless edited since.
-  const clienteFinal =
-    previo?.clienteFinalEscrito !== undefined && proyecto?.clienteFinal === previo.clienteFinalEscrito
-      ? null
-      : (proyecto?.clienteFinal ?? null)
-  // So do the categoría and fecha de inicio it took from the quote, unless edited since.
-  const categoria =
-    previo?.categoriaEscrita !== undefined && proyecto?.categoria === previo.categoriaEscrita ? 'other' : proyecto?.categoria
-  const fechaInicio =
-    previo?.fechaInicioEscrita !== undefined && proyecto?.fechaInicio === previo.fechaInicioEscrita
-      ? null
-      : (proyecto?.fechaInicio ?? null)
+  const notas = previo && proyecto.notas === previo.notasEscritas ? previo.notasAntes : proyecto.notas
+  // What the link filled in from the quote (Cliente final, categoría, fecha de inicio) is
+  // emptied again, unless edited since.
+  const restaurar = <T>(actual: T, escrito: T | undefined, vacio: T): T => (escrito !== undefined && actual === escrito ? vacio : actual)
   // A Cotización linked to the Proyecto by hand since is the user's.
-  const cotizacionId = proyecto?.cotizacionId === s.entidadId ? null : (proyecto?.cotizacionId ?? null)
+  const cotizacionId = proyecto.cotizacionId === s.entidadId ? null : proyecto.cotizacionId
   tx.update(proyectos)
-    .set({ cotizacionId, notas, clienteFinal, fechaInicio, ...(categoria && { categoria }) })
+    .set({
+      cotizacionId,
+      notas,
+      clienteFinal: restaurar(proyecto.clienteFinal, previo?.clienteFinalEscrito, null),
+      categoria: restaurar(proyecto.categoria, previo?.categoriaEscrita, 'other'),
+      fechaInicio: restaurar(proyecto.fechaInicio, previo?.fechaInicioEscrita, null)
+    })
     .where(eq(proyectos.id, proyectoId))
     .run()
 }

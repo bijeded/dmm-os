@@ -55,6 +55,6 @@
 
 ## 6. Review and checks
 
-- [ ] 6.1 Run `/code-review` on the branch diff and fix what it confirms.
-- [ ] 6.2 Run `/security-review`, since the change touches importacion's folder attribution and `sugerencias.ts`'s writes. Fix what it confirms.
-- [ ] 6.3 Run `npm run typecheck`, `npm run lint`, `npm test` and `openspec validate proyectos-atribuidos-por-cotizacion --strict`. All pass.
+- [x] 6.1 Run `/code-review` on the branch diff and fix what it confirms.
+- [x] 6.2 Run `/security-review`, since the change touches importacion's folder attribution and `sugerencias.ts`'s writes. Fix what it confirms.
+- [x] 6.3 Run `npm run typecheck`, `npm run lint`, `npm test` and `openspec validate proyectos-atribuidos-por-cotizacion --strict`. All pass.

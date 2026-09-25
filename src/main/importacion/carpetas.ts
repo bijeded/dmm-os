@@ -1,5 +1,5 @@
 import { posix } from 'node:path'
-import { and, eq, isNull, type SQL } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { leerNombreArchivo, nombresDeProyecto, type NombreCotizacion } from '../cotizaciones'
 import { hoy as hoyLocal } from '../../shared/fechas'
 import { clave, mejorEscrito, parecidos } from '../nombres'
@@ -7,6 +7,7 @@ import type { Db } from '../db'
 import { heredarDeCotizacion } from '../ciclo-proyecto'
 import { proponer } from '../sugerencias'
 import { contactos, cotizaciones, proyectos, ubicacionesArchivo } from '../db/schema'
+import { rutaDeProyecto } from '../paths'
 import { mapaVacio, type Mapa } from './mapa'
 import { partidasDelMonto, partidasGuardadas, type CotizacionDePdf } from './pdf-cotizacion'
 
@@ -198,24 +199,36 @@ export function atribuirCarpetaProyecto(tx: Tx, mapa: Mapa, nombre: string): Atr
   if (delMapa || existe) return { ...resolverSinFila(tx, mapa, nombre), ...sinProyecto }
 
   const quienes = tx
-    .select()
+    .select({
+      folio: cotizaciones.folio,
+      nombre: cotizaciones.nombre,
+      contactoId: cotizaciones.contactoId,
+      pdfRutaRelativa: cotizaciones.pdfRutaRelativa,
+      proyectoId: proyectos.id
+    })
     .from(cotizaciones)
+    .leftJoin(proyectos, eq(proyectos.cotizacionId, cotizaciones.id))
     .orderBy(cotizaciones.folio)
     .all()
     .filter((c) => repartirNombres(c, nombre).nombre !== undefined)
   const contactoIds = [...new Set(quienes.map((c) => c.contactoId))]
   const nada = { contactosCreados: [], sugerencias: 0 }
   if (contactoIds.length === 1) {
-    const clienteFinal = clienteFinalDeCotizacion(mapa, quienes[0]) ?? nombre
+    // The quote the folder will link to, as `vincularCotizacion` picks it: the oldest unlinked one.
+    const vinculable = quienes.find((c) => c.proyectoId === null) ?? quienes[0]
+    const clienteFinal = clienteFinalDeCotizacion(mapa, vinculable) ?? nombre
     return { contactoId: contactoIds[0], proyecto: null, clienteFinal, ambiguos: [], ...nada }
   }
-  const ambiguos = tx
-    .select()
-    .from(contactos)
-    .all()
-    .filter((c) => contactoIds.includes(c.id))
-    .map((c) => c.nombre)
-    .sort((a, b) => a.localeCompare(b, 'es'))
+  const ambiguos =
+    contactoIds.length === 0
+      ? []
+      : tx
+          .select({ nombre: contactos.nombre })
+          .from(contactos)
+          .where(inArray(contactos.id, contactoIds))
+          .all()
+          .map((c) => c.nombre)
+          .sort((a, b) => a.localeCompare(b, 'es'))
   return { contactoId: null, proyecto: null, clienteFinal: null, ambiguos, ...nada }
 }
 
@@ -223,33 +236,44 @@ export function atribuirCarpetaProyecto(tx: Tx, mapa: Mapa, nombre: string): Atr
  * A name already imported keeps its Contacto (the map applies only on first import), but its
  * row still counts as found, and the Contacto it holds is the one an RFC on that row goes to.
  */
-function anotarConocido(mapa: Mapa, nombre: string, contactoId: number, origen: OrigenNombre): void {
+function anotarConocido(mapa: Mapa, nombre: string, contactoId: number | null, origen: OrigenNombre): void {
   const partido = origen === 'cotizacion' ? partirNombre(nombre) : null
   const fila = mapa.buscar(nombre) ?? (partido ? mapa.buscar(partido.contacto) : undefined)
-  if (fila && mapa.contactoDe(fila) === undefined) mapa.anotar(fila, contactoId)
+  if (fila && contactoId !== null && mapa.contactoDe(fila) === undefined) mapa.anotar(fila, contactoId)
+}
+
+/** A `Clientes/` folder already imported under its own name: the Contacto of that name. */
+function contactoImportado(tx: Tx, nombre: string): { contactoId: number; nombre: string } | undefined {
+  const contacto = tx.select().from(contactos).all().find((c) => clave(c.nombre) === clave(nombre))
+  return contacto && { contactoId: contacto.id, nombre: contacto.nombre }
 }
 
 /**
- * A folder already imported under its own name: the Contacto of that name, and for a Proyectos
- * folder its Proyecto of that name too, or a Proyecto sin Contacto of that name. Such a folder
- * keeps what it was imported as.
+ * A `Proyectos/` folder already imported: the Proyecto whose folder of the same name was
+ * recorded in another root, whatever its Contacto became since, or else one imported under the
+ * folder's own name, as a Contacto and Proyecto of that name. Such a folder keeps what it was
+ * imported as.
  */
-function importadoSinMapa(tx: Tx, nombre: string): { contactoId: number; nombre: string } | undefined
-function importadoSinMapa(tx: Tx, nombre: string, conProyecto: true): { contactoId: number | null; nombre: string } | undefined
-function importadoSinMapa(tx: Tx, nombre: string, conProyecto = false): { contactoId: number | null; nombre: string } | undefined {
-  const contacto = tx.select().from(contactos).all().find((c) => clave(c.nombre) === clave(nombre))
-  if (!conProyecto) return contacto && { contactoId: contacto.id, nombre: contacto.nombre }
-  const deNombre = (dondeContacto: SQL | undefined) =>
-    tx
-      .select()
-      .from(proyectos)
-      .where(dondeContacto)
-      .all()
-      .find((p) => clave(p.nombre) === clave(nombre))
-  const proyecto =
-    (contacto && deNombre(eq(proyectos.contactoId, contacto.id))) ??
-    deNombre(and(isNull(proyectos.contactoId), eq(proyectos.etiqueta, 'cliente')))
-  return proyecto && { contactoId: proyecto.contactoId, nombre: proyecto.nombre }
+function proyectoImportado(tx: Tx, nombre: string): typeof proyectos.$inferSelect | undefined {
+  const esta = (ruta: string) => clave(posix.basename(ruta)) === clave(nombre)
+  const hermana = tx
+    .select()
+    .from(ubicacionesArchivo)
+    .all()
+    .find(
+      (u) =>
+        u.tipo !== 'google_drive' && esta(u.rutaRelativa) && u.rutaRelativa === rutaDeProyecto(u.tipo, posix.basename(u.rutaRelativa))
+    )
+  if (hermana) return tx.select().from(proyectos).where(eq(proyectos.id, hermana.proyectoId)).get()
+  const contacto = contactoImportado(tx, nombre)
+  return contacto
+    ? tx
+        .select()
+        .from(proyectos)
+        .where(eq(proyectos.contactoId, contacto.contactoId))
+        .all()
+        .find((p) => clave(p.nombre) === clave(nombre))
+    : undefined
 }
 
 /**
@@ -257,7 +281,7 @@ function importadoSinMapa(tx: Tx, nombre: string, conProyecto = false): { contac
  * that Contacto; its map row, if added since, only counts as found.
  */
 export function contactoDeCarpetaCliente(tx: Tx, mapa: Mapa, nombre: string): ResultadoContacto {
-  const previo = importadoSinMapa(tx, nombre)
+  const previo = contactoImportado(tx, nombre)
   if (!previo) return atribuir(tx, mapa, nombre, 'clientes')
   anotarConocido(mapa, nombre, previo.contactoId, 'clientes')
   return resolverSinFila(tx, mapa, nombre)
@@ -383,39 +407,36 @@ export function importarCarpetaProyecto(
         .set({ disponible: true, verificadoEn: hoy })
         .where(eq(ubicacionesArchivo.id, conocida.id))
         .run()
-      const contactoId = tx.select().from(proyectos).where(eq(proyectos.id, conocida.proyectoId)).get()?.contactoId
-      if (contactoId != null) anotarConocido(mapa, entrada.nombre, contactoId, 'proyectos')
+      const contactoId = tx.select().from(proyectos).where(eq(proyectos.id, conocida.proyectoId)).get()?.contactoId ?? null
+      anotarConocido(mapa, entrada.nombre, contactoId, 'proyectos')
       return { proyectoId: conocida.proyectoId, creado: false, sinContacto: false, ambiguos: [], contactosCreados: [], sugerencias: 0 }
     }
 
-    // The same folder imported earlier from another root, before a map row said otherwise, is
-    // that Proyecto: the map applies only on first import.
-    const previo = entrada.nombre.includes('/') ? undefined : importadoSinMapa(tx, entrada.nombre, true)
-    if (previo?.contactoId != null) anotarConocido(mapa, entrada.nombre, previo.contactoId, 'proyectos')
+    // The same folder imported earlier from another root is that Proyecto, whatever a map row
+    // or its Ficha said since: the map applies only on first import.
+    const previo = entrada.nombre.includes('/') ? undefined : proyectoImportado(tx, entrada.nombre)
+    if (previo) anotarConocido(mapa, entrada.nombre, previo.contactoId, 'proyectos')
+    // A Contacto of the folder's name may still take its better spelling from this one.
+    if (previo && previo.contactoId === contactoImportado(tx, entrada.nombre)?.contactoId) resolverSinFila(tx, mapa, entrada.nombre)
     const { contactoId, proyecto: mapeado, clienteFinal, ambiguos, ...aportes } = previo
-      ? {
-          ...(previo.contactoId === null
-            ? { contactoId: null, contactosCreados: [], sugerencias: 0 }
-            : resolverSinFila(tx, mapa, entrada.nombre)),
-          proyecto: previo.nombre,
-          clienteFinal: null,
-          ambiguos: []
-        }
+      ? { contactoId: previo.contactoId, proyecto: previo.nombre, clienteFinal: null, ambiguos: [], contactosCreados: [], sugerencias: 0 }
       : atribuirCarpetaProyecto(tx, mapa, entrada.nombre)
     const nombre = mapeado ?? posix.basename(entrada.nombre)
     // Matched by Nombre canónico, so the same Proyecto foldered `Sonrieme` in one root and
     // `Sonríeme` in another is one Proyecto with two locations, not two Proyectos. A Proyecto
     // sin Contacto is matched among client Proyectos with none, never a personal one.
-    const existente = tx
-      .select()
-      .from(proyectos)
-      .where(
-        contactoId === null
-          ? and(isNull(proyectos.contactoId), eq(proyectos.etiqueta, 'cliente'))
-          : eq(proyectos.contactoId, contactoId)
-      )
-      .all()
-      .find((p) => clave(p.nombre) === clave(nombre))
+    const existente =
+      previo ??
+      tx
+        .select()
+        .from(proyectos)
+        .where(
+          contactoId === null
+            ? and(isNull(proyectos.contactoId), eq(proyectos.etiqueta, 'cliente'))
+            : eq(proyectos.contactoId, contactoId)
+        )
+        .all()
+        .find((p) => clave(p.nombre) === clave(nombre))
 
     const proyecto =
       existente ??

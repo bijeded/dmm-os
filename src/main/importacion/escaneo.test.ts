@@ -1072,6 +1072,31 @@ describe('la carpeta de Proyecto se atribuye por la Cotización que la nombra', 
     expect(ruba).toMatchObject({ clienteFinal: 'Ruba Café', estado: 'completado' })
   })
 
+  it('keeps the Proyecto on its Contacto when a map row added later would send the HDD copy elsewhere', async () => {
+    sublime()
+    carpeta(root, 'Proyectos', '3 Moon Wishes')
+    await escanear(db, root)
+    mapa(root, `${CABECERA}Sublime,Sublime Inspiración,,\n3 Moon Wishes,Frida,,\n`)
+    carpeta(hdd, 'Proyectos', '3 Moon Wishes')
+    await escanear(db, root, hdd)
+
+    expect(db.select().from(proyectos).all()).toHaveLength(1)
+    expect(contactoDe(proyecto('3 Moon Wishes').contactoId)).toBe('Sublime Inspiración')
+  })
+
+  it("takes the Cliente final from the map row of the quote it links, not of one already linked", () => {
+    mapa(root, `${CABECERA}Lukka - Ruba,Lukka,Ruba,Ruba Café\nLukka - Ruba 2,Lukka,Ruba,Ruba Coffee Co\n`)
+    pdf(root, '2021', 'DMM - 100 - Lukka - Ruba.pdf')
+    pdf(root, '2022', 'DMM - 150 - Lukka - Ruba 2.pdf')
+    escanearCarpetas(db, root)
+    const lukka = db.select().from(contactos).all().find((c) => c.nombre === 'Lukka')!
+    db.insert(proyectos).values({ nombre: 'Ruba 2021', contactoId: lukka.id, cotizacionId: cotizacion(100).id, categoria: 'other' }).run()
+    carpeta(root, 'Archivo', 'Proyectos', 'Ruba')
+    escanearCarpetas(db, root)
+
+    expect(proyecto('Ruba')).toMatchObject({ cotizacionId: cotizacion(150).id, clienteFinal: 'Ruba Coffee Co' })
+  })
+
   it('attributes a folder through the Cliente - Proyecto split of a quote', () => {
     pdf(root, '2022', 'DMM - 331 - Lukka - Tingo.pdf')
     carpeta(root, 'Proyectos', 'Tingo')
@@ -1220,6 +1245,26 @@ describe('Proyecto sin Contacto', () => {
     carpeta(root, 'Proyectos', 'Activista')
     escanearCarpetas(db, root)
     expect(escanearCarpetas(db, root).proyectosSinContacto).toEqual([])
+  })
+
+  it('records the HDD copy on the Proyecto once its Contacto was assigned by hand', () => {
+    carpeta(root, 'Proyectos', 'Activista')
+    escanearCarpetas(db, root)
+    const [frida] = db.insert(contactos).values({ nombre: 'Frida' }).returning().all()
+    db.update(proyectos).set({ contactoId: frida.id }).run()
+    carpeta(hdd, 'Proyectos', 'Activista')
+
+    const log = escanearCarpetas(db, root, hdd)
+    expect(db.select().from(proyectos).all()).toEqual([expect.objectContaining({ nombre: 'Activista', contactoId: frida.id })])
+    expect(db.select().from(ubicacionesArchivo).all()).toHaveLength(2)
+    expect(log.proyectosSinContacto).toEqual([])
+  })
+
+  it('counts a map row for an already imported Proyecto sin Contacto as found, not unused', () => {
+    carpeta(root, 'Proyectos', 'Activista')
+    escanearCarpetas(db, root)
+    mapa(root, `${CABECERA}Activista,Frida,,\n`)
+    expect(escanearCarpetas(db, root).filasMapa).toEqual([])
   })
 
   it('still refuses a new-format quote naming a Proyecto sin Contacto', () => {
