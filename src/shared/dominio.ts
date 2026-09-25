@@ -54,6 +54,31 @@ export interface LogImportacion {
   errores: { archivo: string; error: string }[]
   /** Folders the app knows but could not read on this run (No disponible). */
   noDisponibles: string[]
+  /** Files skipped as Facturas canceladas: filed in a cancel folder, or replaced by relación 04. */
+  cancelados: number
+  sustituidos: number
+  /** XML files that are not CFDIs at all (e.g. CEP bank receipts): skipped, not errors. */
+  noCfdi: string[]
+  /** Records imported by earlier runs that this run corrected, or would have and left alone. */
+  cambios: {
+    cancelados: CambioFactura[]
+    refechados: CambioFactura[]
+    divididos: CambioFactura[]
+    intactos: CambioFactura[]
+  }
+}
+
+/** An Ingreso or Costo the Facturas run changed, or left alone, and why. */
+export interface CambioFactura {
+  entidad: 'ingreso' | 'costo'
+  id: number
+  fecha: string | null
+  total: number
+  /**
+   * Why it changed (`cancelada`, `sustituida`, `pagos`) or was left alone: edited by hand, has a
+   * Reembolso, or its complementos no longer match the Parcialidades already paid (`complementos`).
+   */
+  motivo: 'cancelada' | 'sustituida' | 'pagos' | 'editado' | 'reembolso' | 'complementos'
 }
 
 /** What one rescan of `Cotizaciones/`, `Clientes/` and `Proyectos/` found. */

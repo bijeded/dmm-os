@@ -48,7 +48,8 @@ The shares live in a pure function in `dinero.ts` (reused by the plan), next to 
 A row counts as untouched when its subtotal, IVA, retenciones and total equal what the import stores for that CFDI (or that Parcialidad), its `fecha_pago` equals the CFDI's date (or the Parcialidad's FechaPago), and no Reembolso points at it.
 - **Re-date:** the row stays whole (parcialidad 0), and only `fecha_pago` changes.
 - **Split:** the row becomes Parcialidad 1 with its share. New rows copy `contacto_id`, `proyecto_id`, `cotizacion_id`, `notas`, `categoria`, `estado_facturacion` and `fecha_registro`.
-- **Later complementos:** Parcialidades already *pagado* are never rewritten. The *pendiente* remainder is updated in place into the new payment, and a new remainder is added only if a balance is still open.
+- **Later complementos:** Parcialidades are numbered by NumParcialidad, so a payment whose complemento turns up late fills its own number. Parcialidades already *pagado* are never rewritten. A *pendiente* row is updated in place into a wanted Parcialidad, keeping its number when possible, and a remainder no longer needed is cancelled. If the new plan would change a paid Parcialidad, or no longer splits the invoice, the whole invoice is left alone and reported with motivo `complementos`, because rewriting only part of it could count a payment twice.
+- **Sugerencias:** a new Parcialidad copies every Sugerencia de importación still waiting on the invoice's first row.
 - **Cancel:** set `estado = 'cancelado'` directly, whatever the current estado. This bypasses `cancelarIngreso`, whose guard only accepts *pendiente*, and relies on ADR-0002. Reembolsos are the one exception, because cancelling would orphan money already given back.
 
 Rows that fail the check are reported, not changed.

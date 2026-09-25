@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { monto } from '../shared/formato'
-import { convertir, MENSAJE_REEMBOLSO_EXCEDIDO, monedaDe, montoEn, montos, reembolso, repartir, tasaDe } from './dinero'
+import { convertir, enParcialidades, MENSAJE_REEMBOLSO_EXCEDIDO, monedaDe, montoEn, montos, reembolso, repartir, tasaDe } from './dinero'
 
 const enPesos = { total: 1800, montoOriginal: null, monedaOriginal: null }
 const enUsd = { total: 1800, montoOriginal: 100, monedaOriginal: 'USD' as const }
@@ -110,5 +110,49 @@ describe('dinero', () => {
   it('formats money in its currency', () => {
     expect(monto(125_050)).toBe('$1,250.50')
     expect(monto(3000, 'USD')).toBe('USD 30.00')
+  })
+
+  describe('enParcialidades', () => {
+    const suma = (partes: ReturnType<typeof enParcialidades>, f: 'subtotal' | 'iva' | 'retenciones' | 'total') =>
+      partes.reduce((n, p) => n + p.montos[f], 0)
+
+    it('splits an invoice paid in two parts, the paid-off one taking the remainder even when payments overshoot', () => {
+      // Appleseed 2a676e07: the complementos add up to $9.85 more than the invoice.
+      const factura = montos(26_680_000, { iva: 4_268_800, retenciones: 5_514_756 })
+      const partes = enParcialidades(factura, [
+        { pagado: 9_914_667, saldo: 15_519_377 },
+        { pagado: 15_520_362, saldo: 0 }
+      ])
+      expect(partes.map((p) => p.pagada)).toEqual([true, true])
+      expect(Math.abs(partes[0].montos.total - 9_914_667)).toBeLessThanOrEqual(2)
+      for (const f of ['subtotal', 'iva', 'retenciones', 'total'] as const) expect(suma(partes, f)).toBe(factura[f])
+    })
+
+    it('leaves the open balance as one more part, still to be paid', () => {
+      const factura = montos(1_000_000, { iva: 160_000 })
+      const partes = enParcialidades(factura, [{ pagado: 464_000, saldo: 696_000 }])
+      expect(partes).toEqual([
+        { pagada: true, montos: expect.objectContaining({ subtotal: 400_000, iva: 64_000, total: 464_000 }) },
+        { pagada: false, montos: expect.objectContaining({ subtotal: 600_000, iva: 96_000, total: 696_000 }) }
+      ])
+    })
+
+    it('splits a USD invoice by its USD payments, keeping each part\'s USD original', () => {
+      const factura = montos(1_600_000, { iva: 256_000, montoOriginal: 100_000 })
+      const partes = enParcialidades(factura, [
+        { pagado: 40_000, saldo: 60_000 },
+        { pagado: 60_000, saldo: 0 }
+      ])
+      expect(partes.map((p) => [p.montos.montoOriginal, p.montos.monedaOriginal, p.montos.subtotal, p.montos.iva])).toEqual([
+        [40_000, 'USD', 640_000, 102_400],
+        [60_000, 'USD', 960_000, 153_600]
+      ])
+      expect(suma(partes, 'total')).toBe(factura.total)
+    })
+
+    it('keeps a single payment that pays it all as the whole invoice', () => {
+      const factura = montos(200_000, { iva: 32_000 })
+      expect(enParcialidades(factura, [{ pagado: 232_000, saldo: 0 }])).toEqual([{ pagada: true, montos: factura }])
+    })
   })
 })

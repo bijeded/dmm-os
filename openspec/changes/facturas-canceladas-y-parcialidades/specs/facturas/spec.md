@@ -27,7 +27,7 @@ Importar facturas SHALL NOT import a CFDI that sits, at any depth below `Factura
 - **THEN** no Ingreso is created for it, in pesos or in dollars
 
 ### Requirement: A replaced CFDI is not imported
-When a CFDI the run keeps names another CFDI in its CfdiRelacionados with TipoRelacion `04` (sustitución), Importar facturas SHALL treat the named CFDI as a Factura cancelada, whether or not its file is in the folders. A CFDI that is itself a Factura cancelada SHALL NOT replace anything.
+When a CFDI the run keeps names another CFDI in its CfdiRelacionados with TipoRelacion `04` (sustitución), Importar facturas SHALL treat the named CFDI as a Factura cancelada, whether or not its file is in the folders. A CFDI filed in a cancel folder SHALL NOT replace anything; a CFDI that was itself replaced still counts as having replaced what it named.
 
 #### Scenario: Replacement filed in a later month
 - **WHEN** `2020/05/ea1cd75e….xml` and `2020/08/c79a953d….xml` are both $15,312 invoices to the same RFC, and c79a953d names ea1cd75e with relación `04`
@@ -96,7 +96,7 @@ The invoice's amounts SHALL decide the totals even when the complementos' amount
 - **THEN** it is one Ingreso, *pagado* 2018-04-10
 
 ### Requirement: An already imported PPD invoice is re-dated or split
-When a PPD invoice was already imported as one Ingreso, and the complementos now in the folders date it differently, Importar facturas SHALL re-date that Ingreso or split it into Parcialidades as a fresh import would. It SHALL do this only while the Ingreso still holds the amounts and payment date the import gave it and has no Reembolso. New Parcialidades SHALL carry the original Ingreso's Contacto, Proyecto, Cotización and notes. An Ingreso edited by hand SHALL be left unchanged and listed in the log. A later run with more complementos SHALL keep the Parcialidades already *pagado*, and SHALL re-derive only the *pendiente* remainder.
+When a PPD invoice was already imported as one Ingreso, and the complementos now in the folders date it differently, Importar facturas SHALL re-date that Ingreso or split it into Parcialidades as a fresh import would. It SHALL do this only while the Ingreso still holds the amounts and payment date the import gave it and has no Reembolso. New Parcialidades SHALL carry the original Ingreso's Contacto, Proyecto, Cotización and notes, and any Sugerencia de importación still waiting on it. An Ingreso edited by hand SHALL be left unchanged and listed in the log. Parcialidades SHALL be numbered by the payment's NumParcialidad. A later run with more complementos SHALL keep the Parcialidades already *pagado*, and SHALL re-derive only the *pendiente* remainder. When the complementos now in the folders would change a Parcialidad already *pagado*, or no longer split the invoice at all, the run SHALL leave all of that invoice's Ingresos unchanged and list it in the log, so the invoice is never counted twice.
 
 #### Scenario: Split on the next run
 - **WHEN** Ingreso 94 is the $254,340.44 invoice 2a676e07, *pagado* 2019-08-29 and linked to the Proyecto "Appleseed", and the user runs Importar facturas
@@ -107,6 +107,15 @@ When a PPD invoice was already imported as one Ingreso, and the complementos now
 #### Scenario: Edited by hand
 - **WHEN** the user changed an imported PPD Ingreso's payment date to 2019-10-01 and complementos now date it differently
 - **THEN** Importar facturas leaves it unchanged and lists it in the log
+
+#### Scenario: Missing complemento turns up
+- **WHEN** an invoice was split on the complementos for payments 1 and 3, with a *pendiente* remainder, and the complemento for payment 2 is added
+- **THEN** the next run adds Parcialidad 2 and re-derives the remainder, keeping Parcialidades 1 and 3 unchanged
+- **AND** the Parcialidades still add up to the invoice
+
+#### Scenario: Complementos no longer match
+- **WHEN** an invoice's paid Parcialidades came from a complemento that is later moved to a `Canceladas` folder
+- **THEN** the run leaves them unchanged and lists the invoice in the log, and adds no whole-invoice Ingreso beside them
 
 #### Scenario: Later complemento closes the balance
 - **WHEN** an invoice has a *pagado* Parcialidad and a *pendiente* remainder, and a complemento for the final payment is added

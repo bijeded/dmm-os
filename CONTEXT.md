@@ -112,7 +112,14 @@ Something the importer guessed that waits in Logs for a one-time accept/reject. 
 **Importación**:
 A run that brings existing files into the app: the folder scan (Cotizaciones PDFs, Clientes and Proyectos folders) or the Facturas run (CFDI XML). Each file imports in one transaction, and a Sugerencia de importación is asked only once. A rejected Sugerencia undoes exactly what its guess changed.
 Imported history is exempt from the lifecycle guards: a Proyecto may import as completed without being fully paid, and a Cotización accepted by import creates no Ingresos or Costos (invoiced income arrives through the Facturas run; uninvoiced Ingresos, which carry no IVA, are entered by hand in Finanzas). See ADR-0002.
+The Facturas run reads every file before importing any: a **Factura cancelada** is not imported, and an Ingreso or Costo an earlier run imported from one becomes cancelado, even when paid (ADR-0002). Complementos de pago date a PPD invoice's payments, splitting it into **Parcialidades**. An XML that is not a CFDI (e.g. a CEP bank receipt) is only counted.
 The folder scan follows the Mapa de nombres only when a file or folder is first imported: editing the map later moves, renames or removes nothing already imported. The one exception is an RFC, which a later scan still gives to a Contacto that has none.
+
+**Factura cancelada**:
+A CFDI filed in a folder whose name starts with "cancel" (e.g. `Canceladas`), or one that another CFDI replaces through relación `04` (sustitución). The app never asks the SAT; the folder and the relación are its only signals. Its money never counts.
+
+**Parcialidad**:
+One payment of an invoice, recorded as its own Ingreso dated on that payment's day. An invoice paid in several payments (as its complementos de pago record) is split into Parcialidades that add up exactly to it; an open balance is one more, still pending. The same word names each of the pending Ingresos a Plan de cobro splits a Cotización into.
 
 **Mapa de nombres**:
 `Clientes/_nombres.csv`, edited by the user, telling the folder scan what each name on disk means: its Contacto and, optionally, its Proyecto, Cliente final and the Contacto's RFC. A row keyed `<folder>/<subfolder>` makes that subfolder a Proyecto of its own. A map that exists but cannot be read stops the scan, and rows that matched nothing are reported in Logs.

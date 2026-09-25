@@ -120,6 +120,13 @@
       "when": 1790145261994,
       "tag": "0016_borrar_asignaciones_costo",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1790303589135,
+      "tag": "0017_parcialidades_cfdi",
+      "breakpoints": true
     }
   ]
 }
