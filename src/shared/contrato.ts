@@ -74,7 +74,8 @@ export const contrato = {
     facturas: canal<[], LogImportacion>(),
     /**
      * Re-reads `Cotizaciones/`, `Clientes/`, `Proyectos/` and `Archivo/Proyectos/`, with the
-     * external HDD as a secondary source. Safe to run again at any time.
+     * external HDD as a secondary source. A legacy quote not yet imported takes its fecha, items,
+     * Monto, categoría and project name from its PDF's text. Safe to run again at any time.
      */
     carpetas: canal<[], LogCarpetas>(),
     /**

@@ -1,5 +1,6 @@
-import { and, eq } from 'drizzle-orm'
-import type { OpcionSugerencia, Sugerencia, RespuestaSugerencia } from '../shared/dominio'
+import { and, eq, isNotNull } from 'drizzle-orm'
+import type { Moneda, OpcionSugerencia, Sugerencia, RespuestaSugerencia } from '../shared/dominio'
+import { partidasDelMonto, partidasGuardadas } from './importacion/pdf-cotizacion'
 import { mejorEscrito } from './nombres'
 import { rutaDeProyecto } from './paths'
 import type { Db } from './db/index'
@@ -36,12 +37,14 @@ export function proponer(db: Db | Tx, propuesta: Propuesta): boolean {
   return db.insert(sugerenciasImportacion).values(propuesta).onConflictDoNothing().run().changes > 0
 }
 
-const mxn = (centavos: number) =>
-  (centavos / 100).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
+const mxn = (centavos: number) => dinero(centavos, 'MXN')
+const dinero = (centavos: number, moneda: Moneda) =>
+  (centavos / 100).toLocaleString('es-MX', { style: 'currency', currency: moneda })
 
 /**
  * The Sugerencias still waiting for an answer, oldest first, each naming what it is about and
- * what it can be answered with.
+ * what it can be answered with. A "¿Qué aceptó?" is asked only while its Cotización is accepted:
+ * once its link is rejected, or it is cancelled, there is nothing it accepted.
  */
 export function pendientes(db: Db): Sugerencia[] {
   const catalogo = leerCatalogo(db)
@@ -51,6 +54,7 @@ export function pendientes(db: Db): Sugerencia[] {
     .where(eq(sugerenciasImportacion.estado, 'pendiente'))
     .orderBy(sugerenciasImportacion.id)
     .all()
+    .filter((s) => s.accion !== 'partidas' || cotizacionAceptada(db, s.entidadId))
     .map((s) => ({
       id: s.id,
       accion: s.accion,
@@ -60,9 +64,12 @@ export function pendientes(db: Db): Sugerencia[] {
       registro: describirRegistro(db, s.entidad, s.entidadId),
       destino: describirDestino(db, s.proyectoId, s.contactoId),
       opciones: opcionesDe(db, catalogo, s),
-      varias: false
+      varias: s.accion === 'partidas'
     }))
 }
+
+const cotizacionAceptada = (db: Db | Tx, id: number) =>
+  db.select({ estado: cotizaciones.estado }).from(cotizaciones).where(eq(cotizaciones.id, id)).get()?.estado === 'aceptada'
 
 /**
  * Every Contacto and Proyecto, read once per call, so each Sugerencia's opciones need only its
@@ -99,6 +106,7 @@ function leerCatalogo(db: Db | Tx): Catalogo {
  * merged away disappears. Only the guess is `sugerida`.
  */
 function opcionesDe(db: Db | Tx, catalogo: Catalogo, s: Fila): OpcionSugerencia[] {
+  if (s.accion === 'partidas') return opcionesDePartidas(db, s.entidadId)
   let opciones: { id: number; nombre: string }[] = []
   if (s.accion === 'fusionar') {
     opciones = catalogo.contactos.filter((c) => c.id !== s.entidadId)
@@ -116,6 +124,76 @@ function opcionesDe(db: Db | Tx, catalogo: Catalogo, s: Fila): OpcionSugerencia[
   return opciones
     .map(({ id, nombre }) => ({ id, nombre, sugerida: id === sugerida }))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+}
+
+/**
+ * "¿Qué aceptó?": the prices that make an accepted Cotización's Monto, by their index among its
+ * items, in the order the PDF lists them. Pre-checked are the ones an issued invoice to its
+ * Contacto shows were taken (see `precioFacturado`).
+ */
+function opcionesDePartidas(db: Db | Tx, cotizacionId: number): OpcionSugerencia[] {
+  const c = db.select().from(cotizaciones).where(eq(cotizaciones.id, cotizacionId)).get()
+  if (!c) return []
+  const partidas = partidasGuardadas(c.items)
+  const indices = partidasDelMonto(partidas)
+  const facturadas = new Set(precioFacturado(db, c, indices.map((i) => ({ i, precio: partidas[i].precio }))))
+  return indices.map((i) => ({
+    id: i,
+    nombre: `${partidas[i].concepto} · ${dinero(partidas[i].precio, c.moneda)}`,
+    sugerida: facturadas.has(i)
+  }))
+}
+
+/** Beyond this many prices, only single prices are matched against an invoice, not their combinations. */
+const MAX_COMBINADAS = 12
+
+/**
+ * Which prices of `c` an issued invoice to its Contacto covers exactly: the invoice's subtotal
+ * (all its Parcialidades together) equals one price or the sum of several. Invoices dated before
+ * the quote, or cancelled, say nothing about it. The earliest invoice that matches decides, and
+ * the fewest prices that make it. A USD quote is compared with invoices issued in USD, by their
+ * USD amount before IVA, allowing 1% for the rounding of that amount.
+ */
+function precioFacturado(db: Db | Tx, c: typeof cotizaciones.$inferSelect, precios: { i: number; precio: number }[]): number[] {
+  if (precios.length === 0) return []
+  const usd = c.moneda === 'USD'
+  const facturas = new Map<string, { fecha: string; subtotal: number; total: number; original: number; usd: boolean }>()
+  for (const i of db
+    .select()
+    .from(ingresos)
+    .where(and(eq(ingresos.contactoId, c.contactoId), isNotNull(ingresos.cfdiUuid)))
+    .all()) {
+    if (i.estado === 'cancelado' || (i.fechaRegistro ?? '') < c.fecha) continue
+    const f = facturas.get(i.cfdiUuid!) ?? { fecha: i.fechaRegistro!, subtotal: 0, total: 0, original: 0, usd: i.monedaOriginal === 'USD' }
+    f.fecha = f.fecha < i.fechaRegistro! ? f.fecha : i.fechaRegistro!
+    f.subtotal += i.subtotal
+    f.total += i.total
+    f.original += i.montoOriginal ?? 0
+    facturas.set(i.cfdiUuid!, f)
+  }
+  const combinaciones = subconjuntos(precios, precios.length > MAX_COMBINADAS ? 1 : precios.length)
+  const ordenadas = [...facturas.entries()].sort(([ua, a], [ub, b]) => a.fecha.localeCompare(b.fecha) || ua.localeCompare(ub))
+  for (const [, f] of ordenadas) {
+    if (f.usd !== usd) continue
+    const monto = usd ? Math.round((f.original * f.subtotal) / (f.total || 1)) : f.subtotal
+    const cuadra = combinaciones.find((cs) => {
+      const suma = cs.reduce((s, p) => s + p.precio, 0)
+      return usd ? Math.abs(suma - monto) <= monto * 0.01 : suma === monto
+    })
+    if (cuadra) return cuadra.map((p) => p.i)
+  }
+  return []
+}
+
+/** Every non-empty subset of up to `max` items, fewest items first, each in the items' order. */
+function subconjuntos<T>(items: T[], max: number): T[][] {
+  if (max === 1) return items.map((x) => [x])
+  const r: T[][] = []
+  for (let mascara = 1; mascara < 1 << items.length; mascara++) {
+    const s = items.filter((_, i) => mascara & (1 << i))
+    if (s.length <= max) r.push(s)
+  }
+  return r.sort((a, b) => a.length - b.length)
 }
 
 function describirRegistro(db: Db, entidad: Sugerencia['entidad'], id: number): string {
@@ -189,6 +267,7 @@ type Decision = { estado: 'aceptada' | 'rechazada' } | { estado: 'corregida'; el
 /** Answers `s` inside the caller's transaction. */
 export function responderEn(tx: Tx, s: Fila, respuesta: RespuestaSugerencia, hoy: string): void {
   if (s.estado !== 'pendiente') throw new Error('Esa sugerencia ya fue respondida')
+  if (s.accion === 'partidas') return responderPartidas(tx, s, respuesta)
   const decision = decidir(tx, s, respuesta)
 
   if (s.accion === 'vincular') vincular(tx, s, decision)
@@ -206,19 +285,51 @@ export function responderEn(tx: Tx, s: Fila, respuesta: RespuestaSugerencia, hoy
  */
 function decidir(tx: Tx, s: Fila, respuesta: unknown): Decision {
   if (respuesta === 'aceptada' || respuesta === 'rechazada') return { estado: respuesta }
-  const elegidas: unknown = typeof respuesta === 'object' && respuesta !== null ? (respuesta as { elegidas?: unknown }).elegidas : undefined
-  if (!Array.isArray(elegidas) || !elegidas.every((id) => Number.isInteger(id))) throw new Error('Respuesta no válida')
+  const elegidas = elegidasDe(respuesta)
 
   const opciones = opcionesDe(tx, leerCatalogo(tx), s)
   if (opciones.length === 0) throw new Error('Esta sugerencia no ofrece opciones')
   if (elegidas.length === 0) throw new Error('Elige una opción')
   if (new Set(elegidas).size !== elegidas.length) throw new Error('Una opción se eligió dos veces')
-  // No kind lets several be chosen yet (`varias` is false for all).
+  // Only "¿Qué aceptó?" lets several be chosen, and it is answered by `responderPartidas`.
   if (elegidas.length > 1) throw new Error('Solo se puede elegir una opción')
-  const elegido = elegidas[0] as number
+  const elegido = elegidas[0]
   const opcion = opciones.find((o) => o.id === elegido)
   if (!opcion) throw new Error(`Ese ${s.accion === 'fusionar' ? 'Contacto' : 'Proyecto'} ya no se puede elegir`)
   return opcion.sugerida ? { estado: 'aceptada' } : { estado: 'corregida', elegido }
+}
+
+/**
+ * "¿Qué aceptó?": the checked prices become the Cotización's Monto, before IVA, as every quote
+ * price is. Checking exactly the pre-checked ones accepts the guess; any other set corrects it.
+ * Rejecting keeps the Monto the import gave it. Imported history creates no Ingresos, Costos or
+ * definitions (ADR-0002), whatever the answer.
+ */
+function responderPartidas(tx: Tx, s: Fila, respuesta: unknown): void {
+  if (!cotizacionAceptada(tx, s.entidadId)) throw new Error('Esa cotización ya no está aceptada')
+  let estado: 'aceptada' | 'rechazada' | 'corregida' = 'rechazada'
+  if (respuesta !== 'rechazada') {
+    const opciones = opcionesDePartidas(tx, s.entidadId)
+    const sugeridas = opciones.filter((o) => o.sugerida).map((o) => o.id)
+    const elegidas = respuesta === 'aceptada' ? sugeridas : elegidasDe(respuesta)
+    if (elegidas.length === 0) throw new Error('Elige qué aceptó')
+    if (new Set(elegidas).size !== elegidas.length) throw new Error('Una opción se eligió dos veces')
+    if (!elegidas.every((id) => opciones.some((o) => o.id === id))) throw new Error('Ese precio no está en la cotización')
+    const iguales = elegidas.length === sugeridas.length && elegidas.every((id) => sugeridas.includes(id))
+    estado = iguales ? 'aceptada' : 'corregida'
+    const c = tx.select().from(cotizaciones).where(eq(cotizaciones.id, s.entidadId)).get()!
+    const partidas = partidasGuardadas(c.items)
+    const monto = elegidas.reduce((suma, i) => suma + partidas[i].precio, 0)
+    tx.update(cotizaciones).set({ subtotal: monto, iva: 0, total: monto }).where(eq(cotizaciones.id, s.entidadId)).run()
+  }
+  tx.update(sugerenciasImportacion).set({ estado }).where(eq(sugerenciasImportacion.id, s.id)).run()
+}
+
+/** The ids of an `Eleccion`, which arrives over IPC unchecked. */
+function elegidasDe(respuesta: unknown): number[] {
+  const elegidas: unknown = typeof respuesta === 'object' && respuesta !== null ? (respuesta as { elegidas?: unknown }).elegidas : undefined
+  if (!Array.isArray(elegidas) || !elegidas.every((id) => Number.isInteger(id))) throw new Error('Respuesta no válida')
+  return elegidas as number[]
 }
 
 /**

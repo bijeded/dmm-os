@@ -134,8 +134,18 @@ export interface LogCarpetas {
     contactos: { nombre: string; origen: OrigenImportado }[]
     proyectos: { nombre: string; contacto: string; origen: OrigenImportado }[]
     rfcs: { contacto: string; rfc: string }[]
+    /** Each Cotización created, with what its PDF gave it. `monto` in centavos (US cents for USD), before IVA. */
+    cotizaciones: { folio: string; fecha: string; monto: number; moneda: Moneda; categoria: Categoria }[]
   }
+  /** Cotizaciones this run imported whose PDF gave no fecha or no price, printed another year, or could not be read. */
+  cotizacionesIncompletas: { folio: string; archivo: string; falta: FaltaPdf[] }[]
 }
+
+/**
+ * What a Cotización's PDF could not give: its fecha, any price, or any text at all. `año` means
+ * the PDF printed another year than its folder's, and the folder's was used.
+ */
+export type FaltaPdf = 'fecha' | 'año' | 'precio' | 'pdf'
 
 /** Why a row of the Mapa de nombres did nothing. */
 export type ProblemaFilaMapa =
@@ -162,7 +172,8 @@ export interface EstadoImportacion {
   carpetas: Corrida<LogCarpetas> | null
 }
 
-export const ACCIONES_SUGERENCIA = ['vincular', 'fusionar', 'ubicacion'] as const
+/** `partidas` is "¿Qué aceptó?": which prices of an accepted legacy Cotización were accepted. */
+export const ACCIONES_SUGERENCIA = ['vincular', 'fusionar', 'ubicacion', 'partidas'] as const
 export type AccionSugerencia = (typeof ACCIONES_SUGERENCIA)[number]
 export const ENTIDADES_SUGERENCIA = ['ingreso', 'costo', 'cotizacion', 'proyecto', 'contacto'] as const
 export type EntidadSugerencia = (typeof ENTIDADES_SUGERENCIA)[number]
@@ -370,6 +381,10 @@ export interface PartidaCotizacion {
   cantidad: number
   /** Unit price in centavos before IVA. */
   precio: number
+  /** Charged every period, as a legacy quote's `mensuales` line is; absent for a one-off line. */
+  recurrente?: boolean
+  /** A legacy peso quote's USD price the PDF gives no peso amount or rate for: listed, never in the Monto. */
+  sinConvertir?: boolean
 }
 
 export const CATEGORIAS_COSTO = ['unico', 'mensual', 'msi', 'anual'] as const

@@ -1,11 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { costos, cotizaciones, ingresos, proyectos, ubicacionesArchivo } from './db/schema'
+import { costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, ubicacionesArchivo } from './db/schema'
 import { contacto, cotizacionAceptada, db, ingresoBase, proyecto, reiniciarDb } from './db/test-db'
+import { escanear } from './importacion'
 import { importarCarpetaProyecto } from './importacion/carpetas'
+import { pdfDeTexto } from './importacion/pdf-prueba'
 import {
   borrarProyecto,
   cancelarProyecto,
@@ -191,6 +193,72 @@ describe('sin ingresos registrados', () => {
     const mensual = completado(c.id)
     archivar(mensual.id)
     expect([enCurso, sinCotizacion, sinCarpeta, mensual].map((p) => marcado(p.id))).toEqual([false, false, false, false])
+  })
+})
+
+describe('sin ingresos registrados con el Monto del PDF', () => {
+  /** The quote `DMM - 250 - Flor de Letras.pdf` and its delivered folder in `Archivo/Proyectos/Curso`. */
+  const importarEntregada = async (precio: string) => {
+    mkdirSync(join(root, 'Clientes'), { recursive: true })
+    writeFileSync(join(root, 'Clientes', '_nombres.csv'), 'en disco,contacto,proyecto\nCurso,Flor de Letras,\n')
+    mkdirSync(join(root, 'Cotizaciones', '2021'), { recursive: true })
+    writeFileSync(
+      join(root, 'Cotizaciones', '2021', 'DMM - 250 - Flor de Letras.pdf'),
+      pdfDeTexto(['Ciudad de México, 29 de octubre, 2021.', 'Video “Curso” : Elaboración de video:', precio])
+    )
+    mkdirSync(join(root, 'Archivo', 'Proyectos', 'Curso'), { recursive: true })
+    await escanear(db, root)
+    const p = db.select().from(proyectos).where(eq(proyectos.nombre, 'Curso')).get()!
+    expect(p.estado).toBe('completado')
+    expect(db.select().from(cotizaciones).where(eq(cotizaciones.id, p.cotizacionId!)).get()!.estado).toBe('aceptada')
+    return p
+  }
+  const marcado = (id: number) => listarProyectos(db, root).proyectos.find((p) => p.id === id)!.sinIngresosRegistrados
+  const sinDinero = () =>
+    [ingresos, costos, definicionesIngreso, definicionesCosto].map((t) => db.select().from(t).all().length)
+
+  it('creates no money for an imported accepted quote, and flags it until an Ingreso reaches its Monto', async () => {
+    const p = await importarEntregada('Costo: $ 3,000.00')
+    expect(sinDinero()).toEqual([0, 0, 0, 0])
+    expect(marcado(p.id)).toBe(true)
+
+    // Uninvoiced and without IVA, entered by hand: it reaches the Monto before IVA, and the flag clears.
+    db.insert(ingresos).values({ fechaRegistro: hoy, subtotal: 300000, total: 300000, categoria: 'sin_factura', proyectoId: p.id, estado: 'pagado' }).run()
+    expect(marcado(p.id)).toBe(false)
+  })
+
+  it('stays flagged while the paid Ingresos fall short of the Monto', async () => {
+    const p = await importarEntregada('Costo: $ 3,000.00')
+    db.insert(ingresos).values({ fechaRegistro: hoy, subtotal: 100000, total: 100000, categoria: 'sin_factura', proyectoId: p.id, estado: 'pagado' }).run()
+    expect(marcado(p.id)).toBe(true)
+  })
+
+  it('compares a USD quote with a USD invoice by its original amount', async () => {
+    const p = await importarEntregada('Costo especial: $ 260.00 USD ($5,000.00 MXN)')
+    expect(marcado(p.id)).toBe(true)
+    db.insert(ingresos)
+      .values({
+        fechaRegistro: hoy,
+        subtotal: 500000,
+        iva: 80000,
+        total: 580000,
+        montoOriginal: 30160,
+        monedaOriginal: 'USD',
+        categoria: 'factura',
+        cfdiUuid: 'U-1',
+        estadoFacturacion: 'facturado',
+        proyectoId: p.id,
+        estado: 'pagado'
+      })
+      .run()
+    expect(marcado(p.id)).toBe(false)
+  })
+
+  it('never flags a quote with only recurring prices, and creates no definition for it', async () => {
+    const p = await importarEntregada('Costo: $ 2,000.00 mensuales')
+    expect(db.select().from(cotizaciones).where(eq(cotizaciones.id, p.cotizacionId!)).get()!.facturacion).toBe('mensual')
+    expect(sinDinero()).toEqual([0, 0, 0, 0])
+    expect(marcado(p.id)).toBe(false)
   })
 })
 

@@ -18,7 +18,8 @@ const logCarpetas = {
   mapa: 'ausente' as const,
   filasMapa: [],
   subcarpetasSinProyecto: [],
-  nuevos: { contactos: [], proyectos: [], rfcs: [] }
+  nuevos: { contactos: [], proyectos: [], rfcs: [], cotizaciones: [] },
+  cotizacionesIncompletas: []
 }
 
 const rutas = { dmmOsRoot: '/root', hddRoot: null, hddConectado: false, entrada: 0 }

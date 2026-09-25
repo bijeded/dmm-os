@@ -156,6 +156,19 @@ describe('Nueva cotización', () => {
 })
 
 describe('Ficha de cotización', () => {
+  it('marks the recurring prices of an imported quote', async () => {
+    api.ficha = vi.fn(async (): Promise<Ficha> => ({
+      ...ficha,
+      partidas: [
+        { concepto: 'Sitio web “Hospital Jardín”', categoria: 'website', cantidad: 1, precio: 1_800_000 },
+        { concepto: 'Servicio webmaster', categoria: 'website', cantidad: 1, precio: 200_000, recurrente: true }
+      ]
+    }))
+    montar('/cotizaciones/2')
+    expect((await screen.findByText(/Servicio webmaster/)).textContent).toBe('Servicio webmaster · recurrente')
+    expect(screen.getByText(/Hospital Jardín/).textContent).toBe('Sitio web “Hospital Jardín”')
+  })
+
   it('asks for the exchange rate when accepting a USD quote', async () => {
     vi.mocked(api.ficha).mockResolvedValue({ ...ficha, moneda: 'USD' })
     montar('/cotizaciones/2')

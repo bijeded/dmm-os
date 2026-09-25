@@ -41,7 +41,8 @@ import {
   reanudarProyecto
 } from './proyectos'
 import { agregarTarea, borrarTarea, completarTarea, listarTareas } from './tareas'
-import { escanearCarpetas, importarFacturas, marcarHddNoDisponible } from './importacion'
+import { escanear, escanearCarpetas, importarFacturas, marcarHddNoDisponible } from './importacion'
+import { leerPdfsCotizaciones } from './importacion/pdfs'
 import { bloqueos, borrarImportado, reimportar } from './importacion/reimportar'
 import { ejecutarCli, leerUso, resumenAi, type EjecutarUso } from './ai'
 import { agentesYSkills, rutaAgenteOSkill } from './agentes-skills'
@@ -114,34 +115,38 @@ export function crearHandlers({
         ultimo.facturas = { corridoEn: ahora(), log }
         return log
       },
-      carpetas: () => {
-        const log = escanearCarpetas(conexion.db, info.dmmOsRoot, hddRoot(), hoy())
+      carpetas: async () => {
+        const log = await escanear(conexion.db, info.dmmOsRoot, hddRoot(), hoy())
         ultimo.carpetas = { corridoEn: ahora(), log }
         return log
       },
-      vistaPrevia: () => {
+      // The PDFs are read before the throwaway copy is made, so no copy is held open during I/O.
+      vistaPrevia: async () => {
+        const pdfs = await leerPdfsCotizaciones(info.dmmOsRoot, conexion.db)
         const copia = conexion.copiaEnMemoria()
         try {
-          return escanearCarpetas(copia.db, info.dmmOsRoot, hddRoot(), hoy())
+          return escanearCarpetas(copia.db, info.dmmOsRoot, hddRoot(), hoy(), pdfs)
         } finally {
           copia.close()
         }
       },
-      vistaPreviaDesdeCero: () => {
+      vistaPreviaDesdeCero: async () => {
+        // A reimport reads every legacy quote again, whatever is imported now.
+        const pdfs = await leerPdfsCotizaciones(info.dmmOsRoot)
         const copia = conexion.copiaEnMemoria()
         try {
           // Off on the throwaway copy only: the preview runs even while hand-made records
           // reference imported ones, and the scan never follows those references.
           copia.db.run(sql`PRAGMA foreign_keys = OFF`)
           borrarImportado(copia.db)
-          const log = escanearCarpetas(copia.db, info.dmmOsRoot, hddRoot(), hoy())
+          const log = escanearCarpetas(copia.db, info.dmmOsRoot, hddRoot(), hoy(), pdfs)
           return { log, bloqueos: bloqueos(conexion.db, { root: info.dmmOsRoot, hddRoot: hddRoot() }) }
         } finally {
           copia.close()
         }
       },
-      reimportar: () => {
-        const r = reimportar(conexion.db, {
+      reimportar: async () => {
+        const r = await reimportar(conexion.db, {
           root: info.dmmOsRoot,
           hddRoot: hddRoot(),
           hoy: hoy(),

@@ -4,6 +4,7 @@ import type {
   CambioFactura,
   Corrida,
   EstadoImportacion,
+  FaltaPdf,
   LogCarpetas,
   LogImportacion,
   OrigenImportado,
@@ -13,7 +14,8 @@ import type {
   Sugerencia,
   VistaPreviaDesdeCero
 } from '../../../shared/dominio'
-import { dia, pesos } from '../../../shared/formato'
+import { NOMBRES_CATEGORIA } from '../../../shared/dominio'
+import { dia, folioDmm, monto, pesos } from '../../../shared/formato'
 import { Aviso, Seccion, fecha, mensaje, useAccion } from './Seccion'
 import { campoCls } from './estilos'
 import { Button } from './ui/button'
@@ -66,8 +68,26 @@ export function Logs() {
   const elegidaDe = (s: Sugerencia) =>
     s.opciones.some((o) => o.id === elegidas[s.id]) ? elegidas[s.id] : sugeridaDe(s)
   const aceptar = (s: Sugerencia) => {
+    if (s.varias) return aceptarVarias(s)
     const elegida = elegidaDe(s)
     contestar(s.id, elegida === undefined || elegida === sugeridaDe(s) ? 'aceptada' : { elegidas: [elegida] })
+  }
+
+  // "¿Qué aceptó?": the prices checked on each row, preset to the pre-checked ones. Checking
+  // exactly those sends the guess; any other set sends the set.
+  const [marcadas, setMarcadas] = useState<Record<number, number[]>>({})
+  const sugeridasDe = (s: Sugerencia) => s.opciones.filter((o) => o.sugerida).map((o) => o.id)
+  const marcadasDe = (s: Sugerencia) =>
+    (marcadas[s.id] ?? sugeridasDe(s)).filter((id) => s.opciones.some((o) => o.id === id))
+  const marcar = (s: Sugerencia, id: number, si: boolean) => {
+    const actuales = marcadasDe(s).filter((m) => m !== id)
+    setMarcadas({ ...marcadas, [s.id]: si ? [...actuales, id] : actuales })
+  }
+  const aceptarVarias = (s: Sugerencia) => {
+    const elegidas = marcadasDe(s)
+    const sugeridas = sugeridasDe(s)
+    const iguales = sugeridas.length > 0 && elegidas.length === sugeridas.length && elegidas.every((id) => sugeridas.includes(id))
+    contestar(s.id, iguales ? 'aceptada' : { elegidas })
   }
 
   // A real scan makes the last preview stale.
@@ -154,8 +174,23 @@ export function Logs() {
           {sugerencias.map((s) => (
             <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-2 text-[13px]">
               <span className="min-w-0">
+                {s.varias && <span className="font-semibold">¿Qué aceptó? </span>}
                 {s.registro}
-                {s.opciones.length > 1 && sugeridaDe(s) !== undefined ? (
+                {s.varias ? (
+                  <span className="mt-1 flex flex-col gap-0.5">
+                    {s.opciones.map((o) => (
+                      <label key={o.id} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={marcadasDe(s).includes(o.id)}
+                          onChange={(e) => marcar(s, o.id, e.target.checked)}
+                          disabled={ocupado}
+                        />
+                        {o.nombre}
+                      </label>
+                    ))}
+                  </span>
+                ) : s.opciones.length > 1 && sugeridaDe(s) !== undefined ? (
                   <span className="text-on-surface-muted">
                     {' → '}
                     <select
@@ -189,7 +224,7 @@ export function Logs() {
                   </>
                 ) : (
                   <>
-                    <Button disabled={ocupado} onClick={() => aceptar(s)}>
+                    <Button disabled={ocupado || (s.varias && marcadasDe(s).length === 0)} onClick={() => aceptar(s)}>
                       Aceptar
                     </Button>
                     <Button variant="ghost" disabled={ocupado} onClick={() => contestar(s.id, 'rechazada')}>
@@ -216,6 +251,7 @@ function Corridas({ estado }: { estado: EstadoImportacion }) {
       {estado.carpetas && (
         <CorridaVista titulo="Carpetas" corrida={estado.carpetas} lineas={lineasCarpetas(estado.carpetas.log)}>
           <DetalleMapa log={estado.carpetas.log} />
+          <CotizacionesIncompletas log={estado.carpetas.log} />
         </CorridaVista>
       )}
       {estado.facturas && (
@@ -342,6 +378,8 @@ function VistaPrevia({ log, titulo }: { log: LogCarpetas; titulo?: string }) {
         </>
       )}
       <DetalleMapa log={log} />
+      <CotizacionesNuevas log={log} />
+      <CotizacionesIncompletas log={log} />
     </div>
   )
 }
@@ -359,6 +397,49 @@ function PorOrigen({ titulo, items }: { titulo: string; items: { texto: string; 
       </span>
     )
   })
+}
+
+const FALTAS: Record<FaltaPdf, string> = {
+  fecha: 'sin fecha',
+  año: 'año corregido',
+  precio: 'sin precio',
+  pdf: 'PDF ilegible'
+}
+
+/** The Cotizaciones whose PDF gave no fecha or price, printed another year, or could not be read. */
+function CotizacionesIncompletas({ log }: { log: LogCarpetas }) {
+  if (log.cotizacionesIncompletas.length === 0) return null
+  return (
+    <details>
+      <summary className="cursor-pointer text-on-surface-muted">
+        Cotizaciones con PDF incompleto ({log.cotizacionesIncompletas.length})
+      </summary>
+      <ul className="m-0 flex list-none flex-col gap-0.5 p-0 pl-3">
+        {log.cotizacionesIncompletas.map((c) => (
+          <li key={c.archivo}>
+            {folioDmm(c.folio)} · {c.falta.map((f) => FALTAS[f]).join(', ')} · <span className="text-on-surface-muted">{c.archivo}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
+}
+
+/** Each Cotización a Vista previa would create, with what its PDF gives it. */
+function CotizacionesNuevas({ log }: { log: LogCarpetas }) {
+  if (log.nuevos.cotizaciones.length === 0) return null
+  return (
+    <details>
+      <summary className="cursor-pointer text-on-surface-muted">Cotizaciones nuevas ({log.nuevos.cotizaciones.length})</summary>
+      <ul className="m-0 flex list-none flex-col gap-0.5 p-0 pl-3">
+        {log.nuevos.cotizaciones.map((c) => (
+          <li key={c.folio}>
+            {folioDmm(c.folio)} · {dia(c.fecha)} · {monto(c.monto, c.moneda)} · {NOMBRES_CATEGORIA[c.categoria]}
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
 }
 
 /** What the Mapa de nombres did not apply, and the subfolders left out because of it. */
