@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { EstadoImportacion, LogCarpetas, Sugerencia } from '../../../shared/dominio'
+import type { EstadoImportacion, LogCarpetas, ResultadoReimportar, Sugerencia, VistaPreviaDesdeCero } from '../../../shared/dominio'
 import type { DmmApi } from '../../../shared/contrato'
 import { Logs } from './Logs'
 
@@ -68,23 +68,42 @@ const vista: LogCarpetas = {
   }
 }
 
+const fusionar: Sugerencia = {
+  id: 3,
+  accion: 'fusionar',
+  entidad: 'contacto',
+  motivo: 'nombre parecido a "Sublime"',
+  creadoEn: '2026-09-12T09:14:02.000Z',
+  registro: 'Contacto Sublime Inspiración',
+  destino: 'Sublime'
+}
+
 let api: DmmApi['importacion']
+let reimportado: ResultadoReimportar
+let desdeCero: VistaPreviaDesdeCero
 
 const montar = (sugerencias: Sugerencia[] = [vincular, ubicacion], e: EstadoImportacion = estado, v: LogCarpetas = vista) => {
   api = {
     facturas: vi.fn(async () => ({ importados: 0, duplicados: 0, ignorados: 0, sugerencias: 0, rfcsDesconocidos: [], ivasInusuales: [], errores: [], noDisponibles: [], cancelados: 0, sustituidos: 0, recibidas: 0, noCfdi: [], cambios: { cancelados: [], refechados: [], divididos: [], intactos: [] } })),
     carpetas: vi.fn(async () => e.carpetas!.log),
     vistaPrevia: vi.fn(async () => v),
+    vistaPreviaDesdeCero: vi.fn(async () => desdeCero),
+    reimportar: vi.fn(async () => reimportado),
     estado: vi.fn(async () => e),
     sugerencias: vi.fn(async () => sugerencias),
-    responder: vi.fn(async () => [])
+    responder: vi.fn(async () => []),
+    aceptarVincular: vi.fn(async () => [fusionar, ubicacion])
   }
   window.dmm = { importacion: api } as unknown as DmmApi
   render(<Logs />)
 }
 
 afterEach(cleanup)
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  reimportado = { reimportado: true, carpetas: estado.carpetas!.log, facturas: { importados: 0, duplicados: 0, ignorados: 0, sugerencias: 0, rfcsDesconocidos: [], ivasInusuales: [], errores: [], noDisponibles: [], cancelados: 0, sustituidos: 0, recibidas: 0, noCfdi: [], cambios: { cancelados: [], refechados: [], divididos: [], intactos: [] } } }
+  desdeCero = { log: vista, bloqueos: [] }
+})
 
 describe('Configuración → Logs', () => {
   it('shows what the last rescan found, errors included', async () => {
@@ -218,5 +237,83 @@ describe('Vista previa', () => {
     expect(screen.getByText(/Ingreso 7 .* \(editado a mano\)/)).toBeTruthy()
     expect(screen.getByText(/No es CFDI: .*CEP-20190227/)).toBeTruthy()
     expect(screen.queryByText(/Fecha de pago corregida/)).toBeNull()
+  })
+})
+
+describe('Reimportar desde cero', () => {
+  const pedir = async () => {
+    montar()
+    await screen.findByText(/3 importadas/)
+    fireEvent.click(screen.getByRole('button', { name: 'Reimportar desde cero' }))
+    expect(screen.getByText(/se pierden/)).toBeTruthy()
+  }
+
+  it('does nothing when the confirmation is declined', async () => {
+    await pedir()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByRole('button', { name: 'Sí, reimportar' })).toBe(null)
+    expect(api.reimportar).not.toHaveBeenCalled()
+  })
+
+  it('reimports once confirmed, then refreshes the runs and the Sugerencias', async () => {
+    await pedir()
+    vi.mocked(api.estado).mockClear()
+    vi.mocked(api.sugerencias).mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, reimportar' }))
+    await waitFor(() => expect(api.reimportar).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(api.sugerencias).toHaveBeenCalled())
+    expect(api.estado).toHaveBeenCalled()
+    expect(screen.queryByRole('alert')).toBe(null)
+  })
+
+  it('lists each block with its count when refused', async () => {
+    reimportado = {
+      reimportado: false,
+      bloqueos: [
+        { motivo: 'a_mano', registro: 'ingreso', cantidad: 1 },
+        { motivo: 'a_mano', registro: 'cotizacion', cantidad: 2 },
+        { motivo: 'mapa', error: 'Clientes/_nombres.csv no tiene las columnas' },
+        { motivo: 'hdd', ruta: '/Volumes/HDD' }
+      ]
+    }
+    await pedir()
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, reimportar' }))
+    const aviso = await screen.findByRole('alert')
+    expect(aviso.textContent).toContain('No se puede reimportar desde cero')
+    expect(aviso.textContent).toContain('1 Ingreso registrado a mano')
+    expect(aviso.textContent).toContain('2 Cotizaciones creadas en la app')
+    expect(aviso.textContent).toContain('Clientes/_nombres.csv no tiene las columnas')
+    expect(aviso.textContent).toContain('Conecta el disco externo (/Volumes/HDD)')
+  })
+
+  it('previews desde cero under its own heading, with the blocks above it', async () => {
+    desdeCero = { log: vista, bloqueos: [{ motivo: 'a_mano', registro: 'ingreso', cantidad: 1 }] }
+    montar()
+    await screen.findByText(/3 importadas/)
+    fireEvent.click(screen.getByRole('button', { name: 'Vista previa desde cero' }))
+    expect(await screen.findByText(/Vista previa · Desde cero · Nada se guardó/)).toBeTruthy()
+    expect(screen.getByText(/214 importadas/)).toBeTruthy()
+    expect(screen.getByText(/Reimportar desde cero se rechazaría/).parentElement!.textContent).toContain('1 Ingreso registrado a mano')
+    expect(api.vistaPrevia).not.toHaveBeenCalled()
+    expect(api.reimportar).not.toHaveBeenCalled()
+  })
+})
+
+describe('Aceptar todas', () => {
+  it('is not offered with only fusionar and ubicación pending', async () => {
+    montar([fusionar, ubicacion])
+    await screen.findByText('Proyecto Hotel Aura')
+    expect(screen.queryByRole('button', { name: 'Aceptar todas' })).toBe(null)
+  })
+
+  it('accepts every vincular and shows what is still pending', async () => {
+    montar([vincular, fusionar, ubicacion])
+    await screen.findByText('Cotización 475 · Sonrieme')
+    fireEvent.click(screen.getByRole('button', { name: 'Aceptar todas' }))
+    await waitFor(() => expect(api.aceptarVincular).toHaveBeenCalled())
+    await waitFor(() => expect(screen.queryByText('Cotización 475 · Sonrieme')).toBe(null))
+    expect(screen.getByText('Contacto Sublime Inspiración')).toBeTruthy()
+    expect(screen.getByText('Proyecto Hotel Aura')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Aceptar todas' })).toBe(null)
   })
 })

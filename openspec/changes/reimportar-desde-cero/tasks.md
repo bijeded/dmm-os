@@ -40,12 +40,12 @@
 
 ## 6. Logs UI
 
-- [ ] 6.1 In `src/renderer/src/components/Logs.tsx`, add Vista previa desde cero (rendered with `VistaPrevia` under "Desde cero", blocks listed above it) and Reimportar desde cero with the two-step confirmation ("Sí, reimportar") used in `Exportar.tsx`. A refusal lists the blocks in the Aviso. Pinned in `src/renderer/src/components/Logs.test.tsx`: declining calls nothing, confirming calls `reimportar` and refreshes runs and Sugerencias, and a refusal shows each block with its count.
-- [ ] 6.2 Show Aceptar todas beside the Sugerencias heading only while a pending *vincular* exists, calling `aceptarVincular`. Pinned in `Logs.test.tsx`: hidden with only *fusionar* and *ubicación* pending, and clicking it replaces the list with the returned Sugerencias.
+- [x] 6.1 In `src/renderer/src/components/Logs.tsx`, add Vista previa desde cero (rendered with `VistaPrevia` under "Desde cero", blocks listed above it) and Reimportar desde cero with the two-step confirmation ("Sí, reimportar") used in `Exportar.tsx`. A refusal lists the blocks in the Aviso. Pinned in `src/renderer/src/components/Logs.test.tsx`: declining calls nothing, confirming calls `reimportar` and refreshes runs and Sugerencias, and a refusal shows each block with its count.
+- [x] 6.2 Show Aceptar todas beside the Sugerencias heading only while a pending *vincular* exists, calling `aceptarVincular`. Pinned in `Logs.test.tsx`: hidden with only *fusionar* and *ubicación* pending, and clicking it replaces the list with the returned Sugerencias.
 
 ## 7. Domain docs and checks
 
-- [ ] 7.1 Update `CONTEXT.md`:
+- [x] 7.1 Update `CONTEXT.md`:
   - add **Reimportar desde cero**
   - Importación: a map edit reaches imported records only through a reimport
   - Vista previa: its *desde cero* mode
@@ -53,4 +53,4 @@
   - the Facturas run no longer imports Costos
 
   Verify each term reads as used in the specs.
-- [ ] 7.2 Run `npm run typecheck`, `npm run lint` and `npm test`, and `openspec validate reimportar-desde-cero --strict`. All pass.
+- [x] 7.2 Run `npm run typecheck`, `npm run lint` and `npm test`, and `openspec validate reimportar-desde-cero --strict`. All pass.
