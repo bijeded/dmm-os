@@ -209,6 +209,24 @@ describe('Configuración → Logs', () => {
     expect(screen.getByText('Cotización 475 · Sonrieme')).toBeTruthy()
   })
 
+  it('reloads the opciones after a refused answer, back on the guess', async () => {
+    montar([vincular])
+    const selector = await screen.findByRole<HTMLSelectElement>('combobox', { name: /Vincular a/ })
+    fireEvent.change(selector, { target: { value: '11' } })
+    vi.mocked(api.responder).mockRejectedValueOnce(new Error('Ese Proyecto ya no se puede elegir'))
+    vi.mocked(api.sugerencias).mockResolvedValueOnce([{ ...vincular, opciones: [vincular.opciones[0], { id: 12, nombre: 'Sonrieme 2', sugerida: false }] }])
+    fireEvent.click(screen.getByRole('button', { name: 'Aceptar' }))
+    await screen.findByRole('alert')
+    await waitFor(() => expect(screen.queryByRole('option', { name: 'Sonrieme Branding' })).toBe(null))
+    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: /Vincular a/ }).value).toBe('10')
+  })
+
+  it('shows no selector when none of the opciones is the guess', async () => {
+    montar([{ ...fusionar, opciones: fusionar.opciones.map((o) => ({ ...o, sugerida: false })) }])
+    expect(await screen.findByText(/→ Sublime/)).toBeTruthy()
+    expect(screen.queryByRole('combobox')).toBe(null)
+  })
+
   it('says so when nothing is waiting', async () => {
     montar([])
     expect(await screen.findByText(/Sin sugerencias pendientes/i)).toBeTruthy()

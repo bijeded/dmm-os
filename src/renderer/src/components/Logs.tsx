@@ -47,8 +47,17 @@ export function Logs() {
       setSugerencias(await api.sugerencias())
     })
 
+  // A refused answer reloads the list too: what made it refused, such as a Proyecto that got a
+  // Cotización meanwhile, is gone from the opciones.
   const contestar = (id: number, respuesta: RespuestaSugerencia) =>
-    correr(async () => setSugerencias(await api.responder(id, respuesta)))
+    correr(async () => {
+      try {
+        setSugerencias(await api.responder(id, respuesta))
+      } catch (e) {
+        setSugerencias(await api.sugerencias())
+        throw e
+      }
+    })
 
   // The opción picked on each row, by Sugerencia id. A pick the refreshed list no longer offers
   // falls back to the guess, so the selector never holds an id it cannot send.
@@ -146,12 +155,12 @@ export function Logs() {
             <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-2 text-[13px]">
               <span className="min-w-0">
                 {s.registro}
-                {s.opciones.length > 1 ? (
+                {s.opciones.length > 1 && sugeridaDe(s) !== undefined ? (
                   <span className="text-on-surface-muted">
                     {' → '}
                     <select
                       aria-label={`${s.accion === 'fusionar' ? 'Fusionar con' : 'Vincular a'} (${s.registro})`}
-                      value={elegidaDe(s) ?? ''}
+                      value={elegidaDe(s)}
                       onChange={(e) => setElegidas({ ...elegidas, [s.id]: Number(e.target.value) })}
                       disabled={ocupado}
                       className={campoCls}

@@ -50,6 +50,6 @@
 
 ## 6. Review and checks
 
-- [ ] 6.1 Run `/code-review` on the branch diff and fix what it confirms.
-- [ ] 6.2 Run `/security-review`, since the change widens what `importacion.responder` accepts over IPC, and fix what it confirms.
-- [ ] 6.3 Run `npm run typecheck`, `npm run lint`, `npm test` and `openspec validate sugerencias-con-eleccion --strict`. All pass.
+- [x] 6.1 Run `/code-review` on the branch diff and fix what it confirms.
+- [x] 6.2 Run `/security-review`, since the change widens what `importacion.responder` accepts over IPC, and fix what it confirms.
+- [x] 6.3 Run `npm run typecheck`, `npm run lint`, `npm test` and `openspec validate sugerencias-con-eleccion --strict`. All pass.

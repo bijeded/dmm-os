@@ -64,7 +64,10 @@ export function pendientes(db: Db): Sugerencia[] {
     }))
 }
 
-/** Every Contacto and Proyecto, read once so each Sugerencia's opciones cost no query. */
+/**
+ * Every Contacto and Proyecto, read once per call, so each Sugerencia's opciones need only its
+ * record's Contacto.
+ */
 interface Catalogo {
   contactos: { id: number; nombre: string }[]
   proyectos: Map<number, { id: number; nombre: string }>
@@ -79,7 +82,9 @@ function leerCatalogo(db: Db | Tx): Catalogo {
   const proyectosPorContacto: Catalogo['proyectosPorContacto'] = new Map()
   for (const p of todos) {
     if (p.contactoId === null) continue
-    proyectosPorContacto.set(p.contactoId, [...(proyectosPorContacto.get(p.contactoId) ?? []), p])
+    const delContacto = proyectosPorContacto.get(p.contactoId)
+    if (delContacto) delContacto.push(p)
+    else proyectosPorContacto.set(p.contactoId, [p])
   }
   return {
     contactos: db.select({ id: contactos.id, nombre: contactos.nombre }).from(contactos).all(),
@@ -260,7 +265,9 @@ function deshacerCotizacion(tx: Tx, s: Fila): void {
     previo?.clienteFinalEscrito !== undefined && proyecto?.clienteFinal === previo.clienteFinalEscrito
       ? null
       : (proyecto?.clienteFinal ?? null)
-  tx.update(proyectos).set({ cotizacionId: null, notas, clienteFinal }).where(eq(proyectos.id, proyectoId)).run()
+  // A Cotización linked to the Proyecto by hand since is the user's.
+  const cotizacionId = proyecto?.cotizacionId === s.entidadId ? null : (proyecto?.cotizacionId ?? null)
+  tx.update(proyectos).set({ cotizacionId, notas, clienteFinal }).where(eq(proyectos.id, proyectoId)).run()
 }
 
 /**
@@ -273,15 +280,28 @@ function fusionar(tx: Tx, duplicadoId: number, originalId: number): void {
   const duplicado = tx.select().from(contactos).where(eq(contactos.id, duplicadoId)).get()
   const original = tx.select().from(contactos).where(eq(contactos.id, originalId)).get()
   if (!duplicado || !original) throw new Error('No se puede fusionar: falta uno de los Contactos')
+  if (duplicadoId === originalId) throw new Error('Un Contacto no se fusiona consigo mismo')
 
   // Costos reach a Contacto through their Proyecto or Cotización, so moving those moves them.
   for (const tabla of [cotizaciones, proyectos, ingresos, definicionesIngreso]) {
     tx.update(tabla).set({ contactoId: originalId }).where(eq(tabla.contactoId, duplicadoId)).run()
   }
   // Another pending merge may point at the duplicate; it now points at the Contacto that remains.
+  // One that asked to merge the remaining Contacto into the duplicate is done by this merge.
   tx.update(sugerenciasImportacion)
     .set({ contactoId: originalId })
     .where(eq(sugerenciasImportacion.contactoId, duplicadoId))
+    .run()
+  tx.update(sugerenciasImportacion)
+    .set({ estado: 'aceptada' })
+    .where(
+      and(
+        eq(sugerenciasImportacion.estado, 'pendiente'),
+        eq(sugerenciasImportacion.accion, 'fusionar'),
+        eq(sugerenciasImportacion.entidadId, originalId),
+        eq(sugerenciasImportacion.contactoId, originalId)
+      )
+    )
     .run()
   // The duplicate is deleted before the original is updated: it may hold the RFC, which only
   // one Contacto may claim.

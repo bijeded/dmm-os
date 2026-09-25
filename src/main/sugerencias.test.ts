@@ -486,6 +486,16 @@ describe('correcting a Cotización', () => {
     expect(pendientes(db).map((s) => s.id)).not.toContain(id)
   })
 
+  it('keeps a Cotización the user linked to the guessed Proyecto by hand', () => {
+    const { cotizacion, otra, citliTours, citliTours2, moonWishes } = cotizacionAdivinada()
+    db.update(proyectos).set({ cotizacionId: null }).where(eq(proyectos.id, moonWishes)).run()
+    db.update(proyectos).set({ cotizacionId: otra }).where(eq(proyectos.id, citliTours)).run()
+
+    responder(db, sugerenciaDe(cotizacion).id, { elegidas: [citliTours2] })
+    expect(db.select().from(proyectos).where(eq(proyectos.id, citliTours)).get()!.cotizacionId).toBe(otra)
+    expect(db.select().from(proyectos).where(eq(proyectos.id, citliTours2)).get()!.cotizacionId).toBe(cotizacion)
+  })
+
   it('refuses a Proyecto that got a Cotización after the list was read', () => {
     const { sublime, cotizacion, citliTours2 } = cotizacionAdivinada()
     const { id } = sugerenciaDe(cotizacion)
@@ -573,6 +583,19 @@ describe('correcting a fusionar', () => {
     expect(estadoFrida()).toBe('lead_frio')
     responder(db, unaSugerencia().id, { elegidas: [frida] })
     expect(estadoFrida()).not.toBe('lead_frio')
+  })
+
+  it('settles a pending merge into the duplicate once the duplicate is merged into that Contacto', () => {
+    const { kahlo, frida, duplicado } = fusionAdivinada()
+    const otro = contacto('Frida Comunicación').id
+    db.insert(sugerenciasImportacion).values({ entidad: 'contacto', entidadId: otro, accion: 'fusionar', contactoId: duplicado, motivo: 'nombre parecido' }).run()
+    const [corregida, pendiente] = pendientes(db)
+
+    responder(db, corregida.id, { elegidas: [otro] })
+
+    expect(estadoDe(pendiente.id)).toBe('aceptada')
+    expect(pendientes(db)).toHaveLength(0)
+    expect(db.select().from(contactos).all().map((c) => c.id).sort()).toEqual([kahlo, frida, otro].sort())
   })
 
   it('refuses a Contacto merged away after the list was read', () => {
