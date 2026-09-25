@@ -2,6 +2,7 @@ import { and, eq, isNotNull } from 'drizzle-orm'
 import type { OpcionSugerencia, Sugerencia, RespuestaSugerencia } from '../shared/dominio'
 import { monto } from '../shared/formato'
 import { partidasDelMonto, partidasGuardadas } from './importacion/pdf-cotizacion'
+import { heredarDeCotizacion } from './ciclo-proyecto'
 import { mejorEscrito } from './nombres'
 import { rutaDeProyecto } from './paths'
 import type { Db } from './db/index'
@@ -351,10 +352,15 @@ function vincular(tx: Tx, s: Fila, decision: Decision): void {
     // The guessed Proyecto lets go of the Cotización first, since a Cotización belongs to one
     // Proyecto. `aceptada` is set directly, as the guess did: imported history creates no
     // Ingresos or Costos (ADR-0002). The chosen Proyecto's notes and Cliente final stay as
-    // they are.
+    // they are; it takes the quote's categoría and fecha only where it has none.
     deshacerCotizacion(tx, s)
+    const cotizacion = tx.select().from(cotizaciones).where(eq(cotizaciones.id, s.entidadId)).get()!
+    const elegido = tx.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()
     tx.update(cotizaciones).set({ estado: 'aceptada' }).where(eq(cotizaciones.id, s.entidadId)).run()
-    tx.update(proyectos).set({ cotizacionId: s.entidadId }).where(eq(proyectos.id, proyectoId)).run()
+    tx.update(proyectos)
+      .set({ cotizacionId: s.entidadId, ...heredarDeCotizacion(elegido, cotizacion) })
+      .where(eq(proyectos.id, proyectoId))
+      .run()
   }
 }
 
@@ -366,18 +372,26 @@ function deshacerCotizacion(tx: Tx, s: Fila): void {
   const estado = s.deshacer?.cotizacion?.estado ?? 'enviada'
   tx.update(cotizaciones).set({ estado }).where(eq(cotizaciones.id, s.entidadId)).run()
   const proyecto = tx.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()
+  if (!proyecto) return
   // The note goes back only if it is still what the link wrote; anything written since is the
   // user's, and so is everything when no undo was recorded.
   const previo = s.deshacer?.proyecto
-  const notas = previo && proyecto?.notas === previo.notasEscritas ? previo.notasAntes : (proyecto?.notas ?? null)
-  // A Cliente final the link brought from the quote's map row goes too, unless edited since.
-  const clienteFinal =
-    previo?.clienteFinalEscrito !== undefined && proyecto?.clienteFinal === previo.clienteFinalEscrito
-      ? null
-      : (proyecto?.clienteFinal ?? null)
+  const notas = previo && proyecto.notas === previo.notasEscritas ? previo.notasAntes : proyecto.notas
+  // What the link filled in from the quote (Cliente final, categoría, fecha de inicio) is
+  // emptied again, unless edited since.
+  const restaurar = <T>(actual: T, escrito: T | undefined, vacio: T): T => (escrito !== undefined && actual === escrito ? vacio : actual)
   // A Cotización linked to the Proyecto by hand since is the user's.
-  const cotizacionId = proyecto?.cotizacionId === s.entidadId ? null : (proyecto?.cotizacionId ?? null)
-  tx.update(proyectos).set({ cotizacionId, notas, clienteFinal }).where(eq(proyectos.id, proyectoId)).run()
+  const cotizacionId = proyecto.cotizacionId === s.entidadId ? null : proyecto.cotizacionId
+  tx.update(proyectos)
+    .set({
+      cotizacionId,
+      notas,
+      clienteFinal: restaurar(proyecto.clienteFinal, previo?.clienteFinalEscrito, null),
+      categoria: restaurar(proyecto.categoria, previo?.categoriaEscrita, 'other'),
+      fechaInicio: restaurar(proyecto.fechaInicio, previo?.fechaInicioEscrita, null)
+    })
+    .where(eq(proyectos.id, proyectoId))
+    .run()
 }
 
 /**

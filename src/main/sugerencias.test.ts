@@ -169,6 +169,36 @@ describe('vincular', () => {
     expect(db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()!.cotizacionId).toBe(cotizacionId)
     expect(db.select().from(cotizaciones).get()!.estado).toBe('aceptada')
   })
+
+  /** A folder linked to a `website` quote of 2025, which gave it its categoría and fecha de inicio. */
+  const enlazadaConFecha = () => {
+    const { cotizacionId } = cotizacionEnDisco()
+    db.update(cotizaciones).set({ categoria: 'website', fecha: '2025-03-01' }).where(eq(cotizaciones.id, cotizacionId)).run()
+    const { proyectoId } = carpetaEnDisco()
+    const leer = () => db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()!
+    expect(leer()).toMatchObject({ categoria: 'website', fechaInicio: '2025-03-01' })
+    return { proyectoId, leer }
+  }
+
+  it('restores the categoría and fecha de inicio the link wrote when it is rejected', () => {
+    const { leer } = enlazadaConFecha()
+    responder(db, unaSugerencia().id, 'rechazada')
+    expect(leer()).toMatchObject({ categoria: 'other', fechaInicio: null })
+  })
+
+  it('keeps a fecha de inicio edited since, and still reverts the categoría', () => {
+    const { proyectoId, leer } = enlazadaConFecha()
+    db.update(proyectos).set({ fechaInicio: '2025-04-01' }).where(eq(proyectos.id, proyectoId)).run()
+    responder(db, unaSugerencia().id, 'rechazada')
+    expect(leer()).toMatchObject({ categoria: 'other', fechaInicio: '2025-04-01' })
+  })
+
+  it('leaves categoría and fecha de inicio alone when rejecting a Sugerencia recorded without them', () => {
+    const { leer } = enlazadaConFecha()
+    db.update(sugerenciasImportacion).set({ deshacer: { cotizacion: { estado: 'enviada' }, proyecto: { notasAntes: null, notasEscritas: null } } }).run()
+    responder(db, unaSugerencia().id, 'rechazada')
+    expect(leer()).toMatchObject({ categoria: 'website', fechaInicio: '2025-03-01', cotizacionId: null })
+  })
 })
 
 describe('fusionar', () => {
@@ -496,6 +526,31 @@ describe('correcting a Cotización', () => {
     expect(db.select().from(costos).all()).toHaveLength(0)
     expect(estadoDe(id)).toBe('corregida')
     expect(pendientes(db).map((s) => s.id)).not.toContain(id)
+  })
+
+  it('reverts the categoría and fecha de inicio the guess wrote, and fills only what the chosen Proyecto lacks', () => {
+    const { cotizacion, citliTours, citliTours2 } = cotizacionAdivinada()
+    db.update(proyectos).set({ categoria: 'website', fechaInicio: '2025-03-01' }).where(eq(proyectos.id, citliTours)).run()
+    db.update(sugerenciasImportacion)
+      .set({
+        deshacer: {
+          cotizacion: { estado: 'enviada' },
+          proyecto: { notasAntes: 'Antes', notasEscritas: 'Cotización 401 también incluye: Casa Luna', categoriaEscrita: 'website', fechaInicioEscrita: '2025-03-01' }
+        }
+      })
+      .where(eq(sugerenciasImportacion.entidadId, cotizacion))
+      .run()
+    db.update(proyectos).set({ categoria: 'other', fechaInicio: '2023-06-01' }).where(eq(proyectos.id, citliTours2)).run()
+
+    responder(db, sugerenciaDe(cotizacion).id, { elegidas: [citliTours2] })
+    expect(db.select().from(proyectos).where(eq(proyectos.id, citliTours)).get()).toMatchObject({ categoria: 'other', fechaInicio: null })
+    expect(db.select().from(proyectos).where(eq(proyectos.id, citliTours2)).get()).toMatchObject({ categoria: 'website', fechaInicio: '2023-06-01' })
+  })
+
+  it('gives a chosen Proyecto with no fecha de inicio the Cotización’s fecha', () => {
+    const { cotizacion, citliTours2 } = cotizacionAdivinada()
+    responder(db, sugerenciaDe(cotizacion).id, { elegidas: [citliTours2] })
+    expect(db.select().from(proyectos).where(eq(proyectos.id, citliTours2)).get()).toMatchObject({ categoria: 'website', fechaInicio: '2025-03-01' })
   })
 
   it('keeps a Cotización the user linked to the guessed Proyecto by hand', () => {

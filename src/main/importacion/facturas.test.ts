@@ -279,6 +279,15 @@ describe('adivinar el Proyecto', () => {
     expect(importar().sugerencias).toBe(0)
   })
 
+  it('Invoice guessed by fecha de inicio: a Proyecto started after the invoice is not considered', () => {
+    const c = contactoConRfc()
+    const moon = db.insert(proyectos).values({ nombre: '3 Moon Wishes', contactoId: c.id, categoria: 'ecommerce', fechaInicio: '2021-03-10' }).returning().get()
+    db.insert(proyectos).values({ nombre: 'Citli Tours', contactoId: c.id, categoria: 'website', fechaInicio: '2023-05-02' }).run()
+    emitida(cfdiXml({ fecha: '2022-02-01' }))
+    importar()
+    expect(db.select().from(sugerenciasImportacion).get()).toMatchObject({ proyectoId: moon.id, motivo: 'fecha' })
+  })
+
   it('makes no guess when the Contacto is unknown', () => {
     const c = contacto()
     proyecto(c.id, cotizacionAceptada(c.id).id)

@@ -18,6 +18,7 @@ const logCarpetas = {
   mapa: 'ausente' as const,
   filasMapa: [],
   subcarpetasSinProyecto: [],
+  proyectosSinContacto: [],
   nuevos: { contactos: [], proyectos: [], rfcs: [], cotizaciones: [] },
   cotizacionesIncompletas: []
 }

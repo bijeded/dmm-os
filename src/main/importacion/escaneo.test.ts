@@ -17,7 +17,7 @@ import {
   ubicacionesArchivo
 } from '../db/schema'
 import { db, reiniciarDb } from '../db/test-db'
-import { guardarContacto } from '../contactos'
+import { guardarContacto, listarContactos } from '../contactos'
 import { responder } from '../sugerencias'
 
 let root: string
@@ -90,6 +90,7 @@ describe('escanear Cotizaciones/', () => {
 
   it('files a new-format quote under a Proyecto folder found in the same scan', () => {
     pdf(root, '2026', '260114-DMM520-Clicme.pdf')
+    carpeta(root, 'Clientes', 'Clicme')
     carpeta(root, 'Proyectos', 'Clicme')
 
     const log = escanearCarpetas(db, root)
@@ -357,7 +358,7 @@ describe('el log cuenta lo que la corrida agregó', () => {
     carpeta(root, 'Clientes', 'Sublime Inspiración')
     escanearCarpetas(db, root)
     carpeta(root, 'Proyectos', 'Clicme')
-    expect(escanearCarpetas(db, root)).toMatchObject({ sugerencias: 0, contactos: { creados: 1 } })
+    expect(escanearCarpetas(db, root)).toMatchObject({ sugerencias: 0, proyectos: { creados: 1 } })
   })
 
   it('counts the one-time location question for a quote accepted with no folder', () => {
@@ -639,7 +640,7 @@ describe('el log del Mapa de nombres', () => {
   })
 
   it('names what it created, tagged with where each came from', () => {
-    mapa(root, `${CABECERA}Sonrieme Web,Sonríeme,Web,\n`)
+    mapa(root, `${CABECERA}Sonrieme Web,Sonríeme,Web,\nClicme,Clicme,,\n`)
     carpeta(root, 'Clientes', 'Estudio Ocho')
     carpeta(root, 'Proyectos', 'Clicme')
     pdf(root, '2019', 'DMM - 201 - Sonrieme Web.pdf')
@@ -689,6 +690,7 @@ describe('el mapa aplica solo al importar por primera vez', () => {
   })
 
   it('records a Proyecto folder found in a new place on the Proyecto it was imported as', () => {
+    carpeta(root, 'Clientes', 'Frida Comunicacion')
     carpeta(root, 'Proyectos', 'Frida Comunicacion')
     escanearCarpetas(db, root)
     mapa(root, `${CABECERA}Frida Comunicacion,Frida,Sitio,\n`)
@@ -1008,5 +1010,277 @@ describe('¿Qué aceptó? al aceptar una Cotización con varios precios', () => 
     pdfConTexto('2021', 'DMM - 308 - Sublime.pdf', ['Servicio: a:', 'Costo: $ 10,000.00', 'Servicio: b:', 'Costo: $ 4,000.00'])
     await escanear(db, root)
     expect(preguntas()).toEqual([])
+  })
+})
+
+describe('la carpeta de Proyecto se atribuye por la Cotización que la nombra', () => {
+  const proyecto = (nombre: string) => db.select().from(proyectos).all().find((p) => p.nombre === nombre)!
+  const vincular = () => db.select().from(sugerenciasImportacion).where(eq(sugerenciasImportacion.accion, 'vincular')).all()
+  const sublime = () => {
+    mapa(root, `${CABECERA}Sublime,Sublime Inspiración,,\n`)
+    pdfConTexto('2021', 'DMM - 308 - Sublime.pdf', ['Ciudad de México, 10 de marzo, 2021.', 'eCommerce “3 Moon Wishes” : tienda en línea:', 'Costo: $ 30,000.00'])
+    pdfConTexto('2021', 'DMM - 320 - Sublime.pdf', ['Ciudad de México, 3 de mayo, 2021.', 'Landing page “3 Moon Wishes” : landing:', 'Costo: $ 9,000.00'])
+  }
+
+  it('Agency project folder: the Proyecto goes to the Contacto whose quotes name it', async () => {
+    sublime()
+    carpeta(root, 'Proyectos', '3 Moon Wishes')
+    await escanear(db, root)
+
+    const moon = proyecto('3 Moon Wishes')
+    expect(contactoDe(moon.contactoId)).toBe('Sublime Inspiración')
+    expect(moon).toMatchObject({ clienteFinal: '3 Moon Wishes', estado: 'en_curso', cotizacionId: cotizacion(308).id })
+    expect(vincular()).toEqual([expect.objectContaining({ entidadId: cotizacion(308).id, proyectoId: moon.id })])
+    expect(cotizacion(320).estado).toBe('enviada')
+    expect(nombresDeContactos()).toEqual(['Sublime Inspiración'])
+  })
+
+  it('takes the categoría and fecha de inicio of the linked Cotización, and no fecha de fin or entrega', async () => {
+    sublime()
+    carpeta(root, 'Proyectos', '3 Moon Wishes')
+    await escanear(db, root)
+    expect(proyecto('3 Moon Wishes')).toMatchObject({ categoria: 'ecommerce', fechaInicio: '2021-03-10', fechaFin: null, fechaEntrega: null })
+  })
+
+  it('creates no Ingreso or Costo for the Cotización the link accepts', async () => {
+    sublime()
+    carpeta(root, 'Proyectos', '3 Moon Wishes')
+    await escanear(db, root)
+    expect(cotizacion(308).estado).toBe('aceptada')
+    expect(db.select().from(ingresos).all()).toEqual([])
+    expect(db.select().from(costos).all()).toEqual([])
+  })
+
+  it("counts the Proyecto in the Contacto's Estado de Contacto", async () => {
+    sublime()
+    await escanear(db, root)
+    const estado = () => listarContactos(db).contactos.find((c) => c.nombre === 'Sublime Inspiración')?.estado
+    expect(estado()).toBe('lead_caliente')
+    carpeta(root, 'Proyectos', '3 Moon Wishes')
+    await escanear(db, root)
+    expect(estado()).toBe('cliente_activo')
+  })
+
+  it("gives the map's Cliente final for the quote over the folder's name, and completes an archived folder", () => {
+    mapa(root, `${CABECERA}Lukka - Ruba,Lukka,Ruba,Ruba Café\n`)
+    pdf(root, '2022', 'DMM - 330 - Lukka - Ruba.pdf')
+    carpeta(root, 'Archivo', 'Proyectos', 'Ruba')
+    escanearCarpetas(db, root)
+
+    const ruba = proyecto('Ruba')
+    expect(contactoDe(ruba.contactoId)).toBe('Lukka')
+    expect(ruba).toMatchObject({ clienteFinal: 'Ruba Café', estado: 'completado' })
+  })
+
+  it('keeps the Proyecto on its Contacto when a map row added later would send the HDD copy elsewhere', async () => {
+    sublime()
+    carpeta(root, 'Proyectos', '3 Moon Wishes')
+    await escanear(db, root)
+    mapa(root, `${CABECERA}Sublime,Sublime Inspiración,,\n3 Moon Wishes,Frida,,\n`)
+    carpeta(hdd, 'Proyectos', '3 Moon Wishes')
+    await escanear(db, root, hdd)
+
+    expect(db.select().from(proyectos).all()).toHaveLength(1)
+    expect(contactoDe(proyecto('3 Moon Wishes').contactoId)).toBe('Sublime Inspiración')
+  })
+
+  it("takes the Cliente final from the map row of the quote it links, not of one already linked", () => {
+    mapa(root, `${CABECERA}Lukka - Ruba,Lukka,Ruba,Ruba Café\nLukka - Ruba 2,Lukka,Ruba,Ruba Coffee Co\n`)
+    pdf(root, '2021', 'DMM - 100 - Lukka - Ruba.pdf')
+    pdf(root, '2022', 'DMM - 150 - Lukka - Ruba 2.pdf')
+    escanearCarpetas(db, root)
+    const lukka = db.select().from(contactos).all().find((c) => c.nombre === 'Lukka')!
+    db.insert(proyectos).values({ nombre: 'Ruba 2021', contactoId: lukka.id, cotizacionId: cotizacion(100).id, categoria: 'other' }).run()
+    carpeta(root, 'Archivo', 'Proyectos', 'Ruba')
+    escanearCarpetas(db, root)
+
+    expect(proyecto('Ruba')).toMatchObject({ cotizacionId: cotizacion(150).id, clienteFinal: 'Ruba Coffee Co' })
+  })
+
+  it('attributes a folder through the Cliente - Proyecto split of a quote', () => {
+    pdf(root, '2022', 'DMM - 331 - Lukka - Tingo.pdf')
+    carpeta(root, 'Proyectos', 'Tingo')
+    escanearCarpetas(db, root)
+    expect(contactoDe(proyecto('Tingo').contactoId)).toBe('Lukka')
+    expect(proyecto('Tingo').clienteFinal).toBe('Tingo')
+  })
+
+  it('keeps one Proyecto for the same folder in two roots', async () => {
+    sublime()
+    carpeta(root, 'Proyectos', '3 Moon Wishes')
+    carpeta(hdd, 'Proyectos', '3 Moon Wishes')
+    await escanear(db, root, hdd)
+
+    expect(db.select().from(proyectos).all()).toHaveLength(1)
+    expect(db.select().from(ubicacionesArchivo).where(eq(ubicacionesArchivo.proyectoId, proyecto('3 Moon Wishes').id)).all()).toHaveLength(2)
+  })
+
+  it('lets a map row win over a Contacto of the folder name and over a quote naming it', () => {
+    mapa(root, `${CABECERA}AVC Noticias,Frida,,\n`)
+    carpeta(root, 'Clientes', 'AVC Noticias')
+    pdf(root, '2022', 'DMM - 332 - Sublime - AVC Noticias.pdf')
+    carpeta(root, 'Proyectos', 'AVC Noticias')
+    escanearCarpetas(db, root)
+    expect(contactoDe(proyecto('AVC Noticias').contactoId)).toBe('Frida')
+  })
+
+  it('matches the Contacto from a Clientes folder of the same name', () => {
+    carpeta(root, 'Clientes', 'AVC Noticias')
+    carpeta(root, 'Proyectos', 'AVC Noticias')
+    escanearCarpetas(db, root)
+    expect(contactoDe(proyecto('AVC Noticias').contactoId)).toBe('AVC Noticias')
+    expect(nombresDeContactos()).toEqual(['AVC Noticias'])
+  })
+
+  it('prefers an existing Contacto of the folder name over another Contacto quoting it', () => {
+    carpeta(root, 'Clientes', 'AVC Noticias')
+    pdf(root, '2022', 'DMM - 332 - Sublime - AVC Noticias.pdf')
+    carpeta(root, 'Proyectos', 'AVC Noticias')
+    escanearCarpetas(db, root)
+    expect(contactoDe(proyecto('AVC Noticias').contactoId)).toBe('AVC Noticias')
+  })
+
+  it('creates no Contacto and no fusionar for a folder merely close to a Contacto', () => {
+    carpeta(root, 'Clientes', 'Avansa')
+    carpeta(root, 'Proyectos', 'Avanza')
+    escanearCarpetas(db, root)
+    expect(nombresDeContactos()).toEqual(['Avansa'])
+    expect(db.select().from(sugerenciasImportacion).where(eq(sugerenciasImportacion.accion, 'fusionar')).all()).toEqual([])
+  })
+
+  it('keeps a quote-only lead a Contacto', () => {
+    pdf(root, '2020', 'DMM - 280 - Alisha.pdf')
+    escanearCarpetas(db, root)
+    expect(nombresDeContactos()).toEqual(['Alisha'])
+    expect(contactoDe(cotizacion(280).contactoId)).toBe('Alisha')
+  })
+
+  it('leaves a folder imported under its own name before this change where it was', () => {
+    const [previo] = db.insert(contactos).values({ nombre: '3 Moon Wishes', importado: true }).returning().all()
+    const [p] = db.insert(proyectos).values({ nombre: '3 Moon Wishes', contactoId: previo.id, categoria: 'other', importado: true }).returning().all()
+    db.insert(ubicacionesArchivo).values({ proyectoId: p.id, tipo: 'proyectos', rutaRelativa: 'Proyectos/3 Moon Wishes', disponible: true }).run()
+    pdf(root, '2021', 'DMM - 308 - Sublime - 3 Moon Wishes.pdf')
+    carpeta(root, 'Proyectos', '3 Moon Wishes')
+    carpeta(hdd, 'Proyectos', '3 Moon Wishes')
+
+    const log = escanearCarpetas(db, root, hdd)
+    expect(contactoDe(proyecto('3 Moon Wishes').contactoId)).toBe('3 Moon Wishes')
+    expect(db.select().from(proyectos).all()).toHaveLength(1)
+    expect(log.proyectos).toEqual({ creados: 0, actualizados: 2 })
+  })
+})
+
+describe('Proyecto sin Contacto', () => {
+  const proyecto = (nombre: string) => db.select().from(proyectos).all().find((p) => p.nombre === nombre)!
+
+  it('imports a folder nothing names with no Contacto, and lists it', () => {
+    carpeta(root, 'Proyectos', 'Activista')
+    const log = escanearCarpetas(db, root)
+
+    expect(proyecto('Activista')).toMatchObject({ contactoId: null, etiqueta: 'cliente', estado: 'en_curso', importado: true })
+    expect(db.select().from(ubicacionesArchivo).get()?.rutaRelativa).toBe('Proyectos/Activista')
+    expect(nombresDeContactos()).toEqual([])
+    expect(db.select().from(sugerenciasImportacion).all()).toEqual([])
+    expect(log.proyectosSinContacto).toEqual([{ nombre: 'Activista', ruta: 'Proyectos/Activista', contactos: [] }])
+    expect(log.nuevos.proyectos).toEqual([{ nombre: 'Activista', contacto: '', origen: 'proyectos' }])
+  })
+
+  it('leaves a project quoted by several Contactos without one, naming them', () => {
+    pdf(root, '2022', 'DMM - 331 - Lukka - Tingo.pdf')
+    pdf(root, '2023', 'DMM - 402 - Sublime - Tingo.pdf')
+    carpeta(root, 'Proyectos', 'Tingo')
+    const log = escanearCarpetas(db, root)
+
+    expect(proyecto('Tingo')).toMatchObject({ contactoId: null, cotizacionId: null })
+    expect(db.select().from(cotizaciones).all().map((c) => c.estado)).toEqual(['enviada', 'enviada'])
+    expect(log.proyectosSinContacto).toEqual([{ nombre: 'Tingo', ruta: 'Proyectos/Tingo', contactos: ['Lukka', 'Sublime'] }])
+  })
+
+  it('completes an archived folder with no Contacto', () => {
+    carpeta(root, 'Archivo', 'Proyectos', 'Art Insights')
+    escanearCarpetas(db, root)
+    expect(proyecto('Art Insights')).toMatchObject({ contactoId: null, estado: 'completado' })
+  })
+
+  it('keeps one Proyecto sin Contacto for the same folder in two roots, and lists it once', () => {
+    carpeta(root, 'Proyectos', 'Activista')
+    carpeta(hdd, 'Proyectos', 'Activista')
+    const log = escanearCarpetas(db, root, hdd)
+
+    expect(db.select().from(proyectos).all()).toHaveLength(1)
+    expect(db.select().from(ubicacionesArchivo).all()).toHaveLength(2)
+    expect(log.proyectosSinContacto).toHaveLength(1)
+  })
+
+  it('finds it again from another root after a map row is added, the map applying on first import only', () => {
+    carpeta(root, 'Proyectos', 'Activista')
+    escanearCarpetas(db, root)
+    mapa(root, `${CABECERA}Activista,Frida,,\n`)
+    carpeta(hdd, 'Proyectos', 'Activista')
+    escanearCarpetas(db, root, hdd)
+
+    expect(db.select().from(proyectos).all()).toHaveLength(1)
+    expect(proyecto('Activista').contactoId).toBeNull()
+  })
+
+  it('never reuses a personal Proyecto of the same name', () => {
+    db.insert(proyectos).values({ nombre: 'Portafolio', etiqueta: 'personal', categoria: 'other' }).run()
+    carpeta(root, 'Proyectos', 'Portafolio')
+    escanearCarpetas(db, root)
+    expect(db.select().from(proyectos).all().map((p) => p.etiqueta).sort()).toEqual(['cliente', 'personal'])
+  })
+
+  it('keeps a Contacto assigned by hand on the next scan', () => {
+    carpeta(root, 'Proyectos', 'Activista')
+    escanearCarpetas(db, root)
+    const [frida] = db.insert(contactos).values({ nombre: 'Frida' }).returning().all()
+    db.update(proyectos).set({ contactoId: frida.id }).run()
+
+    const log = escanearCarpetas(db, root)
+    expect(contactoDe(proyecto('Activista').contactoId)).toBe('Frida')
+    expect(log.proyectosSinContacto).toEqual([])
+  })
+
+  it('reports nothing new on a second run', () => {
+    carpeta(root, 'Proyectos', 'Activista')
+    escanearCarpetas(db, root)
+    expect(escanearCarpetas(db, root).proyectosSinContacto).toEqual([])
+  })
+
+  it('records the HDD copy on the Proyecto once its Contacto was assigned by hand', () => {
+    carpeta(root, 'Proyectos', 'Activista')
+    escanearCarpetas(db, root)
+    const [frida] = db.insert(contactos).values({ nombre: 'Frida' }).returning().all()
+    db.update(proyectos).set({ contactoId: frida.id }).run()
+    carpeta(hdd, 'Proyectos', 'Activista')
+
+    const log = escanearCarpetas(db, root, hdd)
+    expect(db.select().from(proyectos).all()).toEqual([expect.objectContaining({ nombre: 'Activista', contactoId: frida.id })])
+    expect(db.select().from(ubicacionesArchivo).all()).toHaveLength(2)
+    expect(log.proyectosSinContacto).toEqual([])
+  })
+
+  it('counts a map row for an already imported Proyecto sin Contacto as found, not unused', () => {
+    carpeta(root, 'Proyectos', 'Activista')
+    escanearCarpetas(db, root)
+    mapa(root, `${CABECERA}Activista,Frida,,\n`)
+    expect(escanearCarpetas(db, root).filasMapa).toEqual([])
+  })
+
+  it('still refuses a new-format quote naming a Proyecto sin Contacto', () => {
+    carpeta(root, 'Proyectos', 'Activista')
+    pdf(root, '2026', '260114-DMM520-Activista.pdf')
+    const log = escanearCarpetas(db, root)
+    expect(log.errores).toEqual([{ archivo: 'Cotizaciones/2026/260114-DMM520-Activista.pdf', error: expect.stringContaining('Activista') }])
+  })
+})
+
+describe('el Proyecto toma categoría y fecha de inicio de su Cotización', () => {
+  it('Accepted quote with no folder', async () => {
+    pdfConTexto('2019', 'DMM - 250 - Versa.pdf', ['Ciudad de México, 3 de junio, 2019.', 'Sitio web “Versa”: sitio:', 'Costo: $ 1,000.00'])
+    await escanear(db, root)
+    db.update(cotizaciones).set({ estado: 'aceptada' }).run()
+    await escanear(db, root)
+    expect(db.select().from(proyectos).get()).toMatchObject({ fechaInicio: '2019-06-03', categoria: 'website', fechaFin: null })
   })
 })

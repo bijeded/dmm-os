@@ -105,11 +105,12 @@ describe('Vista previa', () => {
     expect(log).toMatchObject({
       mapa: 'leido',
       cotizaciones: { importadas: 1 },
-      contactos: { creados: 4 },
+      contactos: { creados: 3 },
       proyectos: { creados: 1 },
       sugerencias: 1
     })
-    expect(log.nuevos.contactos.map((c) => c.nombre)).toEqual(['Appleseed', 'Sublime', 'Sublime Inspiración', 'Clicme'])
+    expect(log.nuevos.contactos.map((c) => c.nombre)).toEqual(['Appleseed', 'Sublime', 'Sublime Inspiración'])
+    expect(log.proyectosSinContacto).toEqual([{ nombre: 'Clicme', ruta: 'Proyectos/Clicme', contactos: [] }])
     expect(cuenta()).toEqual([0, 0, 0, 0])
     expect(await h.importacion.estado()).toEqual({ facturas: null, carpetas: null })
   })
@@ -186,6 +187,22 @@ describe('Reimportar desde cero', () => {
     const r = await h.importacion.reimportar()
     expect(r.reimportado).toBe(true)
     expect(conexion.db.select().from(cotizaciones).where(eq(cotizaciones.folio, 475)).get()).toMatchObject({ fecha: '2025-03-03', total: 800000, categoria: 'website' })
+  })
+
+  it('lists the Proyectos sin Contacto desde cero, until a map row gives one its Contacto', async () => {
+    await importado()
+    mkdirSync(join(root, 'Cotizaciones', '2022'), { recursive: true })
+    writeFileSync(join(root, 'Cotizaciones', '2022', 'DMM - 331 - Lukka - Tingo.pdf'), '%PDF-1.4')
+    writeFileSync(join(root, 'Cotizaciones', '2025', 'DMM - 402 - Sublime - Tingo.pdf'), '%PDF-1.4')
+    mkdirSync(join(root, 'Proyectos', 'Tingo'), { recursive: true })
+
+    const antes = (await h.importacion.vistaPreviaDesdeCero()).log
+    expect(antes.proyectosSinContacto).toContainEqual({ nombre: 'Tingo', ruta: 'Proyectos/Tingo', contactos: ['Lukka', 'Sublime'] })
+
+    writeFileSync(join(root, MAPA), 'en disco,contacto,proyecto,cliente final\nTingo,Lukka,,Tingo\n')
+    const despues = (await h.importacion.vistaPreviaDesdeCero()).log
+    expect(despues.proyectosSinContacto.map((p) => p.nombre)).not.toContain('Tingo')
+    expect(despues.nuevos.proyectos).toContainEqual({ nombre: 'Tingo', contacto: 'Lukka', origen: 'proyectos' })
   })
 
   it('is refused while a hand-entered Ingreso exists, taking no Respaldo', async () => {

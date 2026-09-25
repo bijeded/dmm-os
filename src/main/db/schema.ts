@@ -394,11 +394,18 @@ export const ahorroTokens = sqliteTable('ahorro_tokens', {
 
 /**
  * What a guess changed, so rejecting its Sugerencia restores exactly that. `notas` holds the
- * Proyecto's notes before the guess and the text the guess wrote in their place.
+ * Proyecto's notes before the guess and the text the guess wrote in their place. The other
+ * fields are present only when the guess wrote them, over an empty value.
  */
 export interface DeshacerSugerencia {
   cotizacion?: { estado: (typeof cotizaciones.$inferSelect)['estado'] }
-  proyecto?: { notasAntes: string | null; notasEscritas: string | null; clienteFinalEscrito?: string }
+  proyecto?: {
+    notasAntes: string | null
+    notasEscritas: string | null
+    clienteFinalEscrito?: string
+    categoriaEscrita?: (typeof CATEGORIAS)[number]
+    fechaInicioEscrita?: string
+  }
 }
 
 // Sugerencia de importación: a link the importer guessed, waiting in Logs for a one-time

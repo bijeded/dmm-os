@@ -1,4 +1,4 @@
-import { MENSAJE_SIN_PAGAR, type AccionProyecto, type EstadoProyecto } from '../shared/dominio'
+import { MENSAJE_SIN_PAGAR, type AccionProyecto, type Categoria, type EstadoProyecto } from '../shared/dominio'
 
 export { MENSAJE_SIN_PAGAR }
 
@@ -7,6 +7,20 @@ export interface ContextoProyecto {
   pagadoCompleto: boolean
 }
 
+
+/**
+ * What a Proyecto takes from the Cotización linked to it: the categoría over `other`, and the
+ * Cotización's fecha as a missing fecha de inicio. What the Proyecto already has stays.
+ */
+export function heredarDeCotizacion(
+  proyecto: { categoria: Categoria; fechaInicio: string | null } | undefined,
+  cotizacion: { categoria: Categoria; fecha: string }
+): { categoria?: Categoria; fechaInicio?: string } {
+  return {
+    ...(proyecto?.categoria === 'other' && cotizacion.categoria !== 'other' && { categoria: cotizacion.categoria }),
+    ...(proyecto && proyecto.fechaInicio === null && { fechaInicio: cotizacion.fecha })
+  }
+}
 
 /** A Proyecto being worked on now: En curso, not paused, completed or cancelled. */
 export const proyectoEnCurso = (estado: EstadoProyecto) => estado === 'en_curso'

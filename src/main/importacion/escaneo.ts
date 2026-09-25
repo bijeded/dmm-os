@@ -58,6 +58,7 @@ function logVacio(): LogCarpetas {
     mapa: 'ausente',
     filasMapa: [],
     subcarpetasSinProyecto: [],
+    proyectosSinContacto: [],
     nuevos: { contactos: [], proyectos: [], rfcs: [], cotizaciones: [] },
     cotizacionesIncompletas: []
   }
@@ -284,10 +285,12 @@ function proyectosDeDisco(
 
   const importar = (nombre: string) => {
     try {
-      const r = importarCarpetaProyecto(db, { nombre, tipo, rutaRelativa: rutaDeProyecto(tipo, nombre) }, hoy, mapa)
+      const ruta = rutaDeProyecto(tipo, nombre)
+      const r = importarCarpetaProyecto(db, { nombre, tipo, rutaRelativa: ruta }, hoy, mapa)
       if (r.creado) {
         log.proyectos.creados++
         corrida.proyectos.push({ id: r.proyectoId, origen: 'proyectos' })
+        if (r.sinContacto) log.proyectosSinContacto.push({ nombre: posix.basename(nombre), ruta: enHdd(ruta), contactos: r.ambiguos })
       } else log.proyectos.actualizados++
       sumar(corrida, r, 'proyectos')
     } catch (e) {

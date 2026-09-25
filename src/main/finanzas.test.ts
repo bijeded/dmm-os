@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { costos, cotizaciones, definicionesCosto, ingresos } from './db/schema'
+import { costos, cotizaciones, definicionesCosto, ingresos, proyectos } from './db/schema'
 import { contacto, db, reiniciarDb } from './db/test-db'
 import { rangos, resumenFinanzas } from './finanzas'
 import { dbAlDia } from './ledger'
@@ -336,6 +336,16 @@ describe('nuevo', () => {
     expect(() => nuevoIngreso(db, ingreso({ subtotal: 0 }), hoy)).toThrow(/monto/)
     expect(() => nuevoCosto(db, costo({ nombre: ' ' }), hoy)).toThrow(/nombre/)
     expect(() => nuevoCosto(db, costo({ categoria: 'msi', parcialidades: null }), hoy)).toThrow(/parcialidades/)
+  })
+})
+
+describe('a Proyecto sin Contacto', () => {
+  it('names the Proyecto of an Ingreso linked to it, which takes the Proyecto’s missing Contacto, and counts it', () => {
+    const p = db.insert(proyectos).values({ nombre: 'Activista', categoria: 'other', importado: true }).returning().get()
+    nuevoIngreso(db, ingreso({ proyectoId: p.id }), hoy)
+    const r = resumenFinanzas(db, 'mes', hoy, 30)
+    expect(r.ingresos).toEqual([expect.objectContaining({ proyecto: 'Activista', contacto: null, subtotal: 10000 })])
+    expect(r.actual.ingresos).toBe(10000)
   })
 })
 

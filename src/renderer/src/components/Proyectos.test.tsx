@@ -133,6 +133,43 @@ describe('Proyectos', () => {
   })
 })
 
+describe('Proyecto sin Contacto', () => {
+  const activista = fila(4, 'Activista', { contactoId: null, contacto: null, fechaInicio: null })
+  const fichaSinContacto: Ficha = { ...ficha, id: 4, nombre: 'Activista', contactoId: null, contacto: null, clienteFinal: null, cotizacionId: null, folio: null }
+
+  it('shows Sin Contacto in the list and filters by it, leaving personal Proyectos out', async () => {
+    api.listar = vi.fn(async () => ({ ...lista, proyectos: [activista, ...lista.proyectos] }))
+    montar('/proyectos')
+    await screen.findByText('PRY-004')
+    const filaActivista = screen.getAllByRole('row').find((r) => r.textContent?.includes('Activista'))!
+    expect(within(filaActivista).getByText('Sin Contacto')).toBeTruthy()
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Contacto' }), { target: { value: 'sin_contacto' } })
+    expect(screen.getAllByRole('row').slice(1).map((f) => f.querySelector('td')!.textContent)).toEqual(['PRY-004'])
+  })
+
+  it('shows Sin Contacto in its Ficha, not Personal', async () => {
+    api.ficha = vi.fn(async () => fichaSinContacto)
+    montar('/proyectos/4')
+    await screen.findByRole('heading', { name: 'Activista' })
+    expect(screen.getByText('Sin Contacto')).toBeTruthy()
+    expect(screen.queryByText('Personal')).toBeNull()
+  })
+
+  it('requires a Contacto to save it from its Ficha, and assigns the one chosen', async () => {
+    api.ficha = vi.fn(async () => fichaSinContacto)
+    montar('/proyectos/4/editar')
+    await screen.findByDisplayValue('Activista')
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Elige un contacto')
+    expect(api.guardar).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText('Contacto'), { target: { value: '7' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+    await waitFor(() => expect(api.guardar).toHaveBeenCalledWith(expect.objectContaining({ id: 4, etiqueta: 'cliente', contactoId: 7 })))
+  })
+})
+
 describe('FichaProyecto', () => {
   it('shows what is still to be paid, and only the actions its estado allows', async () => {
     montar('/proyectos/1')
