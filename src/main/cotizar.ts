@@ -9,8 +9,9 @@ import { estadoCobro } from './cobranza'
 import { transaccionConPeriodos } from './ledger'
 import { plantillaCotizacion } from './plantilla-cotizacion'
 import { planCobro } from './plan-cobro'
+import { partidasGuardadas } from './importacion/pdf-cotizacion'
 import { crearCarpeta } from './proyectos'
-import { CATEGORIAS, CATEGORIAS_COSTO, FACTURACIONES, type Categoria, type CotizacionNueva, type EstadoCotizacion, type FichaCotizacion, type ListaCotizaciones, type PartidaCotizacion } from '../shared/dominio'
+import { CATEGORIAS, CATEGORIAS_COSTO, FACTURACIONES, type Categoria, type CotizacionNueva, type EstadoCotizacion, type FichaCotizacion, type ListaCotizaciones } from '../shared/dominio'
 import { folioDmm } from '../shared/formato'
 import { totalesCotizacion } from '../shared/montos'
 import { sumarDias } from '../shared/fechas'
@@ -50,7 +51,7 @@ export function fichaCotizacion(db: Db, id: number): FichaCotizacion {
     fecha: c.fecha,
     validezDias: c.validezDias,
     moneda: c.moneda,
-    partidas: c.items as PartidaCotizacion[],
+    partidas: partidasGuardadas(c.items),
     conIva: c.iva > 0,
     facturacion: c.facturacion,
     parcialidades: c.parcialidades,

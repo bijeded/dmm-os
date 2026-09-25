@@ -18,6 +18,7 @@ import {
 import { carpetaDeProyectos } from '../paths'
 import { escanearCarpetas, leerMapaDe } from './escaneo'
 import { importarFacturas } from './facturas'
+import { leerPdfsCotizaciones } from './pdfs'
 
 /**
  * Reimportar desde cero: remove every record the Importación made, then run the folder scan and
@@ -87,15 +88,21 @@ export function borrarImportado(tx: Tx | Db): void {
 }
 
 /**
- * Refused, with its Bloqueos, while anything would be lost. Otherwise takes the Respaldo, removes
- * the imported records in one transaction, and imports again: folders first, then Facturas.
+ * Refused, with its Bloqueos, while anything would be lost. Otherwise reads every legacy quote's
+ * PDF (before anything changes, so a slow read never leaves the ledger half removed), takes the
+ * Respaldo, removes the imported records in one transaction, and imports again: folders first,
+ * then Facturas.
  */
-export function reimportar(db: Db, entorno: Entorno): ResultadoReimportar {
+export async function reimportar(db: Db, entorno: Entorno): Promise<ResultadoReimportar> {
+  const antes = bloqueos(db, entorno)
+  if (antes.length > 0) return { reimportado: false, bloqueos: antes }
+  const pdfs = await leerPdfsCotizaciones(entorno.root)
+  // Asked again: while the files were read, something may have been made by hand.
   const b = bloqueos(db, entorno)
   if (b.length > 0) return { reimportado: false, bloqueos: b }
   entorno.respaldar()
   db.transaction((tx) => borrarImportado(tx))
-  const carpetas = escanearCarpetas(db, entorno.root, entorno.hddRoot, entorno.hoy)
+  const carpetas = escanearCarpetas(db, entorno.root, entorno.hddRoot, entorno.hoy, pdfs)
   const facturas = importarFacturas(db, entorno.root)
   return { reimportado: true, carpetas, facturas }
 }

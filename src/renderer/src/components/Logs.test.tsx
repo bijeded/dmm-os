@@ -47,7 +47,8 @@ const estado: EstadoImportacion = {
       mapa: 'leido',
       filasMapa: [{ linea: 7, problema: 'sin uso', enDisco: 'Appleseed Plataformma' }],
       subcarpetasSinProyecto: [],
-      nuevos: { contactos: [], proyectos: [], rfcs: [] }
+      nuevos: { contactos: [], proyectos: [], rfcs: [], cotizaciones: [] },
+      cotizacionesIncompletas: []
     }
   }
 }
@@ -71,8 +72,26 @@ const vista: LogCarpetas = {
       { nombre: 'Umanut', origen: 'mapa' }
     ],
     proyectos: [{ nombre: 'Web 2023', contacto: 'DMM Studios', origen: 'proyectos' }],
-    rfcs: [{ contacto: 'Umanut', rfc: 'UMA2311072G4' }]
-  }
+    rfcs: [{ contacto: 'Umanut', rfc: 'UMA2311072G4' }],
+    cotizaciones: []
+  },
+  cotizacionesIncompletas: []
+}
+
+const queAcepto: Sugerencia = {
+  id: 4,
+  accion: 'partidas',
+  entidad: 'cotizacion',
+  motivo: 'cotización 308 aceptada con 3 precios: ¿qué aceptó?',
+  creadoEn: '2026-09-12T09:14:03.000Z',
+  registro: 'Cotización 308 · 3 Moon Wishes',
+  destino: null,
+  opciones: [
+    { id: 0, nombre: 'eCommerce · $10,000.00', sugerida: true },
+    { id: 1, nombre: 'Landing · $4,000.00', sugerida: false },
+    { id: 2, nombre: 'Logo · $2,500.00', sugerida: true }
+  ],
+  varias: true
 }
 
 const fusionar: Sugerencia = {
@@ -399,5 +418,95 @@ describe('Aceptar todas', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Aceptar todas' }))
     await waitFor(() => expect(api.aceptarVincular).toHaveBeenCalledWith())
     expect(api.responder).not.toHaveBeenCalled()
+  })
+})
+
+describe('¿Qué aceptó?', () => {
+  const casilla = (nombre: string) => screen.getByRole('checkbox', { name: nombre }) as HTMLInputElement
+
+  it('shows each price as a checkbox, preset to the pre-checked ones', async () => {
+    montar([queAcepto, vincular])
+    await screen.findByText('Cotización 308 · 3 Moon Wishes')
+    expect(screen.getByText(/¿Qué aceptó\?/)).toBeTruthy()
+    expect([casilla('eCommerce · $10,000.00'), casilla('Landing · $4,000.00'), casilla('Logo · $2,500.00')].map((c) => c.checked)).toEqual([true, false, true])
+    // The single-choice row beside it keeps its selector.
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3)
+    expect(screen.getByRole('combobox', { name: /Vincular a/ })).toBeTruthy()
+  })
+
+  it('accepts the pre-check as the guess', async () => {
+    montar([queAcepto])
+    await screen.findByText('Cotización 308 · 3 Moon Wishes')
+    fireEvent.click(screen.getByRole('button', { name: 'Aceptar' }))
+    await waitFor(() => expect(api.responder).toHaveBeenCalledWith(4, 'aceptada'))
+  })
+
+  it('answers with the prices checked when they differ from the pre-check', async () => {
+    montar([queAcepto])
+    await screen.findByText('Cotización 308 · 3 Moon Wishes')
+    fireEvent.click(casilla('Logo · $2,500.00'))
+    fireEvent.click(casilla('Landing · $4,000.00'))
+    fireEvent.click(screen.getByRole('button', { name: 'Aceptar' }))
+    await waitFor(() => expect(api.responder).toHaveBeenCalledWith(4, { elegidas: [0, 1] }))
+  })
+
+  it('cannot be accepted with no price checked', async () => {
+    montar([queAcepto])
+    await screen.findByText('Cotización 308 · 3 Moon Wishes')
+    fireEvent.click(casilla('eCommerce · $10,000.00'))
+    fireEvent.click(casilla('Logo · $2,500.00'))
+    expect((screen.getByRole('button', { name: 'Aceptar' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('sends the checked prices when nothing was pre-checked', async () => {
+    montar([{ ...queAcepto, opciones: queAcepto.opciones.map((o) => ({ ...o, sugerida: false })) }])
+    await screen.findByText('Cotización 308 · 3 Moon Wishes')
+    fireEvent.click(casilla('Landing · $4,000.00'))
+    fireEvent.click(screen.getByRole('button', { name: 'Aceptar' }))
+    await waitFor(() => expect(api.responder).toHaveBeenCalledWith(4, { elegidas: [1] }))
+  })
+
+  it('rejects it', async () => {
+    montar([queAcepto])
+    await screen.findByText('Cotización 308 · 3 Moon Wishes')
+    fireEvent.click(screen.getByRole('button', { name: 'Rechazar' }))
+    await waitFor(() => expect(api.responder).toHaveBeenCalledWith(4, 'rechazada'))
+  })
+})
+
+describe('Cotizaciones desde su PDF', () => {
+  const conPdfs = (log: LogCarpetas): LogCarpetas => ({
+    ...log,
+    nuevos: {
+      ...log.nuevos,
+      cotizaciones: [
+        { folio: '308', fecha: '2021-03-03', monto: 3000000, moneda: 'MXN', categoria: 'ecommerce' },
+        { folio: '207', fecha: '2019-01-07', monto: 26000, moneda: 'USD', categoria: 'website' }
+      ]
+    },
+    cotizacionesIncompletas: [
+      { folio: '346', archivo: 'Cotizaciones/2022/DMM - 346 - Casa Linda.pdf', falta: ['año'] },
+      { folio: '211', archivo: 'Cotizaciones/2019/DMM - 211 - La Z App.pdf', falta: ['pdf'] },
+      { folio: '260', archivo: 'Cotizaciones/2020/DMM - 260 - Sublime.pdf', falta: ['fecha', 'precio'] }
+    ]
+  })
+
+  it('lists after a real scan the quotes whose PDF could not give everything', async () => {
+    montar([], { facturas: null, carpetas: { ...estado.carpetas!, log: conPdfs(estado.carpetas!.log) } })
+    const resumen = await screen.findByText('Cotizaciones con PDF incompleto (3)')
+    const lista = resumen.parentElement!.textContent
+    expect(lista).toContain('DMM346 · año corregido')
+    expect(lista).toContain('DMM211 · PDF ilegible')
+    expect(lista).toContain('DMM260 · sin fecha, sin precio · Cotizaciones/2020/DMM - 260 - Sublime.pdf')
+  })
+
+  it('shows in Vista previa what each new quote takes from its PDF, and the incomplete ones', async () => {
+    montar([], estado, conPdfs(vista))
+    await screen.findByText(/3 importadas/)
+    fireEvent.click(screen.getByRole('button', { name: 'Vista previa' }))
+    const nuevas = (await screen.findByText('Cotizaciones nuevas (2)')).parentElement!.textContent
+    expect(nuevas).toMatch(/DMM308 · .*2021 · \$30,000\.00 · Ecommerce/)
+    expect(nuevas).toMatch(/DMM207 · .*2019 · .*260\.00 · Website/)
+    expect(screen.getAllByText('Cotizaciones con PDF incompleto (3)').length).toBeGreaterThan(0)
   })
 })

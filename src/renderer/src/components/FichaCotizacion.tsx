@@ -101,7 +101,10 @@ export function FichaCotizacion() {
               <tbody>
                 {f.partidas.map((p, i) => (
                   <tr key={i}>
-                    <td className={celdaCls}>{p.concepto}</td>
+                    <td className={celdaCls}>
+                      {p.concepto}
+                      {p.recurrente && <span className="text-on-surface-muted"> · recurrente</span>}
+                    </td>
                     <td className={celdaCls}>{p.cantidad}</td>
                     <td className={`${celdaCls} font-mono text-[12px]`}>{pesos(p.precio)}</td>
                     <td className={`${celdaCls} font-mono text-[12px]`}>{pesos(p.cantidad * p.precio)}</td>

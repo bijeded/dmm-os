@@ -1,10 +1,10 @@
 import { readdirSync, readFileSync, type Dirent } from 'node:fs'
 import { join, posix } from 'node:path'
-import { inArray } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import type { LogCarpetas, OrigenImportado } from '../../shared/dominio'
 import { leerNombreArchivo } from '../cotizaciones'
 import type { Db } from '../db'
-import { contactos, proyectos } from '../db/schema'
+import { contactos, cotizaciones, proyectos } from '../db/schema'
 import { hoy as hoyLocal } from '../../shared/fechas'
 import { carpetaDeProyectos, rutaDeProyecto, type TipoCarpetaProyecto } from '../paths'
 import {
@@ -17,6 +17,8 @@ import {
 } from './carpetas'
 import { esErrorMapa, leerMapa, mapaVacio, RUTA_MAPA, type Mapa } from './mapa'
 import { asignarRfcs } from './rfcs'
+import { cotizacionDePdf, leerPdfCotizacion } from './pdf-cotizacion'
+import { leerPdfsCotizaciones, type PdfsLeidos } from './pdfs'
 
 /**
  * The rescan: reads `Cotizaciones/`, `Clientes/`, `Proyectos/` and `Archivo/Proyectos/` into
@@ -56,7 +58,8 @@ function logVacio(): LogCarpetas {
     mapa: 'ausente',
     filasMapa: [],
     subcarpetasSinProyecto: [],
-    nuevos: { contactos: [], proyectos: [], rfcs: [] }
+    nuevos: { contactos: [], proyectos: [], rfcs: [], cotizaciones: [] },
+    cotizacionesIncompletas: []
   }
 }
 
@@ -64,6 +67,7 @@ function logVacio(): LogCarpetas {
 interface Corrida {
   log: LogCarpetas
   mapa: Mapa
+  pdfs: PdfsLeidos
   contactos: { id: number; origen: OrigenImportado }[]
   proyectos: { id: number; origen: OrigenImportado }[]
 }
@@ -101,14 +105,30 @@ export function leerMapaDe(root: string, log: Pick<LogCarpetas, 'mapa'>): Mapa |
 }
 
 /**
- * `hddRoot` is the external HDD, organised exactly like the main root. When it is absent its
- * Proyectos stay in the database and their locations become No disponible.
+ * The rescan as the app runs it: the text of every legacy quote not yet imported is read first,
+ * since the scan's transactions cannot wait on a file, then the scan runs.
  */
-export function escanearCarpetas(db: Db, root: string, hddRoot?: string, hoy = hoyLocal()): LogCarpetas {
+export async function escanear(db: Db, root: string, hddRoot?: string, hoy = hoyLocal()): Promise<LogCarpetas> {
+  const pdfs = await leerPdfsCotizaciones(root, db)
+  return escanearCarpetas(db, root, hddRoot, hoy, pdfs)
+}
+
+/**
+ * `hddRoot` is the external HDD, organised exactly like the main root. When it is absent its
+ * Proyectos stay in the database and their locations become No disponible. `pdfs` holds the text
+ * of the legacy quotes, read beforehand; a quote it lacks imports from its name alone.
+ */
+export function escanearCarpetas(
+  db: Db,
+  root: string,
+  hddRoot?: string,
+  hoy = hoyLocal(),
+  pdfs: PdfsLeidos = new Map()
+): LogCarpetas {
   const log = logVacio()
   const mapa = leerMapaDe(root, log)
   if (!mapa) return log
-  const corrida: Corrida = { log, mapa, contactos: [], proyectos: [] }
+  const corrida: Corrida = { log, mapa, pdfs, contactos: [], proyectos: [] }
 
   cotizacionesDeDisco(db, root, corrida, 'antiguo')
   contactosDeDisco(db, root, corrida)
@@ -164,7 +184,8 @@ function nombrarNuevos(db: Db, corrida: Corrida, rfcs: { contactoId: number; rfc
       const p = proyectoDe.get(id)
       return p ? [{ nombre: p.nombre, contacto: (p.contactoId !== null && nombres.get(p.contactoId)) || '', origen }] : []
     }),
-    rfcs: rfcs.map(({ contactoId, rfc }) => ({ contacto: nombres.get(contactoId) ?? '', rfc }))
+    rfcs: rfcs.map(({ contactoId, rfc }) => ({ contacto: nombres.get(contactoId) ?? '', rfc })),
+    cotizaciones: corrida.log.nuevos.cotizaciones
   }
 }
 
@@ -182,24 +203,41 @@ function cotizacionesDeDisco(db: Db, root: string, corrida: Corrida, formato: 'a
       const nombre = leerNombreArchivo(archivo)
       // Only the new format carries a date.
       if (!nombre || (nombre.fecha === null) !== (formato === 'antiguo')) continue
+      const rutaRelativa = posix.join(carpeta, archivo)
+      const anioCarpeta = Number(anio) || new Date().getFullYear()
+      const texto = corrida.pdfs.get(rutaRelativa)
       try {
-        const r = importarCotizacion(
-          db,
-          {
-            ...nombre,
-            anio: Number(anio) || new Date().getFullYear(),
-            rutaRelativa: posix.join(carpeta, archivo)
-          },
-          corrida.mapa
-        )
-        if (r.resultado === 'importado') log.cotizaciones.importadas++
-        else log.cotizaciones.duplicadas++
+        const pdf = texto === undefined ? undefined : texto === null ? null : cotizacionDePdf(leerPdfCotizacion(texto, anioCarpeta), nombre.nombre)
+        const r = importarCotizacion(db, { ...nombre, anio: anioCarpeta, rutaRelativa, pdf }, corrida.mapa)
+        if (r.resultado === 'importado') {
+          log.cotizaciones.importadas++
+          anotarCotizacion(db, corrida, r.cotizacionId, rutaRelativa, pdf)
+        } else log.cotizaciones.duplicadas++
         sumar(corrida, r, 'cotizacion')
       } catch (e) {
         log.errores.push({ archivo: posix.join(carpeta, archivo), error: mensaje(e) })
       }
     }
   }
+}
+
+/**
+ * A new Cotización in the run's log, as its PDF left it, and in the list of those whose PDF
+ * could not give everything.
+ */
+function anotarCotizacion(
+  db: Db,
+  corrida: Corrida,
+  id: number,
+  archivo: string,
+  pdf: ReturnType<typeof cotizacionDePdf> | null | undefined
+): void {
+  const c = db.select().from(cotizaciones).where(eq(cotizaciones.id, id)).get()
+  if (!c) return
+  const folio = `${c.folio}${c.folioSufijo}`
+  corrida.log.nuevos.cotizaciones.push({ folio, fecha: c.fecha, monto: c.total, moneda: c.moneda, categoria: c.categoria })
+  const falta = pdf === null ? (['pdf'] as const) : (pdf?.falta ?? [])
+  if (falta.length > 0) corrida.log.cotizacionesIncompletas.push({ folio, archivo, falta: [...falta] })
 }
 
 /**

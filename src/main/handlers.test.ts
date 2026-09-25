@@ -1,3 +1,4 @@
+import { pdfDeTexto } from './importacion/pdf-prueba'
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -119,10 +120,26 @@ describe('Vista previa', () => {
     const antes = cuenta()
 
     const log = await h.importacion.vistaPrevia()
-    expect(log.nuevos).toEqual({ contactos: [], proyectos: [], rfcs: [] })
+    expect(log.nuevos).toEqual({ contactos: [], proyectos: [], rfcs: [], cotizaciones: [] })
     expect(log).toMatchObject({ cotizaciones: { importadas: 0, duplicadas: 1 }, contactos: { creados: 0 }, sugerencias: 0 })
     expect(cuenta()).toEqual(antes)
     expect((await h.importacion.estado()).carpetas).toEqual({ corridoEn: '2026-09-16T10:00:00.000Z', log: real })
+  })
+
+  it("shows what each new Cotización takes from its PDF, and the ones it could not fully read", async () => {
+    enDisco()
+    writeFileSync(
+      join(root, 'Cotizaciones', '2023', 'DMM - 312 - Appleseed Plataforma.pdf'),
+      pdfDeTexto(['Ciudad de México, 3 de marzo, 2023.', 'Web App “Reservas”: app:', 'Costo: $ 40,000.00'])
+    )
+    writeFileSync(join(root, 'Cotizaciones', '2023', 'DMM - 313 - Sublime.pdf'), '%PDF-1.4')
+    const log = await h.importacion.vistaPrevia()
+    expect(log.nuevos.cotizaciones).toEqual([
+      { folio: '312', fecha: '2023-03-03', monto: 4000000, moneda: 'MXN', categoria: 'app' },
+      { folio: '313', fecha: '2023-01-01', monto: 0, moneda: 'MXN', categoria: 'other' }
+    ])
+    expect(log.cotizacionesIncompletas).toEqual([{ folio: '313', archivo: 'Cotizaciones/2023/DMM - 313 - Sublime.pdf', falta: ['pdf'] }])
+    expect(cuenta()).toEqual([0, 0, 0, 0])
   })
 
   it('shows the same error a real scan would for a broken map', async () => {
@@ -163,6 +180,14 @@ describe('Reimportar desde cero', () => {
     expect(nombres()).toEqual(['Appleseed', 'Clicme', 'Sublime'])
   })
 
+  it("reads every quote's PDF again, so the reimported Cotizaciones carry what it says", async () => {
+    await importado()
+    writeFileSync(join(root, 'Cotizaciones', '2025', 'DMM - 475 - Clicme.pdf'), pdfDeTexto(['Ciudad de México, 3 de marzo, 2025.', 'Sitio web: sitio:', 'Costo: $ 8,000.00']))
+    const r = await h.importacion.reimportar()
+    expect(r.reimportado).toBe(true)
+    expect(conexion.db.select().from(cotizaciones).where(eq(cotizaciones.folio, 475)).get()).toMatchObject({ fecha: '2025-03-03', total: 800000, categoria: 'website' })
+  })
+
   it('is refused while a hand-entered Ingreso exists, taking no Respaldo', async () => {
     await importado()
     conexion.db.insert(ingresos).values({ categoria: 'sin_factura', estado: 'pagado', subtotal: 1000, total: 1000, fechaRegistro: '2026-09-01' }).run()
@@ -180,6 +205,8 @@ describe('Reimportar desde cero', () => {
     expect(log.nuevos.contactos.map((c) => c.nombre)).not.toContain('Appleseed Plataforma')
     expect(log.nuevos.contactos.map((c) => c.nombre)).toContain('Appleseed')
     expect(log.cotizaciones).toEqual({ importadas: 2, duplicadas: 0 })
+    // Both quotes are read again although both are imported in the live database.
+    expect(log.cotizacionesIncompletas.map((c) => c.folio).sort()).toEqual(['312', '475'])
 
     expect(nombres()).toEqual(antes.nombres)
     expect(nombres()).toContain('Appleseed Plataforma')
@@ -220,6 +247,35 @@ describe('Reimportar desde cero', () => {
     const quedan = await h.importacion.responder(vincular.id, { elegidas: [web2027] })
     expect(quedan.map((s) => s.accion)).toEqual(['fusionar'])
     expect(db.select().from(ingresos).where(eq(ingresos.id, ingreso)).get()!.proyectoId).toBe(web2027)
+  })
+
+  it('answers "¿Qué aceptó?" with several prices and returns what is still pending', async () => {
+    const db = conexion.db
+    const sublime = db.insert(contactos).values({ nombre: 'Sublime' }).returning().get().id
+    const partida = (concepto: string, precio: number) => ({ concepto, categoria: 'website' as const, cantidad: 1, precio })
+    const c = db
+      .insert(cotizaciones)
+      .values({
+        folio: 308,
+        contactoId: sublime,
+        categoria: 'website',
+        estado: 'aceptada',
+        fecha: '2021-03-03',
+        items: [partida('Sitio', 1000000), partida('Landing', 400000), partida('Logo', 250000)],
+        subtotal: 1650000,
+        total: 1650000
+      })
+      .returning()
+      .get()
+    const duplicado = db.insert(contactos).values({ nombre: 'Sublime Inspiracion' }).returning().get().id
+    db.insert(sugerenciasImportacion).values({ entidad: 'cotizacion', entidadId: c.id, accion: 'partidas', motivo: 'precios' }).run()
+    db.insert(sugerenciasImportacion).values({ entidad: 'contacto', entidadId: duplicado, accion: 'fusionar', contactoId: sublime, motivo: 'nombre' }).run()
+    const [partidas] = await h.importacion.sugerencias()
+    expect(partidas).toMatchObject({ accion: 'partidas', varias: true })
+
+    const quedan = await h.importacion.responder(partidas.id, { elegidas: [0, 2] })
+    expect(quedan.map((s) => s.accion)).toEqual(['fusionar'])
+    expect(db.select().from(cotizaciones).where(eq(cotizaciones.id, c.id)).get()).toMatchObject({ subtotal: 1250000, iva: 0, total: 1250000 })
   })
 })
 

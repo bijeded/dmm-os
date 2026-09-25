@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { escanearCarpetas } from '.'
+import { escanear, escanearCarpetas } from '.'
+import { pdfDeTexto } from './pdf-prueba'
 import {
   contactos,
   costos,
@@ -659,7 +660,7 @@ describe('el log del Mapa de nombres', () => {
   it('reports nothing new on a second run', () => {
     carpeta(root, 'Proyectos', 'Clicme')
     escanearCarpetas(db, root)
-    expect(escanearCarpetas(db, root).nuevos).toEqual({ contactos: [], proyectos: [], rfcs: [] })
+    expect(escanearCarpetas(db, root).nuevos).toEqual({ contactos: [], proyectos: [], rfcs: [], cotizaciones: [] })
   })
 })
 
@@ -697,7 +698,7 @@ describe('el mapa aplica solo al importar por primera vez', () => {
     expect(nombresDeContactos()).toEqual(['Frida Comunicacion'])
     expect(db.select().from(proyectos).all().map((p) => p.nombre)).toEqual(['Frida Comunicacion'])
     expect(db.select().from(ubicacionesArchivo).all().map((u) => u.tipo).sort()).toEqual(['hdd_externo', 'proyectos'])
-    expect(log.nuevos).toEqual({ contactos: [], proyectos: [], rfcs: [] })
+    expect(log.nuevos).toEqual({ contactos: [], proyectos: [], rfcs: [], cotizaciones: [] })
   })
 })
 
@@ -825,5 +826,187 @@ describe('lo que la Importación crea queda marcado como importado', () => {
 
     expect(cotizacion(134)).toMatchObject({ contactoId: id, importado: true })
     expect(db.select().from(contactos).all()).toEqual([expect.objectContaining({ id, importado: false })])
+  })
+})
+
+/** A legacy quote whose PDF holds `lineas`, in the template's layout. */
+const pdfConTexto = (anio: string, nombre: string, lineas: string[]) => {
+  writeFileSync(join(carpeta(root, 'Cotizaciones', anio), nombre), pdfDeTexto(lineas))
+}
+const flor = [
+  'Ciudad de México, 29 de octubre, 2021.',
+  'presentar la siguiente información:',
+  'Video “Curso” : Elaboración de video:',
+  '• Guion.',
+  'Costo: $ 3,000.00',
+  '• No incluye IVA.',
+  'Asunto:',
+  'Video “Curso”.'
+]
+
+describe('una Cotización antigua desde el texto de su PDF', () => {
+  it('takes its fecha, items, Monto before IVA, categoría and project name from the PDF', async () => {
+    pdfConTexto('2021', 'DMM - 250 - Flor de Letras.pdf', flor)
+    const log = await escanear(db, root)
+    expect(cotizacion(250)).toMatchObject({
+      fecha: '2021-10-29',
+      items: [{ concepto: 'Video “Curso” : Elaboración de video', categoria: 'other', cantidad: 1, precio: 300000 }],
+      subtotal: 300000,
+      iva: 0,
+      total: 300000,
+      facturacion: 'unica',
+      moneda: 'MXN',
+      tipoCambio: null,
+      categoria: 'other',
+      nombre: 'Curso',
+      estado: 'enviada'
+    })
+    expect(log.nuevos.cotizaciones).toEqual([{ folio: '250', fecha: '2021-10-29', monto: 300000, moneda: 'MXN', categoria: 'other' }])
+    expect(log.cotizacionesIncompletas).toEqual([])
+  })
+
+  it("keeps the day and month of last year's date in the folder's year, and lists it", async () => {
+    pdfConTexto('2022', 'DMM - 346 - Casa Linda.pdf', ['Ciudad de México, 21 de enero, 2021.', 'Sitio web: sitio:', 'Costo: $ 8,000.00'])
+    const log = await escanear(db, root)
+    expect(cotizacion(346).fecha).toBe('2022-01-21')
+    expect(log.cotizacionesIncompletas).toEqual([{ folio: '346', archivo: 'Cotizaciones/2022/DMM - 346 - Casa Linda.pdf', falta: ['año'] }])
+  })
+
+  it('lists a quote whose PDF gives no fecha or no price, dated from its folder', async () => {
+    pdfConTexto('2020', 'DMM - 260 - Sublime.pdf', ['Presupuesto', 'Sitio web: sitio:'])
+    const log = await escanear(db, root)
+    expect(cotizacion(260)).toMatchObject({ fecha: '2020-01-01', items: [], total: 0 })
+    expect(log.cotizacionesIncompletas).toEqual([{ folio: '260', archivo: 'Cotizaciones/2020/DMM - 260 - Sublime.pdf', falta: ['fecha', 'precio'] }])
+  })
+
+  it('imports a quote whose PDF cannot be read from its name, and every other file too', async () => {
+    pdf(root, '2019', 'DMM - 211 - La Z App.pdf')
+    pdfConTexto('2019', 'DMM - 212 - Sublime.pdf', ['Ciudad de México, 3 de marzo, 2019.', 'Sitio web: sitio:', 'Costo: $ 1,000.00'])
+    const log = await escanear(db, root)
+    expect(cotizacion(211)).toMatchObject({ fecha: '2019-01-01', items: [], total: 0, categoria: 'other', nombre: 'La Z App' })
+    expect(cotizacion(212).total).toBe(100000)
+    expect(log.cotizaciones.importadas).toBe(2)
+    expect(log.cotizacionesIncompletas).toEqual([{ folio: '211', archivo: 'Cotizaciones/2019/DMM - 211 - La Z App.pdf', falta: ['pdf'] }])
+  })
+
+  it('imports a USD quote in USD, its rate from the pesos it prints', async () => {
+    pdfConTexto('2019', 'DMM - 207 - Noticias Zero.pdf', ['Ciudad de México, 7 de enero, 2019.', 'Sitio: sitio:', 'Costo especial: $ 260.00 USD ($5,000.00 MXN)'])
+    await escanear(db, root)
+    expect(cotizacion(207)).toMatchObject({ moneda: 'USD', tipoCambio: 19.2308, subtotal: 26000, iva: 0, total: 26000 })
+  })
+
+  it('bills a quote with only recurring prices monthly', async () => {
+    pdfConTexto('2021', 'DMM - 300 - Zamora USA.pdf', ['Ciudad de México, 3 de marzo, 2021.', 'Webmaster: soporte:', 'Costo: $ 2,000.00 mensuales'])
+    await escanear(db, root)
+    expect(cotizacion(300)).toMatchObject({ facturacion: 'mensual', total: 200000, items: [expect.objectContaining({ recurrente: true })] })
+  })
+
+  it('leaves a Cotización already imported as it is, even after it was edited', async () => {
+    pdfConTexto('2021', 'DMM - 250 - Flor de Letras.pdf', flor)
+    await escanear(db, root)
+    db.update(cotizaciones).set({ total: 999, fecha: '2021-12-01' }).where(eq(cotizaciones.folio, 250)).run()
+    const log = await escanear(db, root)
+    expect(cotizacion(250)).toMatchObject({ total: 999, fecha: '2021-12-01' })
+    expect(log.cotizaciones).toEqual({ importadas: 0, duplicadas: 1 })
+    expect(log.nuevos.cotizaciones).toEqual([])
+  })
+})
+
+describe('el Proyecto que nombra el PDF', () => {
+  it('links the older of two quotes naming the same project to its folder', async () => {
+    mapa(root, `${CABECERA}3 Moon Wishes,Sublime,,\n`)
+    pdfConTexto('2021', 'DMM - 308 - Sublime.pdf', ['Ciudad de México, 3 de marzo, 2021.', 'eCommerce “3 Moon Wishes” : tienda en línea:', 'Costo: $ 30,000.00'])
+    pdfConTexto('2021', 'DMM - 320 - Sublime.pdf', ['Ciudad de México, 3 de mayo, 2021.', 'Landing page “3 Moon Wishes” : landing:', 'Costo: $ 9,000.00'])
+    carpeta(root, 'Proyectos', '3 Moon Wishes')
+    await escanear(db, root)
+
+    const moon = db.select().from(proyectos).where(eq(proyectos.nombre, '3 Moon Wishes')).get()!
+    expect(moon.cotizacionId).toBe(cotizacion(308).id)
+    expect(cotizacion(308)).toMatchObject({ estado: 'aceptada', nombre: '3 Moon Wishes', categoria: 'ecommerce' })
+    expect(cotizacion(320)).toMatchObject({ estado: 'enviada', nombre: '3 Moon Wishes' })
+    expect(db.select().from(sugerenciasImportacion).where(eq(sugerenciasImportacion.accion, 'vincular')).all()).toEqual([
+      expect.objectContaining({ entidadId: cotizacion(308).id, proyectoId: moon.id })
+    ])
+  })
+
+  it("lets a map row's proyecto win over the quoted name", async () => {
+    mapa(root, `${CABECERA}Appleseed Plataforma,Appleseed,Plataforma,\n`)
+    pdfConTexto('2023', 'DMM - 312 - Appleseed Plataforma.pdf', ['Web App “Reservas Appleseed”: app:', 'Costo: $ 1,000.00'])
+    await escanear(db, root)
+    expect(cotizacion(312).nombre).toBe('Plataforma')
+  })
+
+  it('takes the quoted name over the Cliente - Proyecto split, the Contacto still from the split', async () => {
+    pdfConTexto('2023', 'DMM - 377 - Korova - Blog.pdf', ['Sitio web “Blog Korova”: sitio:', 'Costo: $ 1,000.00'])
+    await escanear(db, root)
+    expect(cotizacion(377).nombre).toBe('Blog Korova')
+    expect(nombresDeContactos()).toEqual(['Korova'])
+  })
+
+  it('keeps the split when the PDF quotes no name', async () => {
+    pdfConTexto('2023', 'DMM - 377 - Korova - Blog.pdf', ['Sitio web: sitio:', 'Costo: $ 1,000.00'])
+    await escanear(db, root)
+    expect(cotizacion(377).nombre).toBe('Blog')
+  })
+
+  it('links a quoted name holding " y " to the folder of that whole name', async () => {
+    mapa(root, `${CABECERA}Diseño y Desarrollo,Sublime,,\n`)
+    pdfConTexto('2021', 'DMM - 330 - Sublime.pdf', ['Sitio web “Diseño y Desarrollo”: sitio:', 'Costo: $ 1,000.00'])
+    carpeta(root, 'Proyectos', 'Diseño y Desarrollo')
+    await escanear(db, root)
+    const p = db.select().from(proyectos).where(eq(proyectos.nombre, 'Diseño y Desarrollo')).get()!
+    expect(p).toMatchObject({ cotizacionId: cotizacion(330).id, notas: null })
+  })
+})
+
+describe('¿Qué aceptó? al aceptar una Cotización con varios precios', () => {
+  const entregada = async (precios: string[]) => {
+    pdfConTexto('2021', 'DMM - 308 - Sublime.pdf', ['Ciudad de México, 3 de marzo, 2021.', ...precios.flatMap((p, i) => [`Servicio ${i + 1}: parte:`, p])])
+    carpeta(root, 'Proyectos', 'Sublime')
+    return escanear(db, root)
+  }
+  const preguntas = () => db.select().from(sugerenciasImportacion).where(eq(sugerenciasImportacion.accion, 'partidas')).all()
+
+  it('asks it when the accepted quote has two prices, and counts it in the log', async () => {
+    const log = await entregada(['Costo: $ 10,000.00', 'Costo: $ 4,000.00'])
+    expect(preguntas()).toEqual([
+      expect.objectContaining({ entidad: 'cotizacion', entidadId: cotizacion(308).id, estado: 'pendiente', proyectoId: null, contactoId: null })
+    ])
+    expect(log.sugerencias).toBe(2)
+  })
+
+  it('does not ask it for one price', async () => {
+    await entregada(['Costo: $ 3,000.00'])
+    expect(cotizacion(308)).toMatchObject({ estado: 'aceptada', total: 300000 })
+    expect(preguntas()).toEqual([])
+  })
+
+  it('does not ask it for one one-off price with a recurring one', async () => {
+    await entregada(['Costo: $ 10,000.00', 'Costo: $ 2,000.00 mensuales'])
+    expect(preguntas()).toEqual([])
+  })
+
+  it('does not ask it twice on a second scan', async () => {
+    await entregada(['Costo: $ 10,000.00', 'Costo: $ 4,000.00'])
+    await escanear(db, root)
+    expect(preguntas()).toHaveLength(1)
+  })
+
+  it('does not ask it for a quote made in the app, whose Monto is its own', async () => {
+    const sublime = db.insert(contactos).values({ nombre: 'Sublime' }).returning().get()
+    const partida = (concepto: string, precio: number) => ({ concepto, categoria: 'website' as const, cantidad: 1, precio })
+    db.insert(cotizaciones)
+      .values({ folio: 530, contactoId: sublime.id, nombre: 'Sublime', categoria: 'website', estado: 'enviada', fecha: '2026-01-10', items: [partida('Sitio', 100000), partida('Logo', 50000)], subtotal: 150000, iva: 24000, total: 174000 })
+      .run()
+    carpeta(root, 'Proyectos', 'Sublime')
+    await escanear(db, root)
+    expect(cotizacion(530)).toMatchObject({ estado: 'aceptada', iva: 24000, total: 174000 })
+    expect(preguntas()).toEqual([])
+  })
+
+  it('does not ask it for a quote no folder delivers', async () => {
+    pdfConTexto('2021', 'DMM - 308 - Sublime.pdf', ['Servicio: a:', 'Costo: $ 10,000.00', 'Servicio: b:', 'Costo: $ 4,000.00'])
+    await escanear(db, root)
+    expect(preguntas()).toEqual([])
   })
 })

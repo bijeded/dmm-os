@@ -7,6 +7,7 @@ import type { Db } from '../db'
 import { proponer } from '../sugerencias'
 import { contactos, cotizaciones, proyectos, ubicacionesArchivo } from '../db/schema'
 import { mapaVacio, type Mapa } from './mapa'
+import { partidasDelMonto, partidasGuardadas, type CotizacionDePdf } from './pdf-cotizacion'
 
 /**
  * Importing what the folders say: a Cotización per archived PDF (keyed by its Folio), a
@@ -43,11 +44,13 @@ export interface ResultadoCarpeta extends Aportes {
   creado: boolean
 }
 
-/** A Cotización as its archived PDF names it, plus where the file sits. */
+/** A Cotización as its archived PDF names it, plus where the file sits and what the PDF says. */
 export interface EntradaCotizacion extends NombreCotizacion {
   /** The `Cotizaciones/<year>/` folder it was filed under, used when the name carries no date. */
   anio: number
   rutaRelativa: string
+  /** What a legacy quote's PDF says; `null` when it could not be read, absent when it was not. */
+  pdf?: CotizacionDePdf | null
 }
 
 export interface EntradaCarpeta {
@@ -61,11 +64,15 @@ export interface EntradaCarpeta {
  * A legacy Cotización naming several projects becomes one Proyecto: `elegido` if given, else
  * the first name. The names it does not become are kept in that Proyecto's notes, which is
  * the only place they survive. `nombre` is undefined when the quote names no such project.
+ * A name that is `elegido` whole (a PDF's “Diseño y desarrollo”) is one project, not split.
  */
 function repartirNombres(
   cotizacion: { folio: number | null; nombre: string | null },
   elegido?: string
 ): { nombre: string | undefined; notas: string | null } {
+  if (elegido !== undefined && cotizacion.nombre !== null && clave(cotizacion.nombre) === clave(elegido)) {
+    return { nombre: cotizacion.nombre, notas: null }
+  }
   const nombres = nombresDeProyecto(cotizacion.nombre ?? '')
   const nombre = elegido === undefined ? nombres[0] : nombres.find((n) => clave(n) === clave(elegido))
   const otros = nombres.filter((n) => n !== nombre)
@@ -227,9 +234,14 @@ function contactoDeProyecto(db: Tx, nombre: string): ResultadoContacto {
  * sharing a Folio apart). A PDF exists, so the quote was at least sent: that is the weakest
  * status its Folio allows. Re-importing the same Folio changes nothing.
  *
- * A legacy quote's Contacto comes through `atribuir`. When the map or the `Cliente - Proyecto`
- * split names the Proyecto it delivers, that name is stored as the Cotización's `nombre`, which
- * is what links it to a folder and names its Proyecto; the full name stays in the PDF's path.
+ * A legacy quote's Contacto comes through `atribuir`. The Proyecto it delivers is, in order: its
+ * map row's `proyecto`, the project its PDF names in curly quotes, the `Cliente - Proyecto`
+ * split. That name is stored as the Cotización's `nombre`, which is what links it to a folder
+ * and names its Proyecto; the full name stays in the PDF's path.
+ *
+ * Its fecha, items, Monto, facturación, currency and categoría come from its PDF. Every quote
+ * price is before IVA, so IVA is 0 and the total is the Monto: an uninvoiced job (no IVA) can
+ * then reach it. Without a readable PDF it imports from its name alone.
  */
 export function importarCotizacion(db: Db, entrada: EntradaCotizacion, mapa: Mapa = mapaVacio()): ResultadoCotizacion {
   return db.transaction((tx) => {
@@ -244,24 +256,36 @@ export function importarCotizacion(db: Db, entrada: EntradaCotizacion, mapa: Map
     return { resultado: 'duplicado', cotizacionId: existente.id, contactosCreados: [], sugerencias: 0 }
   }
 
-  // The old filenames carry no date; the year the file is filed under is all the disk knows.
-  const fecha = entrada.fecha ?? `${entrada.anio}-01-01`
+  const pdf = entrada.fecha === null ? entrada.pdf : undefined
+  // The old filenames carry no date; without one from the PDF, the year it is filed under is all the disk knows.
+  const fecha = entrada.fecha ?? pdf?.fecha ?? `${entrada.anio}-01-01`
   const { contactoId, proyecto, ...aportes } =
     entrada.fecha === null
       ? atribuir(tx, mapa, entrada.nombre, 'cotizacion')
       : { ...contactoDeProyecto(tx, entrada.nombre), proyecto: null }
+  const nombre = (entrada.fecha === null && mapa.consultar(entrada.nombre)?.proyecto) || pdf?.proyecto || proyecto || entrada.nombre
   const cotizacion = tx
     .insert(cotizaciones)
     .values({
       folio: entrada.folio,
       folioSufijo: sufijo,
       contactoId,
-      categoria: 'other',
+      categoria: pdf?.categoria ?? 'other',
       estado: 'enviada',
       fecha,
       pdfRutaRelativa: entrada.rutaRelativa,
-      nombre: proyecto ?? entrada.nombre,
-      importado: true
+      nombre,
+      importado: true,
+      // Written even when empty: the column's default reads back as the string "[]", not a list.
+      items: pdf?.partidas ?? [],
+      ...(pdf && {
+        moneda: pdf.moneda,
+        tipoCambio: pdf.tipoCambio,
+        subtotal: pdf.monto,
+        iva: 0,
+        total: pdf.monto,
+        facturacion: pdf.facturacion
+      })
     })
     .returning()
     .get()
@@ -349,12 +373,12 @@ export function importarCarpetaProyecto(
       })
       .run()
 
-    const vinculada = !existente && vincularCotizacion(tx, mapa, proyecto.id, contactoId, nombre)
+    const propuestas = existente ? 0 : vincularCotizacion(tx, mapa, proyecto.id, contactoId, nombre)
     return {
       proyectoId: proyecto.id,
       creado: !existente,
       contactosCreados: aportes.contactosCreados,
-      sugerencias: aportes.sugerencias + (vinculada ? 1 : 0)
+      sugerencias: aportes.sugerencias + propuestas
     }
   })
 }
@@ -363,9 +387,11 @@ export function importarCarpetaProyecto(
  * A folder delivering a quote of the same name means that quote was accepted. The oldest
  * unlinked match is taken. The inference *is* written — that is what "inferred status" means
  * here — and a Sugerencia records that it was inferred, so rejecting it can undo the link.
- * The quote's Cliente final from the map goes onto a Proyecto that has none.
+ * The quote's Cliente final from the map goes onto a Proyecto that has none. A quote with
+ * several prices also asks "¿Qué aceptó?": which of them the Contacto took. Returns how many
+ * Sugerencias it proposed.
  */
-function vincularCotizacion(db: Tx, mapa: Mapa, proyectoId: number, contactoId: number, nombre: string): boolean {
+function vincularCotizacion(db: Tx, mapa: Mapa, proyectoId: number, contactoId: number, nombre: string): number {
   const candidata = db
     .select()
     .from(cotizaciones)
@@ -375,7 +401,7 @@ function vincularCotizacion(db: Tx, mapa: Mapa, proyectoId: number, contactoId: 
     .all()
     .map((r) => r.cotizaciones)
     .find((c) => repartirNombres(c, nombre).nombre !== undefined)
-  if (!candidata) return false
+  if (!candidata) return 0
 
   const antes = db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()
   const notasAntes = antes?.notas ?? null
@@ -391,7 +417,7 @@ function vincularCotizacion(db: Tx, mapa: Mapa, proyectoId: number, contactoId: 
     })
     .where(eq(proyectos.id, proyectoId))
     .run()
-  return proponer(db, {
+  const vinculada = proponer(db, {
     entidad: 'cotizacion',
     entidadId: candidata.id,
     accion: 'vincular',
@@ -402,6 +428,17 @@ function vincularCotizacion(db: Tx, mapa: Mapa, proyectoId: number, contactoId: 
       proyecto: { notasAntes, notasEscritas, ...(clienteFinal && { clienteFinalEscrito: clienteFinal }) }
     }
   })
+  // Only an imported quote's prices are its PDF's, before IVA; one made in the app has its own Monto.
+  const precios = candidata.importado ? partidasDelMonto(partidasGuardadas(candidata.items)).length : 0
+  const preguntada =
+    precios >= 2 &&
+    proponer(db, {
+      entidad: 'cotizacion',
+      entidadId: candidata.id,
+      accion: 'partidas',
+      motivo: `cotización ${candidata.folio}${candidata.folioSufijo} aceptada con ${precios} precios: ¿qué aceptó?`
+    })
+  return (vinculada ? 1 : 0) + (preguntada ? 1 : 0)
 }
 
 /**

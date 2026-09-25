@@ -5,7 +5,19 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { and, eq, sql } from 'drizzle-orm'
 import { escanearCarpetas } from './importacion'
 import { aceptarVincular, pendientes, responder } from './sugerencias'
-import { contactos, costos, cotizaciones, ingresos, proyectos, sugerenciasImportacion, ubicacionesArchivo } from './db/schema'
+import {
+  contactos,
+  costos,
+  cotizaciones,
+  definicionesCosto,
+  definicionesIngreso,
+  ingresos,
+  proyectos,
+  sugerenciasImportacion,
+  ubicacionesArchivo
+} from './db/schema'
+import { leerPdfsCotizaciones } from './importacion/pdfs'
+import { pdfDeTexto } from './importacion/pdf-prueba'
 import { db, ingresoBase, reiniciarDb } from './db/test-db'
 import { estadoCobro } from './cobranza'
 import { listarContactos } from './contactos'
@@ -608,5 +620,223 @@ describe('correcting a fusionar', () => {
     expect(() => responder(db, id, { elegidas: [frida] })).toThrow('Ese Contacto ya no se puede elegir')
     expect(foto()).toBe(antes)
     expect(estadoDe(id)).toBe('pendiente')
+  })
+})
+
+describe('¿Qué aceptó?', () => {
+  /**
+   * Sublime's quote 308, dated 2021-03-03, with these price lines, delivered by `Proyectos/Sublime`:
+   * the scan accepts it and asks which prices were taken.
+   */
+  const aceptadaConPrecios = async (precios: string[]) => {
+    mkdirSync(join(root, 'Cotizaciones', '2021'), { recursive: true })
+    writeFileSync(
+      join(root, 'Cotizaciones', '2021', 'DMM - 308 - Sublime.pdf'),
+      pdfDeTexto(['Ciudad de México, 3 de marzo, 2021.', ...precios.flatMap((p, i) => [`Servicio ${i + 1}: parte ${i + 1}:`, p])])
+    )
+    mkdirSync(join(root, 'Proyectos', 'Sublime'), { recursive: true })
+    escanearCarpetas(db, root, undefined, '2026-09-01', await leerPdfsCotizaciones(root, db))
+    const c = db.select().from(cotizaciones).where(eq(cotizaciones.folio, 308)).get()!
+    expect(c.estado).toBe('aceptada')
+    return c
+  }
+  const partidas = () => pendientes(db).find((s) => s.accion === 'partidas')
+  const marcadas = () => partidas()!.opciones.filter((o) => o.sugerida).map((o) => o.id)
+  const cotizacion = () => db.select().from(cotizaciones).where(eq(cotizaciones.folio, 308)).get()!
+  /** An issued invoice to the quote's Contacto; `partes` splits it into Parcialidades. */
+  const factura = (
+    uuid: string,
+    subtotal: number,
+    { fecha = '2021-04-01', estado = 'pagado' as 'pagado' | 'cancelado', partes = 1, usd = null as number | null } = {}
+  ) => {
+    const contactoId = cotizacion().contactoId
+    for (let i = 0; i < partes; i++) {
+      const parte = subtotal / partes
+      db.insert(ingresos)
+        .values({
+          categoria: 'factura',
+          estadoFacturacion: 'facturado',
+          estado,
+          contactoId,
+          cfdiUuid: uuid,
+          ...(partes > 1 && { cfdiParcialidad: i + 1 }),
+          fechaRegistro: fecha,
+          subtotal: parte,
+          iva: Math.round(parte * 0.16),
+          total: parte + Math.round(parte * 0.16),
+          ...(usd !== null && { montoOriginal: usd / partes, monedaOriginal: 'USD' as const })
+        })
+        .run()
+    }
+  }
+  const TRES = ['Costo: $ 10,000.00', 'Costo: $ 4,000.00', 'Costo: $ 2,500.00']
+
+  describe('its opciones', () => {
+    it('offers each price, several at once, with its amount, and keeps the sum as the Monto meanwhile', async () => {
+      await aceptadaConPrecios(TRES)
+      expect(partidas()).toMatchObject({ entidad: 'cotizacion', varias: true, registro: expect.stringContaining('308') })
+      expect(partidas()!.opciones.map((o) => [o.id, o.nombre])).toEqual([
+        [0, expect.stringMatching(/Servicio 1: parte 1 · \$10,000\.00/)],
+        [1, expect.stringMatching(/\$4,000\.00/)],
+        [2, expect.stringMatching(/\$2,500\.00/)]
+      ])
+      expect(marcadas()).toEqual([])
+      expect(cotizacion()).toMatchObject({ subtotal: 1650000, iva: 0, total: 1650000 })
+    })
+
+    it('pre-checks the price an invoice equals', async () => {
+      await aceptadaConPrecios(TRES)
+      factura('A', 400000)
+      expect(marcadas()).toEqual([1])
+    })
+
+    it('pre-checks the set of prices an invoice adds up to', async () => {
+      await aceptadaConPrecios(TRES)
+      factura('A', 1250000)
+      expect(marcadas()).toEqual([0, 2])
+    })
+
+    it('adds up the Parcialidades of one invoice', async () => {
+      await aceptadaConPrecios(TRES)
+      factura('A', 1400000, { partes: 2 })
+      expect(marcadas()).toEqual([0, 1])
+    })
+
+    it('ignores invoices dated before the quote, and cancelled ones', async () => {
+      await aceptadaConPrecios(TRES)
+      factura('ANTES', 400000, { fecha: '2021-01-15' })
+      factura('CANCELADA', 250000, { estado: 'cancelado' })
+      expect(marcadas()).toEqual([])
+    })
+
+    it('lets the earliest matching invoice decide', async () => {
+      await aceptadaConPrecios(TRES)
+      factura('DESPUES', 250000, { fecha: '2021-06-01' })
+      factura('PRIMERO', 400000, { fecha: '2021-04-01' })
+      expect(marcadas()).toEqual([1])
+    })
+
+    it('takes the fewest prices that make the invoice', async () => {
+      await aceptadaConPrecios(['Costo: $ 5,000.00', 'Costo: $ 2,000.00', 'Costo: $ 3,000.00'])
+      factura('A', 500000)
+      expect(marcadas()).toEqual([0])
+    })
+
+    it("compares a USD quote with USD invoices by their amount before IVA, and ignores peso ones", async () => {
+      await aceptadaConPrecios(['Costo: $ 260.00 USD', 'Costo: $ 120.00 USD'])
+      expect(cotizacion().moneda).toBe('USD')
+      factura('PESOS', 26000)
+      expect(marcadas()).toEqual([])
+      factura('DOLARES', 500000, { usd: 30160 })
+      expect(marcadas()).toEqual([0])
+    })
+
+    it('pre-checks from an invoice imported after the scan, on the next read', async () => {
+      await aceptadaConPrecios(TRES)
+      expect(marcadas()).toEqual([])
+      factura('A', 1000000)
+      expect(marcadas()).toEqual([0])
+    })
+  })
+
+  describe('answering it', () => {
+    it('sets the Monto to the pre-checked prices when accepted', async () => {
+      await aceptadaConPrecios(TRES)
+      factura('A', 1250000)
+      responder(db, partidas()!.id, 'aceptada')
+      expect(cotizacion()).toMatchObject({ subtotal: 1250000, iva: 0, total: 1250000 })
+      expect(db.select().from(sugerenciasImportacion).where(eq(sugerenciasImportacion.accion, 'partidas')).get()!.estado).toBe('aceptada')
+      expect(partidas()).toBeUndefined()
+    })
+
+    it('records choosing exactly the pre-checked prices as accepting them', async () => {
+      await aceptadaConPrecios(TRES)
+      factura('A', 1250000)
+      responder(db, partidas()!.id, { elegidas: [2, 0] })
+      expect(db.select().from(sugerenciasImportacion).where(eq(sugerenciasImportacion.accion, 'partidas')).get()!.estado).toBe('aceptada')
+    })
+
+    it('corrects it with another set of prices', async () => {
+      await aceptadaConPrecios(TRES)
+      factura('A', 1250000)
+      responder(db, partidas()!.id, { elegidas: [1] })
+      expect(cotizacion()).toMatchObject({ subtotal: 400000, iva: 0, total: 400000 })
+      expect(db.select().from(sugerenciasImportacion).where(eq(sugerenciasImportacion.accion, 'partidas')).get()!.estado).toBe('corregida')
+    })
+
+    it('keeps the provisional Monto when rejected, and is not asked again', async () => {
+      await aceptadaConPrecios(TRES)
+      responder(db, partidas()!.id, 'rechazada')
+      expect(cotizacion().total).toBe(1650000)
+      escanear()
+      expect(partidas()).toBeUndefined()
+    })
+
+    it.each<[string, RespuestaSugerencia]>([
+      ['no price', { elegidas: [] }],
+      ['a price twice', { elegidas: [1, 1] }],
+      ['a price the quote does not have', { elegidas: [7] }],
+      ['the guess when nothing is pre-checked', 'aceptada']
+    ])('refuses %s, changing nothing', async (_, respuesta) => {
+      await aceptadaConPrecios(TRES)
+      const id = partidas()!.id
+      expect(() => responder(db, id, respuesta)).toThrow()
+      expect(cotizacion().total).toBe(1650000)
+      expect(partidas()!.id).toBe(id)
+    })
+
+    it('sets a USD quote\'s Monto in US cents', async () => {
+      await aceptadaConPrecios(['Costo: $ 260.00 USD', 'Costo: $ 120.00 USD'])
+      responder(db, partidas()!.id, { elegidas: [0] })
+      expect(cotizacion()).toMatchObject({ moneda: 'USD', subtotal: 26000, total: 26000 })
+    })
+
+    it('creates no Ingreso, Costo or definition, whatever the answer', async () => {
+      await aceptadaConPrecios(TRES)
+      responder(db, partidas()!.id, { elegidas: [0, 1] })
+      expect([ingresos, costos, definicionesIngreso, definicionesCosto].map((t) => db.select().from(t).all().length)).toEqual([0, 0, 0, 0])
+    })
+
+    it('clears what the Proyecto lacks once the answer is a Monto its paid Ingresos cover', async () => {
+      await aceptadaConPrecios(TRES)
+      const proyectoId = proyectoLlamado('Sublime')
+      db.insert(ingresos).values({ categoria: 'sin_factura', estado: 'pagado', proyectoId, fechaRegistro: '2021-05-01', subtotal: 1250000, total: 1250000 }).run()
+      expect(estadoCobro(db, proyectoId).falta?.faltante).toBe(400000)
+      responder(db, partidas()!.id, { elegidas: [0, 2] })
+      expect(estadoCobro(db, proyectoId).falta).toBeNull()
+    })
+  })
+
+  describe('while its Cotización is accepted', () => {
+    it('is asked only while the Cotización is aceptada', async () => {
+      await aceptadaConPrecios(TRES)
+      const vincular = pendientes(db).find((s) => s.accion === 'vincular')!
+      const id = partidas()!.id
+      responder(db, vincular.id, 'rechazada')
+      expect(cotizacion().estado).toBe('enviada')
+      expect(partidas()).toBeUndefined()
+      expect(() => responder(db, id, { elegidas: [0] })).toThrow('ya no está aceptada')
+    })
+
+    it('stops being asked once the Cotización is cancelled', async () => {
+      await aceptadaConPrecios(TRES)
+      db.update(cotizaciones).set({ estado: 'cancelada' }).where(eq(cotizaciones.folio, 308)).run()
+      expect(partidas()).toBeUndefined()
+    })
+
+    it('is still asked after the link is corrected to another Proyecto', async () => {
+      await aceptadaConPrecios(TRES)
+      const otro = db.insert(proyectos).values({ nombre: 'Sublime 2', contactoId: cotizacion().contactoId, categoria: 'other' }).returning().get()
+      const vincular = pendientes(db).find((s) => s.accion === 'vincular')!
+      responder(db, vincular.id, { elegidas: [otro.id] })
+      expect(partidas()).toBeDefined()
+    })
+
+    it('is left pending by Aceptar todas', async () => {
+      await aceptadaConPrecios(TRES)
+      aceptarVincular(db)
+      expect(partidas()).toBeDefined()
+      expect(cotizacion().total).toBe(1650000)
+    })
   })
 })

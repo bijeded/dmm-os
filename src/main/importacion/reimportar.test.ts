@@ -24,7 +24,15 @@ import {
 import { ajustes, db, reiniciarDb } from '../db/test-db'
 import { pendientes, responder } from '../sugerencias'
 import { cfdiXml, RFC_DMM } from '../test-cfdi'
+import { pdfDeTexto } from './pdf-prueba'
+import { leerPdfsCotizaciones } from './pdfs'
 import { bloqueos, borrarImportado, reimportar, type Entorno } from './reimportar'
+
+// The real reader, watched so a test can see whether a refused reimport read any PDF.
+vi.mock('./pdfs', async (original) => {
+  const real = await original<typeof import('./pdfs')>()
+  return { ...real, leerPdfsCotizaciones: vi.fn(real.leerPdfsCotizaciones) }
+})
 
 let root: string
 let hdd: string
@@ -172,24 +180,24 @@ describe('reimportar', () => {
     return db.select().from(contactos).where(eq(contactos.id, c.contactoId)).get()!.nombre
   }
 
-  it('takes the Respaldo first, then imports every file again as if for the first time', () => {
+  it('takes the Respaldo first, then imports every file again as if for the first time', async () => {
     importado()
     const alRespaldar: ReturnType<typeof cuantos>[] = []
-    const r = reimportar(db, entorno({ respaldar: () => alRespaldar.push(cuantos()) }))
+    const r = await reimportar(db, entorno({ respaldar: () => alRespaldar.push(cuantos()) }))
     expect(alRespaldar).toEqual([expect.objectContaining({ contactos: 4, ingresos: 3 })])
     expect(r).toMatchObject({ reimportado: true, carpetas: { cotizaciones: { importadas: 2 } }, facturas: { importados: 3 } })
   })
 
-  it('lets a map fix reach an imported quote', () => {
+  it('lets a map fix reach an imported quote', async () => {
     importado()
     expect(contactoDe(201)).toBe('Frida Comunicacion')
     mapa('Frida Comunicacion,Frida,,\n')
-    reimportar(db, entorno())
+    await reimportar(db, entorno())
     expect(contactoDe(201)).toBe('Frida')
     expect(db.select().from(contactos).where(eq(contactos.nombre, 'Frida Comunicacion')).all()).toEqual([])
   })
 
-  it('asks an accepted vincular again', () => {
+  it('asks an accepted vincular again', async () => {
     importado()
     const vincular = () => pendientes(db).filter((s) => s.accion === 'vincular')
     const [s] = vincular()
@@ -197,30 +205,30 @@ describe('reimportar', () => {
     responder(db, s.id, 'aceptada', '2026-09-24')
     expect(vincular()).toEqual([])
 
-    reimportar(db, entorno())
+    await reimportar(db, entorno())
     expect(vincular()).toEqual([expect.objectContaining({ registro: expect.stringContaining('475'), destino: 'Clicme' })])
   })
 
-  it('imports a USD Ingreso again with its original amount', () => {
+  it('imports a USD Ingreso again with its original amount', async () => {
     importado()
-    reimportar(db, entorno())
+    await reimportar(db, entorno())
     expect(db.select().from(ingresos).where(eq(ingresos.cfdiUuid, USD)).get()).toMatchObject({ montoOriginal: 116_000, monedaOriginal: 'USD', total: 2_030_000 })
   })
 
-  it('keeps a Factura cancelada out', () => {
+  it('keeps a Factura cancelada out', async () => {
     importado()
     mkdirSync(join(root, 'Facturas/Emitidas/2026/Canceladas'))
     renameSync(join(root, 'Facturas/Emitidas/2026/cancelada.xml'), join(root, 'Facturas/Emitidas/2026/Canceladas/cancelada.xml'))
     importarFacturas(db, root)
     expect(db.select().from(ingresos).where(eq(ingresos.cfdiUuid, CANCELADA)).get()!.estado).toBe('cancelado')
 
-    reimportar(db, entorno())
+    await reimportar(db, entorno())
     expect(db.select().from(ingresos).where(eq(ingresos.cfdiUuid, CANCELADA)).all()).toEqual([])
   })
 
-  it('brings an archived Proyecto back completed, with no Ingresos from its Cotización (ADR-0002)', () => {
+  it('brings an archived Proyecto back completed, with no Ingresos from its Cotización (ADR-0002)', async () => {
     importado()
-    reimportar(db, entorno())
+    await reimportar(db, entorno())
     const versa = db.select().from(proyectos).where(eq(proyectos.nombre, 'Versa')).get()!
     expect(versa.estado).toBe('completado')
     expect(db.select().from(ingresos).where(eq(ingresos.proyectoId, versa.id)).all()).toEqual([])
@@ -228,50 +236,89 @@ describe('reimportar', () => {
     expect(db.select().from(costos).all()).toEqual([])
   })
 
-  it('leaves Estado de Contacto following the new attribution', () => {
+  it('leaves Estado de Contacto following the new attribution', async () => {
     importado()
     const estados = () => Object.fromEntries(listarContactos(db).contactos.map((c) => [c.nombre, c.estado]))
     expect(estados()).toMatchObject({ Frida: 'lead_frio', 'Frida Comunicacion': 'lead_caliente' })
     mapa('Frida Comunicacion,Frida,,\n')
-    reimportar(db, entorno())
+    await reimportar(db, entorno())
     expect(estados()).toMatchObject({ Frida: 'lead_caliente' })
     expect(estados()).not.toHaveProperty('Frida Comunicacion')
   })
 
-  it('leaves every record in place when the Respaldo fails', () => {
+  it('leaves every record in place when the Respaldo fails', async () => {
     importado()
     const antes = cuantos()
     const filas = db.select().from(contactos).all()
     const falla = () => {
       throw new Error('disco lleno')
     }
-    expect(() => reimportar(db, entorno({ respaldar: falla }))).toThrow('disco lleno')
+    await expect(reimportar(db, entorno({ respaldar: falla }))).rejects.toThrow('disco lleno')
     expect(cuantos()).toEqual(antes)
     expect(db.select().from(contactos).all()).toEqual(filas)
   })
 
-  it('takes no Respaldo and removes nothing when refused', () => {
+  it('takes no Respaldo and removes nothing when refused', async () => {
     importado()
     db.insert(costos).values({ nombre: 'Hosting', categoria: 'unico', estado: 'pagado', subtotal: 100, total: 100, fecha: '2026-01-01' }).run()
     const antes = cuantos()
-    expect(reimportar(db, entorno())).toEqual({ reimportado: false, bloqueos: [{ motivo: 'a_mano', registro: 'costo', cantidad: 1 }] })
+    expect(await reimportar(db, entorno())).toEqual({ reimportado: false, bloqueos: [{ motivo: 'a_mano', registro: 'costo', cantidad: 1 }] })
     expect(respaldar).not.toHaveBeenCalled()
     expect(cuantos()).toEqual(antes)
   })
 
-  it('refuses before removing anything when the map cannot be read', () => {
+  it('refuses before removing anything when the map cannot be read', async () => {
     importado()
     escribir('Clientes/_nombres.csv', 'nombre,cliente\n')
     const antes = cuantos()
-    expect(reimportar(db, entorno())).toMatchObject({ reimportado: false, bloqueos: [{ motivo: 'mapa' }] })
+    expect(await reimportar(db, entorno())).toMatchObject({ reimportado: false, bloqueos: [{ motivo: 'mapa' }] })
     expect(cuantos()).toEqual(antes)
   })
 
-  it('counts no received CFDI as a Costo', () => {
+  it('counts no received CFDI as a Costo', async () => {
     importado()
     escribir('Facturas/Recibidas/2026/b.xml', cfdiXml({ uuid: '44444444-0000-4444-8888-99aabbccddee', emisor: 'PRV900101QQ1', receptor: RFC_DMM }))
-    const r = reimportar(db, entorno())
+    const r = await reimportar(db, entorno())
     expect(r).toMatchObject({ reimportado: true, facturas: { recibidas: 1 } })
     expect(db.select().from(costos).all()).toEqual([])
+  })
+})
+
+describe('Reimportar desde cero y los PDFs de las Cotizaciones', () => {
+  it('reads no PDF when it is refused', async () => {
+    importado()
+    db.insert(costos).values({ nombre: 'Hosting', categoria: 'unico', estado: 'pagado', fecha: '2026-01-01', subtotal: 100, total: 100 }).run()
+    vi.mocked(leerPdfsCotizaciones).mockClear()
+    expect((await reimportar(db, entorno())).reimportado).toBe(false)
+    expect(leerPdfsCotizaciones).not.toHaveBeenCalled()
+  })
+
+  it('asks again after reading the PDFs, and is refused if something was made by hand meanwhile', async () => {
+    importado()
+    const real = vi.mocked(leerPdfsCotizaciones).getMockImplementation()!
+    vi.mocked(leerPdfsCotizaciones).mockImplementationOnce(async (...args) => {
+      db.insert(costos).values({ nombre: 'Hosting', categoria: 'unico', estado: 'pagado', fecha: '2026-01-01', subtotal: 100, total: 100 }).run()
+      return real(...args)
+    })
+    const antes = db.select().from(contactos).all().length
+    let respaldado = false
+    expect(await reimportar(db, entorno({ respaldar: () => (respaldado = true) }))).toEqual({
+      reimportado: false,
+      bloqueos: [{ motivo: 'a_mano', registro: 'costo', cantidad: 1 }]
+    })
+    expect(respaldado).toBe(false)
+    expect(db.select().from(contactos).all()).toHaveLength(antes)
+  })
+
+  it('is not refused on account of imported Cotizaciones that have items from their PDF', async () => {
+    mapa()
+    carpeta('Cotizaciones', '2021')
+    writeFileSync(join(root, 'Cotizaciones/2021/DMM - 250 - Flor de Letras.pdf'), pdfDeTexto(['Video “Curso”: video:', 'Costo: $ 3,000.00']))
+    escanearCarpetas(db, root, undefined, '2026-09-01', await leerPdfsCotizaciones(root, db))
+    expect(db.select().from(cotizaciones).get()!.items).toHaveLength(1)
+
+    expect(bloqueos(db, { root })).toEqual([])
+    expect((await reimportar(db, entorno())).reimportado).toBe(true)
+    expect(db.select().from(cotizaciones).get()).toMatchObject({ total: 300000, importado: true })
   })
 })

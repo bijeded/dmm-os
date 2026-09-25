@@ -4,6 +4,6 @@
  * transaction, each Sugerencia de importación is proposed once, and the log counts what the
  * run itself added.
  */
-export { escanearCarpetas } from './escaneo'
+export { escanear, escanearCarpetas } from './escaneo'
 export { importarFacturas } from './facturas'
 export { marcarHddNoDisponible } from './carpetas'
