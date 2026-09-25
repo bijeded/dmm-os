@@ -218,10 +218,7 @@ export interface CotizacionDePdf {
   falta: FaltaPdf[]
 }
 
-/**
- * A Cotización's stored `items` as partidas. A row that took the column's default holds the
- * string "[]" rather than a list, and has none.
- */
+/** A Cotización's stored `items` as partidas; anything that is not a list has none. */
 export function partidasGuardadas(items: unknown): PartidaCotizacion[] {
   return Array.isArray(items) ? (items as PartidaCotizacion[]) : []
 }

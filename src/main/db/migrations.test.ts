@@ -271,6 +271,8 @@ it('0019 marks the legacy Cotizaciones stored with "[]" imported, and stores [] 
     insert into cotizaciones (id, folio, contacto_id, categoria, estado, fecha, items, subtotal, total) values
       (1, 201, 1, 'website', 'aceptada', '2019-03-01', '"[]"', 50000, 50000),
       (2, 202, 1, 'other', 'expirada', '2020-01-01', '"[]"', 8000, 8000),
+      (7, 207, 1, 'other', 'rechazada', '2020-02-01', '[]', 9000, 9000),
+      (8, 208, 1, 'other', 'cancelada', '2020-03-01', '"[]"', 7000, 7000),
       (4, 204, 1, 'website', 'enviada', '2026-09-01', '[{"concepto":"Sitio","precio":1000,"cantidad":1}]', 1000, 1160);
     insert into cotizaciones (id, folio, contacto_id, categoria, estado, fecha, items, moneda, tipo_cambio, subtotal, total)
       values (3, 203, 1, 'app', 'aceptada', '2021-06-01', '"[]"', 'USD', 17.5, 3000, 3000);
@@ -280,11 +282,8 @@ it('0019 marks the legacy Cotizaciones stored with "[]" imported, and stores [] 
 
   const { db, close } = createDatabase(drizzleDir).abrir(file)
   // Inserted through drizzle without items, as the app does.
-  db.insert(cotizaciones).values({ contactoId: 1, categoria: 'website', estado: 'borrador', fecha: '2026-09-25' }).run()
-  expect(db.select({ id: cotizaciones.id, items: cotizaciones.items }).from(cotizaciones).where(eq(cotizaciones.id, 6)).get()).toEqual({
-    id: 6,
-    items: []
-  })
+  const nueva = db.insert(cotizaciones).values({ contactoId: 1, categoria: 'website', estado: 'borrador', fecha: '2026-09-25' }).returning().get()
+  expect(db.select({ items: cotizaciones.items }).from(cotizaciones).where(eq(cotizaciones.id, nueva.id)).get()).toEqual({ items: [] })
   close()
 
   const migrada = new Database(file)
@@ -294,7 +293,9 @@ it('0019 marks the legacy Cotizaciones stored with "[]" imported, and stores [] 
     { id: 3, importado: 1, items: '[]', moneda: 'USD', tipo_cambio: 17.5, subtotal: 3000, total: 3000 },
     { id: 4, importado: 0, items: '[{"concepto":"Sitio","precio":1000,"cantidad":1}]', moneda: 'MXN', tipo_cambio: null, subtotal: 1000, total: 1160 },
     { id: 5, importado: 0, items: '[]', moneda: 'MXN', tipo_cambio: null, subtotal: 0, total: 0 },
-    { id: 6, importado: 0, items: '[]', moneda: 'MXN', tipo_cambio: null, subtotal: 0, total: 0 }
+    { id: 7, importado: 1, items: '[]', moneda: 'MXN', tipo_cambio: null, subtotal: 9000, total: 9000 },
+    { id: 8, importado: 1, items: '[]', moneda: 'MXN', tipo_cambio: null, subtotal: 7000, total: 7000 },
+    { id: 9, importado: 0, items: '[]', moneda: 'MXN', tipo_cambio: null, subtotal: 0, total: 0 }
   ])
   expect(migrada.pragma('foreign_key_check')).toEqual([])
   migrada.close()

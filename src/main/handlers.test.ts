@@ -2,7 +2,7 @@ import { pdfDeTexto } from './importacion/pdf-prueba'
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDatabase, type Conexion } from './db'
 import { contactos, costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, sugerenciasImportacion, vigenciasPrecio } from './db/schema'
@@ -212,6 +212,20 @@ describe('Reimportar desde cero', () => {
     expect(nombres()).toContain('Appleseed Plataforma')
     expect(await h.importacion.sugerencias()).toEqual(antes.pendientes)
     expect(await h.importacion.estado()).toEqual(antes.estado)
+  })
+
+  it('previews legacy Cotizaciones as imported again once 0019 marks them, not as duplicates', async () => {
+    await importado()
+    // As an app before 0019 left them: stored with "[]" and never marked imported.
+    conexion.db.run(sql`update cotizaciones set importado = 0, items = '"[]"'`)
+    expect((await h.importacion.vistaPreviaDesdeCero()).log.cotizaciones).toEqual({ importadas: 0, duplicadas: 2 })
+
+    const migracion = readFileSync(join(migrationsFolder, '0019_corregir_importado_cotizaciones.sql'), 'utf8')
+    for (const stmt of migracion.split('--> statement-breakpoint')) conexion.db.run(sql.raw(stmt))
+
+    const { log, bloqueos } = await h.importacion.vistaPreviaDesdeCero()
+    expect(log.cotizaciones).toEqual({ importadas: 2, duplicadas: 0 })
+    expect(bloqueos).toEqual([])
   })
 
   it('still previews while a hand-entered Ingreso points at an imported Contacto, and names the block', async () => {

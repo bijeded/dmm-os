@@ -149,12 +149,20 @@ describe('bloqueos', () => {
   it('stops naming legacy Cotizaciones once 0019 marks them, and still names one made in the app', () => {
     importado()
     // As an app before 0019 left them: stored with "[]" and never marked imported.
-    db.run(sql`update cotizaciones set importado = 0, items = '"[]"'`)
+    const legado = db.select().from(cotizaciones).all().length
+    db.run(sql`update cotizaciones set importado = 0, items = '"[]"' where importado = 1`)
     const frida = db.select().from(contactos).where(eq(contactos.nombre, 'Frida')).get()!
     db.insert(cotizaciones)
-      .values({ folio: 900, contactoId: frida.id, categoria: 'website', estado: 'enviada', fecha: '2026-09-01', items: [{ concepto: 'Sitio', precio: 1000, cantidad: 1 }] })
+      .values({
+        folio: 900,
+        contactoId: frida.id,
+        categoria: 'website',
+        estado: 'enviada',
+        fecha: '2026-09-01',
+        items: [{ concepto: 'Sitio', categoria: 'website', precio: 1000, cantidad: 1 }]
+      })
       .run()
-    expect(bloqueos(db, entorno())).toEqual([{ motivo: 'a_mano', registro: 'cotizacion', cantidad: 3 }])
+    expect(bloqueos(db, entorno())).toEqual([{ motivo: 'a_mano', registro: 'cotizacion', cantidad: legado + 1 }])
 
     const migracion = readFileSync(resolve(import.meta.dirname, '../../../drizzle/0019_corregir_importado_cotizaciones.sql'), 'utf8')
     for (const stmt of migracion.split('--> statement-breakpoint')) db.run(sql.raw(stmt))

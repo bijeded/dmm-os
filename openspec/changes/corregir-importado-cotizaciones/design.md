@@ -24,7 +24,7 @@ See proposal.md, Why. Three facts shape the approach:
   2. `UPDATE cotizaciones SET items = '[]' WHERE items = '"[]"'`
 
   Marking first keeps the predicate simple. The normalisation runs over every estado, borradores included. `coalesce` is unneeded because `items` is `NOT NULL`.
-- **Schema default `.default([])`.** This matches `costosEstimados`. The SQL default stays `'[]'`, so `drizzle-kit` should produce no DDL. Run `npm run db:generate` first to confirm there is no diff. If one appears, it goes in its own generated migration, not hand-merged into 0019. No `$type<PartidaCotizacion[]>()` is added: typing the column would ripple through every reader, and that is outside this fix.
+- **Schema default `.default([])`.** This matches `costosEstimados`. The SQL default stays `'[]'`, so `drizzle-kit` should produce no DDL. Run `npm run db:generate` first to confirm there is no diff. If one appears, it goes in its own generated migration, not hand-merged into 0019. The column also gains `$type<PartidaCotizacion[]>()`, as `costosEstimados` has: the untyped column is what let the string default compile. Readers keep `partidasGuardadas` as a guard.
 - **Match only `[]` and `"[]"`, not "every row not made in the app".** An app-made Cotización outside *borrador* always has at least one item (`cotizar.ts` refuses zero), and importer-made rows already set `importado` since #190. So "empty items" is exact. There is no need to cross-check Contacto or Folio.
 
 ## Risks / Trade-offs

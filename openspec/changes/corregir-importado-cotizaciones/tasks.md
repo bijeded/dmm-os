@@ -27,6 +27,6 @@
 
 ## 4. Review and checks
 
-- [ ] 4.1 Run `/code-review` on the branch diff and fix what it confirms.
-- [ ] 4.2 Run `/security-review`, since the change touches migrations and the database, and fix what it confirms.
-- [ ] 4.3 `npm run typecheck`, `npm run lint` and `npm test` all pass. `openspec validate corregir-importado-cotizaciones --strict` passes.
+- [x] 4.1 Run `/code-review` on the branch diff and fix what it confirms.
+- [x] 4.2 Run `/security-review`, since the change touches migrations and the database, and fix what it confirms.
+- [x] 4.3 `npm run typecheck`, `npm run lint` and `npm test` all pass. `openspec validate corregir-importado-cotizaciones --strict` passes.
