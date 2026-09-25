@@ -135,6 +135,8 @@ export function createRespaldos({ dir, dbPath, database, relaunch, now = () => n
     estado,
     respaldarSiToca,
     crear: () => respaldar(conectada(), 'manual'),
+    /** The Respaldo Reimportar desde cero takes before removing anything. */
+    antesDeReimportar: () => respaldar(conectada(), 'antes-de-reimportar'),
     configurar({ frecuenciaDias, conservar }: ConfigRespaldos): EstadoRespaldos {
       for (const n of [frecuenciaDias, conservar]) {
         if (!Number.isInteger(n) || n < 1) throw new Error('Frecuencia y respaldos a conservar deben ser enteros mayores a 0')

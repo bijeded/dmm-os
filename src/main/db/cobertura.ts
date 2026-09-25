@@ -4,7 +4,7 @@ import type { Db } from './index'
 import { costos } from './schema'
 
 /**
- * Sin datos: a year whose Costos were never imported. Its margin and profit are shown as
+ * Sin datos: a year with no Costos recorded. Its margin and profit are shown as
  * Sin datos rather than estimated from the Ingresos alone.
  */
 export function coberturaCostos(db: Db, desde: number, hasta: number): CoberturaAnual[] {

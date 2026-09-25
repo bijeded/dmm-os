@@ -89,7 +89,7 @@ A completed Proyecto with files somewhere (local or external HDD) and a one-off 
 _Avoid_: "sin pagar" (it is about what the app has recorded, not what the client owes)
 
 **Sin datos**:
-What a period shows for margin or profit when its Costos were never imported. Never estimated.
+What a period shows for margin or profit when it has no Costos recorded. Never estimated.
 
 **Entrada**:
 The inbox folder of loose files with no triage yet. The app counts what waits there and opens it; it never files anything from it by itself.
@@ -110,10 +110,14 @@ Always derived from Cotizaciones and Proyectos, never set by hand. A Contacto wi
 Something the importer guessed that waits in Logs for a one-time accept/reject. Three kinds: *vincular* a record to a Proyecto (e.g. CFDI → Proyecto by amount/date, or a folder taken to deliver a quote of the same name), *fusionar* two Contactos whose names are near-duplicates, and *ubicación* — asking whether a completed Proyecto with no folder is Archivado or No disponible. A guessed status is written so the record is usable; the suggestion is what makes it reversible.
 
 **Importación**:
-A run that brings existing files into the app: the folder scan (Cotizaciones PDFs, Clientes and Proyectos folders) or the Facturas run (CFDI XML). Each file imports in one transaction, and a Sugerencia de importación is asked only once. A rejected Sugerencia undoes exactly what its guess changed.
+A run that brings existing files into the app: the folder scan (Cotizaciones PDFs, Clientes and Proyectos folders) or the Facturas run (issued CFDI XML). What it creates is marked as imported, which is what Reimportar desde cero removes. Each file imports in one transaction, and a Sugerencia de importación is asked only once. A rejected Sugerencia undoes exactly what its guess changed.
 Imported history is exempt from the lifecycle guards: a Proyecto may import as completed without being fully paid, and a Cotización accepted by import creates no Ingresos or Costos (invoiced income arrives through the Facturas run; uninvoiced Ingresos, which carry no IVA, are entered by hand in Finanzas). See ADR-0002.
-The Facturas run reads every file before importing any: a **Factura cancelada** is not imported, and an Ingreso or Costo an earlier run imported from one becomes cancelado, even when paid (ADR-0002). Complementos de pago date a PPD invoice's payments, splitting it into **Parcialidades**. An XML that is not a CFDI (e.g. a CEP bank receipt) is only counted.
-The folder scan follows the Mapa de nombres only when a file or folder is first imported: editing the map later moves, renames or removes nothing already imported. The one exception is an RFC, which a later scan still gives to a Contacto that has none.
+The Facturas run imports issued invoices as Ingresos. It reads and counts the received CFDIs under `Facturas/Recibidas` but imports none of them: Costos are entered by hand in Finanzas, and a Costo an earlier run imported stays as it is. It reads every file before importing any: a **Factura cancelada** is not imported, and an Ingreso an earlier run imported from one becomes cancelado, even when paid (ADR-0002). Complementos de pago date a PPD invoice's payments, splitting it into **Parcialidades**. An XML that is not a CFDI (e.g. a CEP bank receipt) is only counted.
+The folder scan follows the Mapa de nombres only when a file or folder is first imported: editing the map later moves, renames or removes nothing already imported. The one exception is an RFC, which a later scan still gives to a Contacto that has none. A map edit reaches records already imported only through Reimportar desde cero.
+
+**Reimportar desde cero**:
+Removing every record the Importación made (its Contactos, Cotizaciones, Proyectos and their locations, the Ingresos and Costos that carry a CFDI UUID, and every Sugerencia de importación) and running the folder scan and the Facturas run again, from Configuración → Logs, after a confirmation and a Respaldo *antes de reimportar*. Answers to Sugerencias and edits to imported records are lost. Refused, removing nothing, while anything made by hand exists (a Contacto, Cotización or Proyecto created in the app, an Ingreso or Costo with no CFDI UUID, a recurring definition), while the Mapa de nombres cannot be read, or while a set-up external HDD is not connected. AI token usage, Tareas, the Catálogo and settings are untouched.
+_Avoid_: reset, borrar todo
 
 **Factura cancelada**:
 A CFDI filed in a folder whose name starts with "cancel" (e.g. `Canceladas`), or one that another CFDI replaces through relación `04` (sustitución). The app never asks the SAT; the folder and the relación are its only signals. Its money never counts.
@@ -126,7 +130,7 @@ One payment of an invoice, recorded as its own Ingreso dated on that payment's d
 _Avoid_: alias file, mapping
 
 **Vista previa**:
-A folder scan run on a throwaway copy of the database, from Configuración → Logs. It shows what a real scan would create and the map's problems, and saves nothing.
+A folder scan run on a throwaway copy of the database, from Configuración → Logs. It shows what a real scan would create and the map's problems, and saves nothing. Its *desde cero* mode first removes, on the copy, what Reimportar desde cero would remove, so it shows what a reimport would create with the current map, beside the reasons a reimport would be refused.
 _Avoid_: dry run, simulación
 
 **Proyecto AI**:
@@ -159,7 +163,7 @@ _Avoid_: costo pagado
 When a Proyecto/Cotización is cancelled, paid Ingresos stay paid, pending Ingresos become cancelled or uncollectible, pending estimated Costos are cancelled.
 
 **Respaldo**:
-A dated copy of the whole database in Vault, labelled by motivo (semanal, migración, manual, antes de restaurar). Retention counts each motivo separately. No migration runs without one.
+A dated copy of the whole database in Vault, labelled by motivo (semanal, migración, manual, antes de restaurar, antes de reimportar). Retention counts each motivo separately. No migration runs without one.
 _Avoid_: backup (in UI copy)
 
 **Restauración**:

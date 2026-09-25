@@ -3,18 +3,15 @@ import type { Cfdi, PagoCfdi } from '../cfdi'
 import type { Db } from '../db'
 import { enParcialidades, montos, type MontosRegistrados } from '../dinero'
 import { proponer } from '../sugerencias'
-import { contactos, costos, cotizaciones, ingresos, proyectos, sugerenciasImportacion } from '../db/schema'
+import { contactos, cotizaciones, ingresos, proyectos, sugerenciasImportacion } from '../db/schema'
 import type { CambioFactura } from '../../shared/dominio'
 import type { MotivoCancelada } from './plan-facturas'
-
-/** Which folder the CFDI came from: `Facturas/Emitidas` or `Facturas/Recibidas`. */
-export type Direccion = 'emitida' | 'recibida'
 
 export interface ResultadoImportacion {
   /** `duplicado` means the UUID was already imported and nothing changed. */
   resultado: 'importado' | 'duplicado' | 'ignorado'
   uuid: string
-  /** The Ingreso or Costo, when one was created. */
+  /** The first Ingreso, when one was created. */
   id: number | null
   /** The RFC no Contacto claims, when the Contacto could not be linked. */
   rfcDesconocido: string | null
@@ -54,39 +51,36 @@ function montosDe(cfdi: Cfdi) {
 function releerSiImportado(db: Tx, cfdi: Cfdi): boolean {
   const { subtotal, iva, retenciones, total } = montosDe(cfdi)
   const neto = iva - retenciones
-  const corregir = (tabla: typeof ingresos | typeof costos) => {
-    // A Parcialidad holds only a share of the CFDI, so only a row holding all of it is re-read.
-    const filas = db.select().from(tabla).where(eq(tabla.cfdiUuid, cfdi.uuid)).all()
-    if (filas.length === 0) return false
-    const fila = filas.find((f) => !('cfdiParcialidad' in f) || f.cfdiParcialidad === 0)
-    if (fila === undefined) return true
-    db.update(tabla)
-      .set({ iva, retenciones })
-      .where(
-        and(
-          eq(tabla.id, fila.id),
-          eq(tabla.subtotal, subtotal),
-          eq(tabla.total, total),
-          or(
-            and(eq(tabla.iva, neto), eq(tabla.retenciones, 0)),
-            and(eq(tabla.iva, 0), eq(tabla.retenciones, -neto))
-          )
+  // A Parcialidad holds only a share of the CFDI, so only a row holding all of it is re-read.
+  const filas = db.select().from(ingresos).where(eq(ingresos.cfdiUuid, cfdi.uuid)).all()
+  if (filas.length === 0) return false
+  const fila = filas.find((f) => f.cfdiParcialidad === 0)
+  if (fila === undefined) return true
+  db.update(ingresos)
+    .set({ iva, retenciones })
+    .where(
+      and(
+        eq(ingresos.id, fila.id),
+        eq(ingresos.subtotal, subtotal),
+        eq(ingresos.total, total),
+        or(
+          and(eq(ingresos.iva, neto), eq(ingresos.retenciones, 0)),
+          and(eq(ingresos.iva, 0), eq(ingresos.retenciones, -neto))
         )
       )
-      .run()
-    return true
-  }
-  return corregir(ingresos) || corregir(costos)
+    )
+    .run()
+  return true
 }
 
 /**
- * Imports one CFDI as an Ingreso (emitida) or a Costo (recibida), keyed by its UUID:
- * importing the same file again changes nothing. The Contacto is linked by RFC; the
+ * Imports one issued CFDI as an Ingreso, keyed by its UUID: importing the same file again
+ * changes nothing. Received CFDIs are never imported; Costos are entered by hand. The Contacto is linked by RFC; the
  * Proyecto is only ever guessed, and the guess waits as a Sugerencia de importación.
  * A PPD invoice is dated by the `pagos` its complementos record, split into Parcialidades
  * when there are several; an Ingreso an earlier run imported is re-dated or split to match.
  */
-export function importarCfdi(db: Db, cfdi: Cfdi, direccion: Direccion, pagos: PagoCfdi[] = []): ResultadoImportacion {
+export function importarCfdi(db: Db, cfdi: Cfdi, pagos: PagoCfdi[] = []): ResultadoImportacion {
   const vacio = { uuid: cfdi.uuid, id: null, rfcDesconocido: null, tasaIvaInusual: null, sugerencias: 0, cambio: null }
 
   // Only ingreso vouchers carry new money; pagos, nóminas and traslados restate what exists.
@@ -94,20 +88,18 @@ export function importarCfdi(db: Db, cfdi: Cfdi, direccion: Direccion, pagos: Pa
   if (cfdi.tipo !== 'I') return { ...vacio, resultado: 'ignorado' }
 
   return db.transaction((tx) => {
-    const emitida = direccion === 'emitida'
-    const partes = emitida ? partesDeFactura(cfdi, pagos) : []
-    if (releerSiImportado(tx, cfdi))
-      return { ...vacio, resultado: 'duplicado' as const, cambio: emitida ? conciliar(tx, cfdi, partes) : null }
+    const partes = partesDeFactura(cfdi, pagos)
+    if (releerSiImportado(tx, cfdi)) return { ...vacio, resultado: 'duplicado' as const, cambio: conciliar(tx, cfdi, partes) }
 
-    const rfc = emitida ? cfdi.receptor.rfc : cfdi.emisor.rfc
+    const rfc = cfdi.receptor.rfc
     const contacto = tx.select().from(contactos).where(eq(contactos.rfc, rfc)).get()
-    const ids = emitida ? partes.map((p) => registrarIngreso(tx, cfdi, p, contacto?.id)) : [registrarCosto(tx, cfdi)]
+    const ids = partes.map((p) => registrarIngreso(tx, cfdi, p, contacto?.id))
 
     const adivinado = contacto ? adivinarProyecto(tx, contacto.id, cfdi.total, cfdi.fecha) : null
     const sugerencias = adivinado
       ? ids.filter((id) =>
           proponer(tx, {
-            entidad: emitida ? 'ingreso' : 'costo',
+            entidad: 'ingreso',
             entidadId: id,
             proyectoId: adivinado.proyectoId,
             motivo: adivinado.motivo
@@ -281,9 +273,10 @@ function copiarParte(tx: Tx, fila: Ingreso, p: Parte): void {
 }
 
 /**
- * Sets every Ingreso and Costo imported from a Factura cancelada to cancelado, paid or not: imported
- * history is exempt from the lifecycle guards (ADR-0002). An Ingreso with a Reembolso is left alone,
- * since cancelling it would orphan money already given back.
+ * Sets every Ingreso imported from a Factura cancelada to cancelado, paid or not: imported history is
+ * exempt from the lifecycle guards (ADR-0002). An Ingreso with a Reembolso is left alone, since
+ * cancelling it would orphan money already given back. Costos are never touched: an earlier run's
+ * Costo from a received CFDI stays as it is.
  */
 export function cancelarFacturas(db: Db, canceladas: Map<string, MotivoCancelada>) {
   const cancelados: CambioFactura[] = []
@@ -299,11 +292,6 @@ export function cancelarFacturas(db: Db, canceladas: Map<string, MotivoCancelada
         }
         tx.update(ingresos).set({ estado: 'cancelado' }).where(eq(ingresos.id, fila.id)).run()
         cancelados.push(detalle(fila, motivo))
-      }
-      const costosVivos = and(eq(costos.cfdiUuid, uuid), ne(costos.estado, 'cancelado'))
-      for (const fila of tx.select().from(costos).where(costosVivos).all()) {
-        tx.update(costos).set({ estado: 'cancelado' }).where(eq(costos.id, fila.id)).run()
-        cancelados.push({ entidad: 'costo', id: fila.id, fecha: fila.fecha, total: fila.total, motivo })
       }
     }
   })
@@ -327,24 +315,6 @@ function registrarIngreso(tx: Tx, cfdi: Cfdi, parte: Parte, contactoId: number |
       notas: cfdi.descripcion
     })
     .returning({ id: ingresos.id })
-    .get().id
-}
-
-/** A recibida is a single paid Costo; a recurring one is recognised from its definición, not the CFDI. */
-function registrarCosto(tx: Tx, cfdi: Cfdi): number {
-  return tx
-    .insert(costos)
-    .values({
-      nombre: cfdi.descripcion,
-      categoria: 'unico',
-      estado: 'pagado',
-      ...montosDe(cfdi),
-      proveedor: cfdi.emisor.nombre,
-      fecha: cfdi.fecha,
-      fechaPago: cfdi.fecha,
-      cfdiUuid: cfdi.uuid
-    })
-    .returning({ id: costos.id })
     .get().id
 }
 

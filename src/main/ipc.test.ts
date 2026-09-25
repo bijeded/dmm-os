@@ -5,7 +5,7 @@ import { registerIpc } from './ipc'
 
 const info = { version: '0.1.0', dbPath: '/db', dmmOsRoot: '/root' }
 const estado = { dir: '/v', frecuenciaDias: 7, conservar: 4, ultimo: null, respaldos: [] }
-const log = { importados: 0, duplicados: 0, ignorados: 0, sugerencias: 0, rfcsDesconocidos: [], ivasInusuales: [], errores: [], noDisponibles: [], cancelados: 0, sustituidos: 0, noCfdi: [], cambios: { cancelados: [], refechados: [], divididos: [], intactos: [] } }
+const log = { importados: 0, duplicados: 0, ignorados: 0, sugerencias: 0, rfcsDesconocidos: [], ivasInusuales: [], errores: [], noDisponibles: [], cancelados: 0, sustituidos: 0, recibidas: 0, noCfdi: [], cambios: { cancelados: [], refechados: [], divididos: [], intactos: [] } }
 const logCarpetas = {
   cotizaciones: { importadas: 0, duplicadas: 0 },
   contactos: { creados: 0 },
@@ -40,9 +40,12 @@ function handlers() {
       facturas: vi.fn(() => log),
       carpetas: vi.fn(() => logCarpetas),
       vistaPrevia: vi.fn(() => logCarpetas),
+      vistaPreviaDesdeCero: vi.fn(() => ({ log: logCarpetas, bloqueos: [] })),
+      reimportar: vi.fn(() => ({ reimportado: false as const, bloqueos: [] })),
       estado: vi.fn(() => ({ facturas: null, carpetas: null })),
       sugerencias: vi.fn(() => []),
-      responder: vi.fn(() => [])
+      responder: vi.fn(() => []),
+      aceptarVincular: vi.fn(() => [])
     },
     rutas: {
       leer: vi.fn(() => rutas),
@@ -160,6 +163,7 @@ describe('IPC contract', () => {
     recorrerContrato(contrato, (canal) => canales.push(canal))
     expect([...conectar(handlers()).registrados.keys()]).toEqual(canales)
     expect(canales).toContain('respaldos:estado')
+    expect(canales).toEqual(expect.arrayContaining(['importacion:vistaPreviaDesdeCero', 'importacion:reimportar', 'importacion:aceptarVincular']))
     expect(canales).toEqual(expect.arrayContaining(['lab:carpetas', 'lab:archivos', 'lab:buscar', 'lab:vistaPrevia', 'lab:abrir', 'ai:resumen', 'ai:leerUso', 'ai:agentesYSkills', 'ai:abrir']))
   })
 
@@ -176,6 +180,12 @@ describe('IPC contract', () => {
     expect(h.respaldos.crear).toHaveBeenCalled()
     expect(h.respaldos.configurar).toHaveBeenCalledWith({ frecuenciaDias: 1, conservar: 2 })
     expect(h.respaldos.restaurar).toHaveBeenCalledWith('/v/a.db')
+
+    expect(await api.importacion.reimportar()).toEqual({ reimportado: false, bloqueos: [] })
+    expect(await api.importacion.vistaPreviaDesdeCero()).toEqual({ log: logCarpetas, bloqueos: [] })
+    expect(await api.importacion.aceptarVincular()).toEqual([])
+    expect(h.importacion.reimportar).toHaveBeenCalled()
+    expect(h.importacion.aceptarVincular).toHaveBeenCalled()
 
     await api.lab.abrir('Benchmarks/a.md')
     expect(h.lab.abrir).toHaveBeenCalledWith('Benchmarks/a.md')

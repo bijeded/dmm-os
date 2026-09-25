@@ -8,7 +8,8 @@ const motivos: Record<MotivoRespaldo, string> = {
   semanal: 'Semanal',
   migracion: 'Antes de migración',
   manual: 'Manual',
-  'antes-de-restaurar': 'Antes de restaurar'
+  'antes-de-restaurar': 'Antes de restaurar',
+  'antes-de-reimportar': 'Antes de reimportar'
 }
 
 /** Configuración → Exportar: where the backups go, how often, and restoring from one. */

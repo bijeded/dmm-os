@@ -29,13 +29,13 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
 describe('importarFacturas', () => {
-  it('reads Emitidas as Ingresos and Recibidas as Costos, at any depth', () => {
+  it('reads Emitidas as Ingresos and counts Recibidas without importing them, at any depth', () => {
     escribir('Facturas/Emitidas/2026/02/a.xml', cfdi('11111111-0000-4444-8888-99AABBCCDDEE'))
     escribir('Facturas/Recibidas/2026/b.xml', cfdi('22222222-0000-4444-8888-99AABBCCDDEE'))
     const log = importarFacturas(db, root)
-    expect(log.importados).toBe(2)
+    expect(log).toMatchObject({ importados: 1, recibidas: 1 })
     expect(db.select().from(ingresos).all()).toHaveLength(1)
-    expect(db.select().from(costos).all()).toHaveLength(1)
+    expect(db.select().from(costos).all()).toHaveLength(0)
   })
 
   it('ignores files that are not XML', () => {
@@ -95,14 +95,6 @@ describe('importarFacturas', () => {
     db.update(ingresos).set({ iva: 0, retenciones: 4_667 }).run()
     expect(importarFacturas(db, root).duplicados).toBe(1)
     expect(db.select().from(ingresos).get()).toMatchObject({ subtotal: 100_000, iva: 16_000, retenciones: 20_667, total: 95_333 })
-  })
-
-  it('keeps edits to other fields of an earlier Costo when re-reading it', () => {
-    escribir('Facturas/Recibidas/2026/b.xml', cfdiXml())
-    importarFacturas(db, root)
-    db.update(costos).set({ nombre: 'Renombrado' }).run()
-    importarFacturas(db, root)
-    expect(db.select().from(costos).get()).toMatchObject({ nombre: 'Renombrado', iva: 16_000, retenciones: 0, total: 116_000 })
   })
 
   it('leaves a row whose amounts were edited after import alone', () => {
@@ -186,26 +178,53 @@ describe('una factura emitida', () => {
   })
 })
 
+/** A Costo an earlier run imported from a received CFDI, as that run stored it. */
+const costoImportadoAntes = (uuid = UUID) =>
+  db
+    .insert(costos)
+    .values({ nombre: 'Hosting anual', categoria: 'unico', estado: 'pagado', subtotal: 100_000, iva: 16_000, total: 116_000, proveedor: 'HOSTING MX', fecha: '2026-02-03', fechaPago: '2026-02-03', cfdiUuid: uuid })
+    .returning()
+    .get()
+
 describe('una factura recibida', () => {
-  it('records it as a single paid Costo with its supplier', () => {
-    recibida(cfdiXml({ emisor: 'PRV900101QQ1', nombreEmisor: 'HOSTING MX', receptor: RFC_DMM, descripcion: 'Hosting anual' }))
-    importar()
-    expect(db.select().from(costos).get()).toMatchObject({
-      nombre: 'Hosting anual',
-      categoria: 'unico',
-      estado: 'pagado',
-      estimado: false,
-      proveedor: 'HOSTING MX',
-      subtotal: 100_000,
-      fecha: '2026-02-03',
-      cfdiUuid: UUID
-    })
+  it('creates no Costo and counts it among the received CFDIs read', () => {
+    recibida(
+      cfdiXml({ emisor: 'ATT0703197U4', nombreEmisor: 'AT&amp;T', receptor: RFC_DMM, subtotal: '676.72', iva: '108.27' }),
+      '2026/06/000000573360456.xml'
+    )
+    const log = importar()
+    expect(log).toMatchObject({ importados: 0, recibidas: 1, sugerencias: 0 })
+    expect(db.select().from(costos).all()).toEqual([])
+    expect(db.select().from(sugerenciasImportacion).all()).toEqual([])
+  })
+
+  it('creates no Costo for a received invoice in USD', () => {
+    recibida(cfdiXml({ emisor: 'PRV900101QQ1', receptor: RFC_DMM, moneda: 'USD', tipoCambio: '18.50' }), '2026/03/b.xml')
+    expect(importar().recibidas).toBe(1)
+    expect(db.select().from(costos).all()).toEqual([])
+  })
+
+  it('leaves a Costo imported before this change as it is', () => {
+    const antes = costoImportadoAntes()
+    recibida(cfdiXml({ emisor: 'PRV900101QQ1', nombreEmisor: 'HOSTING MX', receptor: RFC_DMM, retenciones: '100.00' }))
+    expect(importar()).toMatchObject({ importados: 0, duplicados: 0, recibidas: 1 })
+    expect(db.select().from(costos).all()).toEqual([antes])
+  })
+
+  it('imports the issued invoices exactly as before', () => {
+    for (const letra of ['A', 'B', 'C'])
+      emitida(cfdiXml({ uuid: `${letra}1111111-0000-4444-8888-99AABBCCDDEE`, receptor: 'SIA161024H91' }), `${letra}.xml`)
+    for (let n = 0; n < 10; n++)
+      recibida(cfdiXml({ uuid: `${n}2222222-0000-4444-8888-99AABBCCDDEE`, emisor: 'PRV900101QQ1', receptor: RFC_DMM }), `${n}.xml`)
+    expect(importar()).toMatchObject({ importados: 3, recibidas: 10 })
+    expect(db.select().from(ingresos).all()).toHaveLength(3)
+    expect(db.select().from(costos).all()).toEqual([])
   })
 
   it('imports a CFDI once even when the same file sits in both folders', () => {
     emitida(cfdiXml())
     recibida(cfdiXml())
-    expect(importar()).toMatchObject({ importados: 1, duplicados: 1 })
+    expect(importar()).toMatchObject({ importados: 1, recibidas: 1 })
     expect(db.select().from(costos).all()).toHaveLength(0)
   })
 })
@@ -271,15 +290,12 @@ describe('adivinar el Proyecto', () => {
 describe('una factura con retenciones', () => {
   it('stores IVA and retenciones apart, and Finanzas reports them', () => {
     emitida(cfdiXml({ retenciones: '206.67' }))
-    recibida(cfdiXml({ uuid: 'B1B2C3D4-0000-4444-8888-99AABBCCDDEE', emisor: 'PRV900101QQ1', receptor: RFC_DMM, retenciones: '100.00' }))
     importar()
     expect(db.select().from(ingresos).get()).toMatchObject({ subtotal: 100_000, iva: 16_000, retenciones: 20_667, total: 95_333 })
-    expect(db.select().from(costos).get()).toMatchObject({ subtotal: 100_000, iva: 16_000, retenciones: 10_000, total: 106_000 })
 
     const r = resumenFinanzas(db, 'anio', '2026-12-31', 30)
-    expect(r.actual).toMatchObject({ ingresos: 100_000, ivaIngresos: 16_000, retencionesIngresos: 20_667, costos: 100_000, retencionesCostos: 10_000 })
+    expect(r.actual).toMatchObject({ ingresos: 100_000, ivaIngresos: 16_000, retencionesIngresos: 20_667 })
     expect(r.ingresos[0]).toMatchObject({ iva: 16_000, retenciones: 20_667, total: 95_333 })
-    expect(r.costos[0]).toMatchObject({ retenciones: 10_000 })
   })
 })
 
@@ -326,7 +342,7 @@ describe('una factura cancelada', () => {
     emitida(factura(), '2023/07/Cancelación/a.xml')
     recibida(cfdiXml({ uuid: OTRA, emisor: 'PRV900101QQ1', receptor: RFC_DMM }), '2025/03/Canceladas/b.xml')
     emitida(cfdiXml({ uuid: 'b1b2c3d4-0000-4444-8888-99aabbccddee', moneda: 'USD', tipoCambio: '18.50' }), '2024/10/Canceladas/c.xml')
-    expect(importar().cancelados).toBe(3)
+    expect(importar()).toMatchObject({ cancelados: 2, recibidas: 1 })
     expect(filas()).toEqual([])
     expect(db.select().from(costos).all()).toEqual([])
   })
@@ -373,17 +389,22 @@ describe('una factura ya importada que resulta cancelada', () => {
     expect(log.cambios.cancelados.map((c) => c.motivo)).toEqual(['sustituida'])
   })
 
-  it('cancels a USD Ingreso keeping its USD original, and a received Costo', () => {
+  it('cancels a USD Ingreso keeping its USD original', () => {
     emitida(cfdiXml({ uuid: OTRA, moneda: 'USD', tipoCambio: '18.50' }), '2023/07/a.xml')
-    recibida(cfdiXml({ emisor: 'PRV900101QQ1', receptor: RFC_DMM }), '2025/03/b.xml')
     importar()
     rmSync(join(root, 'Facturas'), { recursive: true })
     emitida(cfdiXml({ uuid: OTRA, moneda: 'USD', tipoCambio: '18.50' }), '2023/07/Canceladas/a.xml')
-    recibida(cfdiXml({ emisor: 'PRV900101QQ1', receptor: RFC_DMM }), '2025/03/Canceladas/b.xml')
     importar()
     expect(filas()[0]).toMatchObject({ estado: 'cancelado', montoOriginal: 116_000, monedaOriginal: 'USD' })
-    expect(db.select().from(costos).get()).toMatchObject({ estado: 'cancelado' })
-    expect(resumenFinanzas(db, 'anio', '2026-12-31', 30).actual.costos).toBe(0)
+  })
+
+  it('leaves a Costo imported before unchanged when its CFDI moves into Canceladas', () => {
+    const antes = costoImportadoAntes()
+    recibida(cfdiXml({ emisor: 'PRV900101QQ1', receptor: RFC_DMM }), '2026/02/Canceladas/b.xml')
+    const log = importar()
+    expect(db.select().from(costos).all()).toEqual([antes])
+    expect(log.cambios.cancelados).toEqual([])
+    expect(resumenFinanzas(db, 'anio', '2026-12-31', 30).actual.costos).toBe(100_000)
   })
 
   it('leaves an Ingreso with a Reembolso alone and reports it', () => {

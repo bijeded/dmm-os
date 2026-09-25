@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -15,6 +16,7 @@ import {
   ubicacionesArchivo
 } from '../db/schema'
 import { db, reiniciarDb } from '../db/test-db'
+import { guardarContacto } from '../contactos'
 import { responder } from '../sugerencias'
 
 let root: string
@@ -775,5 +777,38 @@ describe('el RFC desde el mapa', () => {
     const log = escanearCarpetas(db, root)
     expect(rfcDe('Versa')).toBe('VCO900213R94')
     expect(log.filasMapa).toEqual([{ linea: 2, problema: 'contacto con otro rfc', enDisco: '' }])
+  })
+})
+
+describe('lo que la Importación crea queda marcado como importado', () => {
+  it('marks every Contacto, Cotización and Proyecto a scan creates', () => {
+    mapa(root, `${CABECERA},Rocío Bistro,,,RBI010101AB1\n`)
+    carpeta(root, 'Clientes', 'Estudio Ocho')
+    carpeta(root, 'Proyectos', 'Clicme')
+    carpeta(root, 'Archivo', 'Proyectos', 'Versa')
+    carpeta(hdd, 'Proyectos', 'Aura')
+    pdf(root, '2025', 'DMM - 475 - Clicme.pdf')
+    pdf(root, '2017', 'DMM - 134 - Sublime.pdf')
+    escanearCarpetas(db, root, hdd)
+    // An accepted quote with no folder gets its Proyecto on the next scan.
+    db.update(cotizaciones).set({ estado: 'aceptada' }).where(eq(cotizaciones.folio, 134)).run()
+    escanearCarpetas(db, root, hdd)
+
+    expect(db.select().from(proyectos).all().map((p) => p.nombre).sort()).toEqual(['Aura', 'Clicme', 'Sublime', 'Versa'])
+    expect(nombresDeContactos()).toContain('Rocío Bistro')
+    for (const tabla of [contactos, cotizaciones, proyectos]) {
+      const filas = db.select().from(tabla).all()
+      expect(filas.length).toBeGreaterThan(0)
+      expect(filas.every((r) => r.importado)).toBe(true)
+    }
+  })
+
+  it('leaves a Contacto made in the app hand-made when it receives an imported quote', () => {
+    const id = guardarContacto(db, { nombre: 'Versa', empresa: null, email: 'hola@versa.mx', telefono: null, direccion: null, notas: null })
+    pdf(root, '2017', 'DMM - 134 - Versa.pdf')
+    escanearCarpetas(db, root)
+
+    expect(cotizacion(134)).toMatchObject({ contactoId: id, importado: true })
+    expect(db.select().from(contactos).all()).toEqual([expect.objectContaining({ id, importado: false })])
   })
 })

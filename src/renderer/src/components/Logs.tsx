@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type {
+  Bloqueo,
   CambioFactura,
   Corrida,
   EstadoImportacion,
@@ -8,7 +9,9 @@ import type {
   OrigenImportado,
   ProblemaFilaMapa,
   RespuestaSugerencia,
-  Sugerencia
+  RegistroAMano,
+  Sugerencia,
+  VistaPreviaDesdeCero
 } from '../../../shared/dominio'
 import { dia, pesos } from '../../../shared/formato'
 import { Aviso, Seccion, fecha, mensaje, useAccion } from './Seccion'
@@ -24,6 +27,9 @@ export function Logs() {
   const [estado, setEstado] = useState<EstadoImportacion>({ facturas: null, carpetas: null })
   const [sugerencias, setSugerencias] = useState<Sugerencia[]>([])
   const [vista, setVista] = useState<LogCarpetas | null>(null)
+  const [desdeCero, setDesdeCero] = useState<VistaPreviaDesdeCero | null>(null)
+  const [confirmar, setConfirmar] = useState(false)
+  const [rechazo, setRechazo] = useState<Bloqueo[]>([])
   const { error, setError, ocupado, correr } = useAccion()
 
   useEffect(() => {
@@ -46,9 +52,22 @@ export function Logs() {
   // A real scan makes the last preview stale.
   const escanear = () => importar(async () => {
     setVista(null)
+    setDesdeCero(null)
     await api.carpetas()
   })
   const previsualizar = () => correr(async () => setVista(await api.vistaPrevia()))
+  const previsualizarDesdeCero = () => correr(async () => setDesdeCero(await api.vistaPreviaDesdeCero()))
+  const reimportar = () => {
+    setConfirmar(false)
+    setRechazo([])
+    importar(async () => {
+      const r = await api.reimportar()
+      if (!r.reimportado) return setRechazo(r.bloqueos)
+      setVista(null)
+      setDesdeCero(null)
+    })
+  }
+  const aceptarTodas = () => correr(async () => setSugerencias(await api.aceptarVincular()))
 
   return (
     <Seccion id="logs" titulo="Logs">
@@ -59,18 +78,54 @@ export function Logs() {
         <Button variant="secondary" disabled={ocupado} onClick={previsualizar}>
           Vista previa
         </Button>
+        <Button variant="secondary" disabled={ocupado} onClick={previsualizarDesdeCero}>
+          Vista previa desde cero
+        </Button>
         <Button variant="secondary" disabled={ocupado} onClick={() => importar(() => api.facturas())}>
           Importar facturas
         </Button>
+        <Button variant="ghost" className="text-error-text" disabled={ocupado} onClick={() => setConfirmar(true)}>
+          Reimportar desde cero
+        </Button>
       </div>
 
+      {confirmar && (
+        <div className="flex flex-wrap items-center gap-3 rounded-control border border-border-strong p-3 text-[13px]">
+          <span>
+            Se quitarán todos los Contactos, Cotizaciones, Proyectos, Ingresos y Costos que hizo la importación, y se volverán a
+            importar. Las respuestas a las Sugerencias de importación y las ediciones a registros importados se pierden. Antes se toma
+            un respaldo.
+          </span>
+          <Button disabled={ocupado} onClick={reimportar}>
+            Sí, reimportar
+          </Button>
+          <Button variant="ghost" onClick={() => setConfirmar(false)}>
+            Cancelar
+          </Button>
+        </div>
+      )}
+      {rechazo.length > 0 && <Bloqueos titulo="No se puede reimportar desde cero:" bloqueos={rechazo} alerta />}
+
       {vista && <VistaPrevia log={vista} />}
+      {desdeCero && (
+        <>
+          {desdeCero.bloqueos.length > 0 && <Bloqueos titulo="Reimportar desde cero se rechazaría:" bloqueos={desdeCero.bloqueos} />}
+          <VistaPrevia titulo="Desde cero" log={desdeCero.log} />
+        </>
+      )}
 
       <Corridas estado={estado} />
 
-      <h3 className="m-0 font-mono text-[10px] font-semibold tracking-[.12em] text-on-surface-muted uppercase">
-        Sugerencias de importación
-      </h3>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="m-0 font-mono text-[10px] font-semibold tracking-[.12em] text-on-surface-muted uppercase">
+          Sugerencias de importación
+        </h3>
+        {sugerencias.some((s) => s.accion === 'vincular') && (
+          <Button variant="secondary" disabled={ocupado} onClick={aceptarTodas}>
+            Aceptar todas
+          </Button>
+        )}
+      </div>
       {sugerencias.length === 0 ? (
         <p className="m-0 text-[13px] text-on-surface-muted">Sin sugerencias pendientes.</p>
       ) : (
@@ -183,15 +238,46 @@ const PROBLEMAS: Record<ProblemaFilaMapa, string> = {
   'contacto con otro rfc': 'el Contacto ya tiene otro RFC'
 }
 
+const A_MANO: Record<RegistroAMano, [string, string]> = {
+  contacto: ['Contacto creado en la app', 'Contactos creados en la app'],
+  cotizacion: ['Cotización creada en la app', 'Cotizaciones creadas en la app'],
+  proyecto: ['Proyecto creado en la app', 'Proyectos creados en la app'],
+  ingreso: ['Ingreso registrado a mano', 'Ingresos registrados a mano'],
+  costo: ['Costo registrado a mano', 'Costos registrados a mano'],
+  definicion_ingreso: ['Ingreso recurrente definido', 'Ingresos recurrentes definidos'],
+  definicion_costo: ['Costo recurrente definido', 'Costos recurrentes definidos']
+}
+
+const textoBloqueo = (b: Bloqueo) => {
+  if (b.motivo === 'a_mano') return `${b.cantidad} ${A_MANO[b.registro][b.cantidad === 1 ? 0 : 1]}`
+  if (b.motivo === 'mapa') return b.error
+  return `Conecta el disco externo (${b.ruta}): sus Proyectos no se volverían a importar.`
+}
+
+/** Why Reimportar desde cero is refused, one line per kind of record with its count. */
+function Bloqueos({ titulo, bloqueos, alerta = false }: { titulo: string; bloqueos: Bloqueo[]; alerta?: boolean }) {
+  return (
+    <div role={alerta ? 'alert' : undefined} className="flex flex-col gap-1 text-[13px] text-error-text">
+      <span>{titulo}</span>
+      <ul className="m-0 flex list-disc flex-col gap-0.5 pl-5">
+        {bloqueos.map((b) => (
+          <li key={textoBloqueo(b)}>{textoBloqueo(b)}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 /**
- * Vista previa: what a real scan would add to the database as it is now. Nothing of it was
- * saved, and it never replaces the last real run below.
+ * Vista previa: what a real scan would add to the database as it is now, or, desde cero, what
+ * Reimportar desde cero would create. Nothing of it was saved, and it never replaces the last
+ * real run below.
  */
-function VistaPrevia({ log }: { log: LogCarpetas }) {
+function VistaPrevia({ log, titulo }: { log: LogCarpetas; titulo?: string }) {
   const { contactos, proyectos, rfcs } = log.nuevos
   return (
     <div className="flex flex-col gap-1 border-t border-border pt-2 text-[13px]">
-      <span className="text-on-surface-muted">Vista previa · Nada se guardó.</span>
+      <span className="text-on-surface-muted">Vista previa{titulo && ` · ${titulo}`} · Nada se guardó.</span>
       {typeof log.mapa !== 'object' && (
         <>
           {lineasCarpetas(log).map((l) => (
@@ -305,6 +391,7 @@ function CambiosFacturas({ log }: { log: LogImportacion }) {
 const lineasFacturas = (l: LogImportacion) => [
   `Facturas: ${l.importados} importadas · ${l.duplicados} duplicadas · ${l.ignorados} ignoradas`,
   `Omitidas: ${l.cancelados} canceladas · ${l.sustituidos} sustituidas · ${l.noCfdi.length} no son CFDI`,
+  `Recibidas: ${l.recibidas} leídas, no importadas (los costos se capturan en Finanzas)`,
   `Sugerencias: ${l.sugerencias}`,
   ...(l.rfcsDesconocidos.length > 0 ? [`RFC sin Contacto: ${l.rfcsDesconocidos.join(', ')}`] : []),
   ...l.ivasInusuales.map((f) => `IVA inusual (${f.tasa}%): ${f.archivo}`)

@@ -127,6 +127,13 @@
       "when": 1790303589135,
       "tag": "0017_parcialidades_cfdi",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1790311605617,
+      "tag": "0018_importado",
+      "breakpoints": true
     }
   ]
 }
