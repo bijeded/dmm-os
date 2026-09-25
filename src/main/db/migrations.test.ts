@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3'
+import { eq } from 'drizzle-orm'
 import { readFileSync } from 'node:fs'
 import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -206,11 +207,11 @@ it('0017 gives imported CFDIs Parcialidad 0 and lets one CFDI hold several Parci
   migrada.close()
 })
 
-it('0018 marks bare rows imported and keeps rows made in the app hand-made', () => {
-  const file = join(dir, 'importado.db')
+/** A database at `file` with the first `n` migrations applied and recorded, as the migrator would. */
+function migradaHasta(file: string, n: number): Database.Database {
   const sqlite = new Database(file)
   sqlite.pragma('foreign_keys = ON')
-  const entradas = JSON.parse(readFileSync(join(drizzleDir, 'meta', '_journal.json'), 'utf8')).entries.slice(0, 18)
+  const entradas = JSON.parse(readFileSync(join(drizzleDir, 'meta', '_journal.json'), 'utf8')).entries.slice(0, n)
   for (const { tag } of entradas as { tag: string }[]) {
     for (const stmt of readFileSync(join(drizzleDir, `${tag}.sql`), 'utf8').split('--> statement-breakpoint')) {
       if (stmt.trim()) sqlite.exec(stmt)
@@ -220,7 +221,13 @@ it('0018 marks bare rows imported and keeps rows made in the app hand-made', () 
     'create table __drizzle_migrations (id integer primary key autoincrement, hash text not null, created_at numeric)'
   )
   const aplicar = sqlite.prepare('insert into __drizzle_migrations (hash, created_at) values (?, ?)')
-  for (const when of journalTimes(drizzleDir).slice(0, 18)) aplicar.run(String(when), when)
+  for (const when of journalTimes(drizzleDir).slice(0, n)) aplicar.run(String(when), when)
+  return sqlite
+}
+
+it('0018 marks bare rows imported and keeps rows made in the app hand-made', () => {
+  const file = join(dir, 'importado.db')
+  const sqlite = migradaHasta(file, 18)
   sqlite.exec(`
     insert into contactos (id, nombre) values (1, 'Frida');
     insert into contactos (id, nombre, email) values (2, 'Nuevo Cliente', 'hola@nuevo.mx');
@@ -251,6 +258,43 @@ it('0018 marks bare rows imported and keeps rows made in the app hand-made', () 
     { id: 1, importado: 1 },
     { id: 2, importado: 0 },
     { id: 3, importado: 0 }
+  ])
+  expect(migrada.pragma('foreign_key_check')).toEqual([])
+  migrada.close()
+})
+
+it('0019 marks the legacy Cotizaciones stored with "[]" imported, and stores [] from then on', () => {
+  const file = join(dir, 'items.db')
+  const sqlite = migradaHasta(file, 19)
+  sqlite.exec(`
+    insert into contactos (id, nombre, importado) values (1, 'Versa', 1);
+    insert into cotizaciones (id, folio, contacto_id, categoria, estado, fecha, items, subtotal, total) values
+      (1, 201, 1, 'website', 'aceptada', '2019-03-01', '"[]"', 50000, 50000),
+      (2, 202, 1, 'other', 'expirada', '2020-01-01', '"[]"', 8000, 8000),
+      (4, 204, 1, 'website', 'enviada', '2026-09-01', '[{"concepto":"Sitio","precio":1000,"cantidad":1}]', 1000, 1160);
+    insert into cotizaciones (id, folio, contacto_id, categoria, estado, fecha, items, moneda, tipo_cambio, subtotal, total)
+      values (3, 203, 1, 'app', 'aceptada', '2021-06-01', '"[]"', 'USD', 17.5, 3000, 3000);
+    insert into cotizaciones (id, contacto_id, categoria, estado, fecha, items) values (5, 1, 'website', 'borrador', '2026-09-20', '"[]"');
+  `)
+  sqlite.close()
+
+  const { db, close } = createDatabase(drizzleDir).abrir(file)
+  // Inserted through drizzle without items, as the app does.
+  db.insert(cotizaciones).values({ contactoId: 1, categoria: 'website', estado: 'borrador', fecha: '2026-09-25' }).run()
+  expect(db.select({ id: cotizaciones.id, items: cotizaciones.items }).from(cotizaciones).where(eq(cotizaciones.id, 6)).get()).toEqual({
+    id: 6,
+    items: []
+  })
+  close()
+
+  const migrada = new Database(file)
+  expect(migrada.prepare('select id, importado, items, moneda, tipo_cambio, subtotal, total from cotizaciones order by id').all()).toEqual([
+    { id: 1, importado: 1, items: '[]', moneda: 'MXN', tipo_cambio: null, subtotal: 50000, total: 50000 },
+    { id: 2, importado: 1, items: '[]', moneda: 'MXN', tipo_cambio: null, subtotal: 8000, total: 8000 },
+    { id: 3, importado: 1, items: '[]', moneda: 'USD', tipo_cambio: 17.5, subtotal: 3000, total: 3000 },
+    { id: 4, importado: 0, items: '[{"concepto":"Sitio","precio":1000,"cantidad":1}]', moneda: 'MXN', tipo_cambio: null, subtotal: 1000, total: 1160 },
+    { id: 5, importado: 0, items: '[]', moneda: 'MXN', tipo_cambio: null, subtotal: 0, total: 0 },
+    { id: 6, importado: 0, items: '[]', moneda: 'MXN', tipo_cambio: null, subtotal: 0, total: 0 }
   ])
   expect(migrada.pragma('foreign_key_check')).toEqual([])
   migrada.close()
