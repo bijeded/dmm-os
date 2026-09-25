@@ -23,7 +23,8 @@ import {
   ETIQUETAS_PROYECTO,
   FACTURACIONES,
   MONEDAS,
-  type CostoEstimado
+  type CostoEstimado,
+  type PartidaCotizacion
 } from '../../shared/dominio'
 
 // Money is stored as integer centavos (MXN); a USD amount, where one is kept, as integer USD cents.
@@ -126,7 +127,7 @@ export const cotizaciones = sqliteTable(
     moneda: text('moneda', { enum: MONEDAS }).notNull().default('MXN'),
     /** MXN per USD, set when a USD quote is accepted; converts its Ingresos paid in pesos. */
     tipoCambio: real('tipo_cambio'),
-    items: text('items', { mode: 'json' }).notNull().default('[]'),
+    items: text('items', { mode: 'json' }).$type<PartidaCotizacion[]>().notNull().default([]),
     stack: text('stack'),
     subtotal: integer('subtotal').notNull().default(0),
     iva: integer('iva').notNull().default(0),

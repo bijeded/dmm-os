@@ -134,6 +134,13 @@
       "when": 1790311605617,
       "tag": "0018_importado",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1790357973093,
+      "tag": "0019_corregir_importado_cotizaciones",
+      "breakpoints": true
     }
   ]
 }

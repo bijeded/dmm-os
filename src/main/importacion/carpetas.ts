@@ -276,7 +276,6 @@ export function importarCotizacion(db: Db, entrada: EntradaCotizacion, mapa: Map
       pdfRutaRelativa: entrada.rutaRelativa,
       nombre,
       importado: true,
-      // Written even when empty: the column's default reads back as the string "[]", not a list.
       items: pdf?.partidas ?? [],
       ...(pdf && {
         moneda: pdf.moneda,
