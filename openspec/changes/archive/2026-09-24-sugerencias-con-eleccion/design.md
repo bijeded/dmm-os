@@ -76,11 +76,15 @@ The enum lives only in TypeScript, so `npm run db:generate` is expected to produ
 
 The rejection branch of `vincular` becomes `deshacerCotizacion(tx, s)`. It restores the previous estado and the guessed Proyecto's `cotizacion_id`, notes and Cliente final under the existing "unless edited since" rules. Rejection calls it alone. Correction calls it, then sets the Cotización *aceptada* and `proyectos.cotizacion_id = elegido`. The undo must run first: until it clears the guessed Proyecto's `cotizacion_id`, linking the chosen one would break `proyectos_cotizacion_unique`. Setting *aceptada* directly skips `aceptarCotizacion`, which is ADR-0002's sanctioned exception for imported history, so no Ingresos or Costos are created.
 
+The undo clears the guessed Proyecto's `cotizacion_id` only while it still holds this Cotización. One the user linked there by hand since stays, for rejection and correction alike (added in review).
+
 The chosen Proyecto's notes and Cliente final are left alone. The guess's note ("Cotización N también incluye: …") is computed against the folder name it matched. The chosen Proyecto may already carry the user's notes. The Cliente final comes from the Mapa de nombres, which `responder` does not read. *Alternative*: recompute with `repartirNombres` and read the map. Rejected: it ties `sugerencias.ts` to the map reader and the file system, and it risks overwriting the user's notes. The user can edit the Proyecto.
 
 ### 6. Ingreso and fusionar corrections reuse the accept path
 
 An Ingreso correction runs the same `update ingresos set proyecto_id` as accepting, with the chosen id. A *fusionar* correction calls `fusionar(tx, duplicadoId, elegidoId)` unchanged. It already moves every reference, redirects other pending merges that named the duplicate, and keeps the better-written Nombre canónico.
+
+A correction can make another pending merge point a Contacto at itself: B merges Z into X, and A's duplicate X is merged into Z. `fusionar` then records B as *aceptada*, since Z and X are already one, and refuses to merge a Contacto into itself (added in review).
 
 Each Parcialidad keeps its own Sugerencia. A choice answers only that one, as accepting does today.
 
