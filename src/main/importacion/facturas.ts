@@ -2,7 +2,9 @@ import { readdirSync, readFileSync, type Dirent } from 'node:fs'
 import { join, posix } from 'node:path'
 import type { Db } from '../db'
 import type { LogImportacion } from '../../shared/dominio'
-import { importarCfdi, type Direccion } from './comprobantes'
+import { leerXml } from '../cfdi'
+import { cancelarFacturas, importarCfdi, type Direccion } from './comprobantes'
+import { planearFacturas, type Lectura } from './plan-facturas'
 
 const CARPETAS: Record<Direccion, string> = {
   emitida: posix.join('Facturas', 'Emitidas'),
@@ -29,8 +31,12 @@ function xmls(root: string, rutaRelativa: string): string[] | null {
 
 /**
  * Imports every CFDI under `Facturas/Emitidas` and `Facturas/Recibidas`. Re-running it is safe:
- * each CFDI is keyed by its UUID. A folder that cannot be read is reported as No disponible,
- * and a file that cannot be read is reported without stopping the run.
+ * each CFDI is keyed by its UUID. Every file is read before anything is imported, because what
+ * a CFDI records depends on the others: a Factura cancelada (filed in a cancel folder, or replaced
+ * by relación 04) is not imported and cancels what an earlier run imported from it, and complementos
+ * de pago date a PPD invoice's Parcialidades. A folder that cannot be read is reported as No
+ * disponible; a file that cannot be read is reported without stopping the run; an XML that is not
+ * a CFDI at all is only counted.
  */
 export function importarFacturas(db: Db, root: string): LogImportacion {
   const log: LogImportacion = {
@@ -41,10 +47,14 @@ export function importarFacturas(db: Db, root: string): LogImportacion {
     rfcsDesconocidos: [],
     ivasInusuales: [],
     errores: [],
-    noDisponibles: []
+    noDisponibles: [],
+    cancelados: 0,
+    sustituidos: 0,
+    noCfdi: [],
+    cambios: { cancelados: [], refechados: [], divididos: [], intactos: [] }
   }
-  const rfcs = new Set<string>()
 
+  const lecturas: (Lectura & { direccion: Direccion })[] = []
   for (const [direccion, carpeta] of Object.entries(CARPETAS) as [Direccion, string][]) {
     const archivos = xmls(root, carpeta)
     if (archivos === null) {
@@ -53,18 +63,40 @@ export function importarFacturas(db: Db, root: string): LogImportacion {
     }
     for (const archivo of archivos) {
       try {
-        const r = importarCfdi(db, readFileSync(join(root, archivo), 'utf8'), direccion)
-        if (r.resultado === 'importado') log.importados++
-        else if (r.resultado === 'duplicado') log.duplicados++
-        else log.ignorados++
-        if (r.sugerencia) log.sugerencias++
-        if (r.rfcDesconocido) rfcs.add(r.rfcDesconocido)
-        if (r.tasaIvaInusual !== null) log.ivasInusuales.push({ archivo, tasa: r.tasaIvaInusual })
+        const cfdi = leerXml(readFileSync(join(root, archivo), 'utf8'))
+        if (cfdi) lecturas.push({ archivo, direccion, cfdi })
+        else log.noCfdi.push(archivo)
       } catch (e) {
-        log.errores.push({ archivo, error: e instanceof Error ? e.message : String(e) })
+        log.errores.push({ archivo, error: mensaje(e) })
       }
     }
   }
+
+  const plan = planearFacturas(lecturas)
+  log.cancelados = plan.omitidas.carpeta
+  log.sustituidos = plan.omitidas.sustituida
+  const rfcs = new Set<string>()
+  for (const { archivo, direccion, cfdi } of plan.importar) {
+    try {
+      const r = importarCfdi(db, cfdi, direccion, plan.pagos.get(cfdi.uuid))
+      if (r.resultado === 'importado') log.importados++
+      else if (r.resultado === 'duplicado') log.duplicados++
+      else log.ignorados++
+      log.sugerencias += r.sugerencias
+      if (r.rfcDesconocido) rfcs.add(r.rfcDesconocido)
+      if (r.tasaIvaInusual !== null) log.ivasInusuales.push({ archivo, tasa: r.tasaIvaInusual })
+      if (r.cambio?.tipo === 'refechado') log.cambios.refechados.push(r.cambio.detalle)
+      if (r.cambio?.tipo === 'dividido') log.cambios.divididos.push(r.cambio.detalle)
+      if (r.cambio?.tipo === 'intacto') log.cambios.intactos.push(r.cambio.detalle)
+    } catch (e) {
+      log.errores.push({ archivo, error: mensaje(e) })
+    }
+  }
+  const { cancelados, intactos } = cancelarFacturas(db, plan.canceladas)
+  log.cambios.cancelados = cancelados
+  log.cambios.intactos.push(...intactos)
   log.rfcsDesconocidos = [...rfcs]
   return log
 }
+
+const mensaje = (e: unknown) => (e instanceof Error ? e.message : String(e))

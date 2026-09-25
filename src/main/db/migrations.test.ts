@@ -168,6 +168,44 @@ it('0012 gives existing amounts zero retenciones and keeps rows linked to rebuil
   migrada.close()
 })
 
+it('0017 gives imported CFDIs Parcialidad 0 and lets one CFDI hold several Parcialidades', () => {
+  const file = join(dir, 'parcialidades.db')
+  const sqlite = new Database(file)
+  sqlite.pragma('foreign_keys = ON')
+  const entradas = JSON.parse(readFileSync(join(drizzleDir, 'meta', '_journal.json'), 'utf8')).entries.slice(0, 17)
+  for (const { tag } of entradas as { tag: string }[]) {
+    for (const stmt of readFileSync(join(drizzleDir, `${tag}.sql`), 'utf8').split('--> statement-breakpoint')) {
+      if (stmt.trim()) sqlite.exec(stmt)
+    }
+  }
+  sqlite.exec(
+    'create table __drizzle_migrations (id integer primary key autoincrement, hash text not null, created_at numeric)'
+  )
+  const aplicar = sqlite.prepare('insert into __drizzle_migrations (hash, created_at) values (?, ?)')
+  for (const when of journalTimes(drizzleDir).slice(0, 17)) aplicar.run(String(when), when)
+  sqlite.exec(`
+    insert into ingresos (categoria, estado, estado_facturacion, subtotal, iva, total, fecha_registro, cfdi_uuid)
+      values ('factura', 'pagado', 'facturado', 1000, 160, 1160, '2019-08-29', 'A');
+  `)
+  sqlite.close()
+
+  createDatabase(drizzleDir).abrir(file).close()
+
+  const migrada = new Database(file)
+  expect(migrada.prepare('select cfdi_uuid, cfdi_parcialidad from ingresos').all()).toEqual([
+    { cfdi_uuid: 'A', cfdi_parcialidad: 0 }
+  ])
+  const insertar = (parcialidad: number) =>
+    migrada.exec(
+      `insert into ingresos (categoria, estado, estado_facturacion, subtotal, iva, total, cfdi_uuid, cfdi_parcialidad)
+        values ('factura', 'pagado', 'facturado', 500, 80, 580, 'B', ${parcialidad})`
+    )
+  insertar(1)
+  insertar(2)
+  expect(() => insertar(2)).toThrow(/UNIQUE/)
+  migrada.close()
+})
+
 it('rolls back a migration that leaves broken references, so the database stays as it was', () => {
   const carpeta = join(dir, 'drizzle')
   cpSync(drizzleDir, carpeta, { recursive: true })

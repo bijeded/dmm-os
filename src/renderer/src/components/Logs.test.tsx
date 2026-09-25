@@ -72,7 +72,7 @@ let api: DmmApi['importacion']
 
 const montar = (sugerencias: Sugerencia[] = [vincular, ubicacion], e: EstadoImportacion = estado, v: LogCarpetas = vista) => {
   api = {
-    facturas: vi.fn(async () => ({ importados: 0, duplicados: 0, ignorados: 0, sugerencias: 0, rfcsDesconocidos: [], ivasInusuales: [], errores: [], noDisponibles: [] })),
+    facturas: vi.fn(async () => ({ importados: 0, duplicados: 0, ignorados: 0, sugerencias: 0, rfcsDesconocidos: [], ivasInusuales: [], errores: [], noDisponibles: [], cancelados: 0, sustituidos: 0, noCfdi: [], cambios: { cancelados: [], refechados: [], divididos: [], intactos: [] } })),
     carpetas: vi.fn(async () => e.carpetas!.log),
     vistaPrevia: vi.fn(async () => v),
     estado: vi.fn(async () => e),
@@ -182,5 +182,39 @@ describe('Vista previa', () => {
     expect(screen.getByText('Clientes/_nombres.csv no tiene las columnas')).toBeTruthy()
     expect(screen.queryByText(/214 importadas/)).toBe(null)
     expect(screen.queryByText(/Contactos nuevos/)).toBe(null)
+  })
+
+  it('shows what the last Facturas run skipped and corrected', async () => {
+    montar([], {
+      carpetas: null,
+      facturas: {
+        corridoEn: '2026-09-24T10:00:00.000Z',
+        log: {
+          importados: 0,
+          duplicados: 468,
+          ignorados: 6,
+          sugerencias: 0,
+          rfcsDesconocidos: [],
+          ivasInusuales: [],
+          errores: [],
+          noDisponibles: [],
+          cancelados: 19,
+          sustituidos: 1,
+          noCfdi: ['Facturas/Emitidas/2019/02/comprobante de pago/CEP-20190227-HSBC051240.xml'],
+          cambios: {
+            cancelados: [{ entidad: 'ingreso', id: 99, fecha: '2019-08-28', total: 9_914_320, motivo: 'cancelada' }],
+            refechados: [],
+            divididos: [{ entidad: 'ingreso', id: 94, fecha: '2019-08-29', total: 25_434_044, motivo: 'pagos' }],
+            intactos: [{ entidad: 'ingreso', id: 7, fecha: '2018-04-10', total: 116_000, motivo: 'editado' }]
+          }
+        }
+      }
+    })
+    expect(await screen.findByText(/19 canceladas · 1 sustituidas · 1 no son CFDI/)).toBeTruthy()
+    expect(screen.getByText(/Ingreso 99 · .* · \$99,143.20 \(en una carpeta de canceladas\)/)).toBeTruthy()
+    expect(screen.getByText(/Ingreso 94 .* \$254,340.44 \(según sus complementos de pago\)/)).toBeTruthy()
+    expect(screen.getByText(/Ingreso 7 .* \(editado a mano\)/)).toBeTruthy()
+    expect(screen.getByText(/No es CFDI: .*CEP-20190227/)).toBeTruthy()
+    expect(screen.queryByText(/Fecha de pago corregida/)).toBeNull()
   })
 })

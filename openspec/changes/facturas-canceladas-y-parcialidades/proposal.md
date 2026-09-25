@@ -9,7 +9,7 @@ Intent: **the Facturas run records an invoice's money only if the invoice stands
 ## What Changes
 
 - A CFDI filed under a folder whose name starts with "cancel" (Canceladas, cancelados, Cancelaciones, Cancelación…) is not imported. It is counted in the run's log.
-- A CFDI that another CFDI in the folders replaces (CfdiRelacionados with TipoRelacion `04`) is not imported. Only a CFDI the run keeps can replace another, so a cancelled complemento that points at a valid invoice does not knock it out.
+- A CFDI that another CFDI in the folders replaces (CfdiRelacionados with TipoRelacion `04`) is not imported. Only a CFDI not filed as cancelled can replace another, so a cancelled complemento that points at a valid invoice does not knock it out.
 - An Ingreso or Costo already imported from a CFDI that is now known to be cancelled or replaced becomes *cancelado* on the next run. It stays visible and stops counting.
 - A PPD invoice with complementos de pago in the folders becomes one paid Ingreso per payment, each dated on its FechaPago. The invoice's own amounts are split between the payments, so together they add up exactly to the invoice. An invoice already imported as a single Ingreso is split on the next run.
 - A PPD invoice with no complemento keeps today's behavior: it is paid on its own date.

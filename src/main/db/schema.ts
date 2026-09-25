@@ -292,6 +292,8 @@ export const ingresos = sqliteTable(
       onDelete: 'restrict'
     }),
     cfdiUuid: text('cfdi_uuid'),
+    // 0 is the whole CFDI; n is its nth Parcialidad, when complementos de pago split a PPD invoice.
+    cfdiParcialidad: integer('cfdi_parcialidad').notNull().default(0),
     reembolsoDeId: integer('reembolso_de_id').references((): AnySQLiteColumn => ingresos.id, {
       onDelete: 'restrict'
     }),
@@ -299,7 +301,7 @@ export const ingresos = sqliteTable(
     creadoEn: creadoEn()
   },
   (t) => [
-    uniqueIndex('ingresos_cfdi_unique').on(t.cfdiUuid),
+    uniqueIndex('ingresos_cfdi_unique').on(t.cfdiUuid, t.cfdiParcialidad),
     uniqueIndex('ingresos_definicion_periodo_unique').on(t.definicionId, t.periodo),
     index('ingresos_proyecto_idx').on(t.proyectoId),
     index('ingresos_contacto_idx').on(t.contactoId),

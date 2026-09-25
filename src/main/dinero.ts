@@ -80,6 +80,45 @@ export function repartir(total: number, n: number) {
   return Array.from({ length: n }, (_, i) => (i === 0 ? total - parte * (n - 1) : parte))
 }
 
+/**
+ * The Parcialidades rule: a PPD invoice's recorded amounts split between its payments, in order. Each
+ * `pagado` is in the invoice's own currency (USD cents for a USD invoice, else centavos) and takes
+ * that share of the subtotal, IVA, retenciones and USD original. The payment that leaves no `saldo`
+ * takes the exact remainders, so the parts add up to the invoice even when the payments do not; with
+ * none, the remainder is one more part, still to be paid. `totalPropio` is the invoice total in its own
+ * currency, for one in a currency the app keeps no original for (e.g. EUR).
+ */
+export function enParcialidades(
+  factura: MontosRegistrados,
+  pagos: { pagado: number; saldo: number }[],
+  totalPropio = factura.montoOriginal ?? factura.total
+) {
+  const completa = { subtotal: factura.subtotal, iva: factura.iva, retenciones: factura.retenciones, original: totalPropio }
+  const queda = { ...completa }
+  const partes: { montos: MontosRegistrados; pagada: boolean }[] = []
+  const tomar = (parte: typeof queda, pagada: boolean) => {
+    for (const f of Object.keys(queda) as (keyof typeof queda)[]) queda[f] -= parte[f]
+    partes.push({
+      pagada,
+      montos: montos(parte.subtotal, {
+        iva: parte.iva,
+        retenciones: parte.retenciones,
+        montoOriginal: factura.montoOriginal === null ? null : parte.original
+      })
+    })
+  }
+  for (const { pagado, saldo } of pagos) {
+    if (saldo <= 0) {
+      tomar({ ...queda }, true)
+      return partes
+    }
+    const parte = (f: keyof typeof queda) => Math.min(queda[f], Math.round((completa[f] * pagado) / completa.original))
+    tomar({ subtotal: parte('subtotal'), iva: parte('iva'), retenciones: parte('retenciones'), original: parte('original') }, true)
+  }
+  if (queda.subtotal + queda.iva - queda.retenciones > 0) tomar({ ...queda }, false)
+  return partes
+}
+
 export const MENSAJE_REEMBOLSO_EXCEDIDO = 'No se puede reembolsar más de lo pagado'
 
 type Partes = Pick<MontosRegistrados, 'total' | 'iva' | 'retenciones'>

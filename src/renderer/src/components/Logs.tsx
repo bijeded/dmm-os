@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type {
+  CambioFactura,
   Corrida,
   EstadoImportacion,
   LogCarpetas,
@@ -9,6 +10,7 @@ import type {
   RespuestaSugerencia,
   Sugerencia
 } from '../../../shared/dominio'
+import { dia, pesos } from '../../../shared/formato'
 import { Aviso, Seccion, fecha, mensaje, useAccion } from './Seccion'
 import { Button } from './ui/button'
 
@@ -121,7 +123,11 @@ function Corridas({ estado }: { estado: EstadoImportacion }) {
           <DetalleMapa log={estado.carpetas.log} />
         </CorridaVista>
       )}
-      {estado.facturas && <CorridaVista titulo="Facturas" corrida={estado.facturas} lineas={lineasFacturas(estado.facturas.log)} />}
+      {estado.facturas && (
+        <CorridaVista titulo="Facturas" corrida={estado.facturas} lineas={lineasFacturas(estado.facturas.log)}>
+          <CambiosFacturas log={estado.facturas.log} />
+        </CorridaVista>
+      )}
     </div>
   )
 }
@@ -257,8 +263,48 @@ const lineasCarpetas = (l: LogCarpetas) => [
   `Disco externo: ${l.hddConectado ? 'conectado' : 'no conectado'}`
 ]
 
+const MOTIVOS: Record<CambioFactura['motivo'], string> = {
+  cancelada: 'en una carpeta de canceladas',
+  sustituida: 'sustituida por otro CFDI',
+  pagos: 'según sus complementos de pago',
+  editado: 'editado a mano',
+  reembolso: 'tiene un reembolso',
+  complementos: 'sus complementos de pago ya no cuadran con las parcialidades pagadas'
+}
+
+const CAMBIOS: [keyof LogImportacion['cambios'], string][] = [
+  ['cancelados', 'Canceladas'],
+  ['refechados', 'Fecha de pago corregida'],
+  ['divididos', 'Divididas en parcialidades'],
+  ['intactos', 'Sin cambiar']
+]
+
+/** The Ingresos and Costos an earlier run imported that this run corrected, or left alone and why. */
+function CambiosFacturas({ log }: { log: LogImportacion }) {
+  return (
+    <>
+      {CAMBIOS.filter(([k]) => log.cambios[k].length > 0).map(([k, titulo]) => (
+        <span key={k}>
+          <span className="text-on-surface-muted">
+            {titulo} ({log.cambios[k].length}):
+          </span>{' '}
+          {log.cambios[k]
+            .map((c) => `${c.entidad === 'ingreso' ? 'Ingreso' : 'Costo'} ${c.id} · ${c.fecha ? dia(c.fecha) : 'sin fecha'} · ${pesos(c.total)} (${MOTIVOS[c.motivo]})`)
+            .join('; ')}
+        </span>
+      ))}
+      {log.noCfdi.map((a) => (
+        <span key={a} className="text-on-surface-muted">
+          No es CFDI: {a}
+        </span>
+      ))}
+    </>
+  )
+}
+
 const lineasFacturas = (l: LogImportacion) => [
   `Facturas: ${l.importados} importadas · ${l.duplicados} duplicadas · ${l.ignorados} ignoradas`,
+  `Omitidas: ${l.cancelados} canceladas · ${l.sustituidos} sustituidas · ${l.noCfdi.length} no son CFDI`,
   `Sugerencias: ${l.sugerencias}`,
   ...(l.rfcsDesconocidos.length > 0 ? [`RFC sin Contacto: ${l.rfcsDesconocidos.join(', ')}`] : []),
   ...l.ivasInusuales.map((f) => `IVA inusual (${f.tasa}%): ${f.archivo}`)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { leerCfdi } from './cfdi'
-import { cfdiXml } from './test-cfdi'
+import { leerCfdi, leerXml } from './cfdi'
+import { cfdiXml, complementoXml } from './test-cfdi'
 
 describe('leerCfdi', () => {
   it('reads the UUID, date and parties of a CFDI', () => {
@@ -89,12 +89,53 @@ describe('leerCfdi', () => {
     expect(leerCfdi(cfdiXml({ tipo: 'P' })).tipo).toBe('P')
   })
 
-  it('rejects a file that is not a stamped CFDI', () => {
+  it('reads a well-formed document that is not a CFDI, like a CEP bank receipt, as nothing', () => {
+    expect(
+      leerXml('<?xml version="1.0" encoding="UTF-8"?><SPEI_Tercero FechaOperacion="2019-02-27" Hora="12:31:05"><Beneficiario Nombre="X"/></SPEI_Tercero>')
+    ).toBeNull()
+  })
+
+  it('rejects a file that is not well-formed XML', () => {
+    expect(() => leerXml('<cfdi:Comprobante><roto></cfdi:Comprobante>')).toThrow(/no es XML válido/)
+  })
+
+  it('rejects a CFDI without its timbre', () => {
+    const sinTimbre = `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" Fecha="2026-02-03T12:00:00" SubTotal="1" Total="1"/>`
+    expect(() => leerXml(sinTimbre)).toThrow(/sin timbre/)
+    expect(() => leerCfdi(sinTimbre)).toThrow(/sin timbre/)
+  })
+
+  it('still refuses to read something that is not a CFDI as one', () => {
     expect(() => leerCfdi('<html><body>no</body></html>')).toThrow(/no es un CFDI/)
-    expect(() =>
-      leerCfdi(
-        `<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" Fecha="2026-02-03T12:00:00" SubTotal="1" Total="1"/>`
-      )
-    ).toThrow(/sin timbre/)
+  })
+
+  it('reads the MetodoPago, and none when the voucher carries none', () => {
+    expect(leerCfdi(cfdiXml({ metodoPago: 'PPD' })).metodoPago).toBe('PPD')
+    expect(leerCfdi(cfdiXml()).metodoPago).toBeNull()
+  })
+
+  it('reads the UUIDs a sustitución replaces, lowercase', () => {
+    expect(leerCfdi(cfdiXml({ sustituye: ['EA1CD75E-E1A4-448F-828A-1EA0EF784596'] })).sustituye).toEqual([
+      'ea1cd75e-e1a4-448f-828a-1ea0ef784596'
+    ])
+    expect(leerCfdi(cfdiXml()).sustituye).toEqual([])
+  })
+
+  it('reads every payment of a complemento de pago, in the invoice currency', () => {
+    const xml = complementoXml({
+      uuid: 'C0000000-0000-4444-8888-99AABBCCDDEE',
+      pagos: [
+        { factura: 'a1', parcialidad: 1, fecha: '2019-09-12', pagado: '99146.67', saldoAnterior: '254340.44', saldo: '155193.77' },
+        { factura: 'b2', parcialidad: 2, fecha: '2020-08-13', pagado: '155203.62', saldoAnterior: '155203.62', saldo: '0' }
+      ]
+    })
+    expect(leerCfdi(xml)).toMatchObject({
+      tipo: 'P',
+      pagos: [
+        { uuidFactura: 'a1', parcialidad: 1, fecha: '2019-09-12', pagado: 9_914_667, saldo: 15_519_377 },
+        { uuidFactura: 'b2', parcialidad: 2, fecha: '2020-08-13', pagado: 15_520_362, saldo: 0 }
+      ]
+    })
+    expect(leerCfdi(cfdiXml()).pagos).toEqual([])
   })
 })
