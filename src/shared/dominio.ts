@@ -47,7 +47,7 @@ export interface LogImportacion {
   ignorados: number
   /** Sugerencias de importación left waiting for accept/reject. */
   sugerencias: number
-  /** RFCs no Contacto claims, so their Ingresos and Costos stayed unlinked. */
+  /** RFCs no Contacto claims, so their Ingresos stayed unlinked. */
   rfcsDesconocidos: string[]
   /** Invoices imported this run whose IVA is neither 0 nor 16%, imported as charged. */
   ivasInusuales: { archivo: string; tasa: number }[]
@@ -57,6 +57,8 @@ export interface LogImportacion {
   /** Files skipped as Facturas canceladas: filed in a cancel folder, or replaced by relación 04. */
   cancelados: number
   sustituidos: number
+  /** CFDIs read under `Facturas/Recibidas`: counted, never imported. Costos are entered by hand. */
+  recibidas: number
   /** XML files that are not CFDIs at all (e.g. CEP bank receipts): skipped, not errors. */
   noCfdi: string[]
   /** Records imported by earlier runs that this run corrected, or would have and left alone. */

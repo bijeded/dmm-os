@@ -72,7 +72,7 @@ let api: DmmApi['importacion']
 
 const montar = (sugerencias: Sugerencia[] = [vincular, ubicacion], e: EstadoImportacion = estado, v: LogCarpetas = vista) => {
   api = {
-    facturas: vi.fn(async () => ({ importados: 0, duplicados: 0, ignorados: 0, sugerencias: 0, rfcsDesconocidos: [], ivasInusuales: [], errores: [], noDisponibles: [], cancelados: 0, sustituidos: 0, noCfdi: [], cambios: { cancelados: [], refechados: [], divididos: [], intactos: [] } })),
+    facturas: vi.fn(async () => ({ importados: 0, duplicados: 0, ignorados: 0, sugerencias: 0, rfcsDesconocidos: [], ivasInusuales: [], errores: [], noDisponibles: [], cancelados: 0, sustituidos: 0, recibidas: 0, noCfdi: [], cambios: { cancelados: [], refechados: [], divididos: [], intactos: [] } })),
     carpetas: vi.fn(async () => e.carpetas!.log),
     vistaPrevia: vi.fn(async () => v),
     estado: vi.fn(async () => e),
@@ -200,6 +200,7 @@ describe('Vista previa', () => {
           noDisponibles: [],
           cancelados: 19,
           sustituidos: 1,
+          recibidas: 36,
           noCfdi: ['Facturas/Emitidas/2019/02/comprobante de pago/CEP-20190227-HSBC051240.xml'],
           cambios: {
             cancelados: [{ entidad: 'ingreso', id: 99, fecha: '2019-08-28', total: 9_914_320, motivo: 'cancelada' }],
@@ -211,6 +212,7 @@ describe('Vista previa', () => {
       }
     })
     expect(await screen.findByText(/19 canceladas · 1 sustituidas · 1 no son CFDI/)).toBeTruthy()
+    expect(screen.getByText(/Recibidas: 36 leídas, no importadas/)).toBeTruthy()
     expect(screen.getByText(/Ingreso 99 · .* · \$99,143.20 \(en una carpeta de canceladas\)/)).toBeTruthy()
     expect(screen.getByText(/Ingreso 94 .* \$254,340.44 \(según sus complementos de pago\)/)).toBeTruthy()
     expect(screen.getByText(/Ingreso 7 .* \(editado a mano\)/)).toBeTruthy()

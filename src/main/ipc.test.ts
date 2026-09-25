@@ -5,7 +5,7 @@ import { registerIpc } from './ipc'
 
 const info = { version: '0.1.0', dbPath: '/db', dmmOsRoot: '/root' }
 const estado = { dir: '/v', frecuenciaDias: 7, conservar: 4, ultimo: null, respaldos: [] }
-const log = { importados: 0, duplicados: 0, ignorados: 0, sugerencias: 0, rfcsDesconocidos: [], ivasInusuales: [], errores: [], noDisponibles: [], cancelados: 0, sustituidos: 0, noCfdi: [], cambios: { cancelados: [], refechados: [], divididos: [], intactos: [] } }
+const log = { importados: 0, duplicados: 0, ignorados: 0, sugerencias: 0, rfcsDesconocidos: [], ivasInusuales: [], errores: [], noDisponibles: [], cancelados: 0, sustituidos: 0, recibidas: 0, noCfdi: [], cambios: { cancelados: [], refechados: [], divididos: [], intactos: [] } }
 const logCarpetas = {
   cotizaciones: { importadas: 0, duplicadas: 0 },
   contactos: { creados: 0 },

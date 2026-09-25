@@ -305,6 +305,7 @@ function CambiosFacturas({ log }: { log: LogImportacion }) {
 const lineasFacturas = (l: LogImportacion) => [
   `Facturas: ${l.importados} importadas · ${l.duplicados} duplicadas · ${l.ignorados} ignoradas`,
   `Omitidas: ${l.cancelados} canceladas · ${l.sustituidos} sustituidas · ${l.noCfdi.length} no son CFDI`,
+  `Recibidas: ${l.recibidas} leídas, no importadas (los costos se capturan en Finanzas)`,
   `Sugerencias: ${l.sugerencias}`,
   ...(l.rfcsDesconocidos.length > 0 ? [`RFC sin Contacto: ${l.rfcsDesconocidos.join(', ')}`] : []),
   ...l.ivasInusuales.map((f) => `IVA inusual (${f.tasa}%): ${f.archivo}`)

@@ -2,13 +2,13 @@
 
 ## 1. Provenance flag
 
-- [ ] 1.1 Add `importado` (boolean, default false) to `contactos`, `cotizaciones` and `proyectos` in `src/main/db/schema.ts`, run `npm run db:generate`, and append the backfill `UPDATE`s from design.md §1. Verify with a `src/main/db/migrations.test.ts` case: a hand-made-looking row (Contacto with email, Cotización with partidas, `personal` Proyecto) stays `0`, a bare row becomes `1`, and the migration passes the ADR-0003 foreign-key check.
-- [ ] 1.2 Set `importado: true` on every Contacto, Cotización and Proyecto insert in `importacion/carpetas.ts` and `importacion/rfcs.ts`. Leave the flag untouched when the scan matches an existing Contacto. Pinned by a `src/main/importacion/escaneo.test.ts` case: after a scan every created record has `importado = 1`, and a Contacto created through `contactos.guardar` that receives an imported quote keeps `0`.
+- [x] 1.1 Add `importado` (boolean, default false) to `contactos`, `cotizaciones` and `proyectos` in `src/main/db/schema.ts`, run `npm run db:generate`, and append the backfill `UPDATE`s from design.md §1. Verify with a `src/main/db/migrations.test.ts` case: a hand-made-looking row (Contacto with email, Cotización with partidas, `personal` Proyecto) stays `0`, a bare row becomes `1`, and the migration passes the ADR-0003 foreign-key check.
+- [x] 1.2 Set `importado: true` on every Contacto, Cotización and Proyecto insert in `importacion/carpetas.ts` and `importacion/rfcs.ts`. Leave the flag untouched when the scan matches an existing Contacto. Pinned by a `src/main/importacion/escaneo.test.ts` case: after a scan every created record has `importado = 1`, and a Contacto created through `contactos.guardar` that receives an imported quote keeps `0`.
 
 ## 2. Facturas run stops creating Costos
 
-- [ ] 2.1 In `importacion/facturas.ts`, read `Facturas/Recibidas`, count its CFDIs in a new `LogImportacion.recibidas`, and plan and import emitidas only. Delete `registrarCosto` and the Costo Sugerencia path from `comprobantes.ts`, and make `cancelarFacturas` touch Ingresos only. Pinned in `src/main/importacion/facturas.test.ts`: a received CFDI creates no Costo and counts in `recibidas` (MXN and USD); a Costo imported before stays unchanged when its CFDI moves into `Canceladas`; issued invoices import as before.
-- [ ] 2.2 Update the existing `facturas.test.ts` and `handlers.test.ts` cases that expected Costos from `Recibidas`, and show `recibidas` among the Facturas run's counts in `Logs.tsx`. Verify `npm test -- src/main/importacion/facturas.test.ts src/main/handlers.test.ts src/renderer/src/components/Logs.test.tsx` passes.
+- [x] 2.1 In `importacion/facturas.ts`, read `Facturas/Recibidas`, count its CFDIs in a new `LogImportacion.recibidas`, and plan and import emitidas only. Delete `registrarCosto` and the Costo Sugerencia path from `comprobantes.ts`, and make `cancelarFacturas` touch Ingresos only. Pinned in `src/main/importacion/facturas.test.ts`: a received CFDI creates no Costo and counts in `recibidas` (MXN and USD); a Costo imported before stays unchanged when its CFDI moves into `Canceladas`; issued invoices import as before.
+- [x] 2.2 Update the existing `facturas.test.ts` and `handlers.test.ts` cases that expected Costos from `Recibidas`, and show `recibidas` among the Facturas run's counts in `Logs.tsx`. Verify `npm test -- src/main/importacion/facturas.test.ts src/main/handlers.test.ts src/renderer/src/components/Logs.test.tsx` passes.
 
 ## 3. Reimport module
 

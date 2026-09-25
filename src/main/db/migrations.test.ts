@@ -206,6 +206,56 @@ it('0017 gives imported CFDIs Parcialidad 0 and lets one CFDI hold several Parci
   migrada.close()
 })
 
+it('0018 marks bare rows imported and keeps rows made in the app hand-made', () => {
+  const file = join(dir, 'importado.db')
+  const sqlite = new Database(file)
+  sqlite.pragma('foreign_keys = ON')
+  const entradas = JSON.parse(readFileSync(join(drizzleDir, 'meta', '_journal.json'), 'utf8')).entries.slice(0, 18)
+  for (const { tag } of entradas as { tag: string }[]) {
+    for (const stmt of readFileSync(join(drizzleDir, `${tag}.sql`), 'utf8').split('--> statement-breakpoint')) {
+      if (stmt.trim()) sqlite.exec(stmt)
+    }
+  }
+  sqlite.exec(
+    'create table __drizzle_migrations (id integer primary key autoincrement, hash text not null, created_at numeric)'
+  )
+  const aplicar = sqlite.prepare('insert into __drizzle_migrations (hash, created_at) values (?, ?)')
+  for (const when of journalTimes(drizzleDir).slice(0, 18)) aplicar.run(String(when), when)
+  sqlite.exec(`
+    insert into contactos (id, nombre) values (1, 'Frida');
+    insert into contactos (id, nombre, email) values (2, 'Nuevo Cliente', 'hola@nuevo.mx');
+    insert into cotizaciones (id, folio, contacto_id, categoria, estado, fecha)
+      values (1, 475, 1, 'other', 'enviada', '2019-01-01');
+    insert into cotizaciones (id, folio, contacto_id, categoria, estado, fecha, items)
+      values (2, 476, 2, 'website', 'enviada', '2026-01-01', '[{"concepto":"Sitio","precio":1000,"cantidad":1}]');
+    insert into cotizaciones (id, contacto_id, categoria, estado, fecha) values (3, 1, 'website', 'borrador', '2026-02-01');
+    insert into proyectos (id, nombre, contacto_id, categoria) values (1, 'Frida', 1, 'other');
+    insert into proyectos (id, nombre, categoria, etiqueta) values (2, 'Portafolio', 'other', 'personal');
+    insert into proyectos (id, nombre, contacto_id, categoria, fecha_inicio) values (3, 'Tienda', 2, 'website', '2026-01-05');
+  `)
+  sqlite.close()
+
+  createDatabase(drizzleDir).abrir(file).close()
+
+  const migrada = new Database(file)
+  expect(migrada.prepare('select id, importado from contactos order by id').all()).toEqual([
+    { id: 1, importado: 1 },
+    { id: 2, importado: 0 }
+  ])
+  expect(migrada.prepare('select id, importado from cotizaciones order by id').all()).toEqual([
+    { id: 1, importado: 1 },
+    { id: 2, importado: 0 },
+    { id: 3, importado: 0 }
+  ])
+  expect(migrada.prepare('select id, importado from proyectos order by id').all()).toEqual([
+    { id: 1, importado: 1 },
+    { id: 2, importado: 0 },
+    { id: 3, importado: 0 }
+  ])
+  expect(migrada.pragma('foreign_key_check')).toEqual([])
+  migrada.close()
+})
+
 it('rolls back a migration that leaves broken references, so the database stays as it was', () => {
   const carpeta = join(dir, 'drizzle')
   cpSync(drizzleDir, carpeta, { recursive: true })

@@ -94,7 +94,7 @@ export function resolverContacto(db: Tx, nombre: string, { canonico = false } = 
   }
 
   const parecido = canonico ? undefined : todos.find((c) => parecidos(c.nombre, nombre))
-  const creado = db.insert(contactos).values({ nombre }).returning().get()
+  const creado = db.insert(contactos).values({ nombre, importado: true }).returning().get()
   const sugerido =
     parecido !== undefined &&
     proponer(db, {
@@ -260,7 +260,8 @@ export function importarCotizacion(db: Db, entrada: EntradaCotizacion, mapa: Map
       estado: 'enviada',
       fecha,
       pdfRutaRelativa: entrada.rutaRelativa,
-      nombre: proyecto ?? entrada.nombre
+      nombre: proyecto ?? entrada.nombre,
+      importado: true
     })
     .returning()
     .get()
@@ -328,7 +329,8 @@ export function importarCarpetaProyecto(
           contactoId,
           clienteFinal,
           categoria: 'other',
-          estado: entrada.tipo === 'proyectos' ? 'en_curso' : 'completado'
+          estado: entrada.tipo === 'proyectos' ? 'en_curso' : 'completado',
+          importado: true
         })
         .returning()
         .get()
@@ -434,7 +436,8 @@ export function proyectosDeCotizacionesAceptadas(
         clienteFinal: clienteFinalDeCotizacion(mapa, c),
         categoria: c.categoria,
         estado: 'completado',
-        notas
+        notas,
+        importado: true
       })
       .returning()
       .get()

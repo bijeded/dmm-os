@@ -3,13 +3,11 @@ import { join, posix } from 'node:path'
 import type { Db } from '../db'
 import type { LogImportacion } from '../../shared/dominio'
 import { leerXml } from '../cfdi'
-import { cancelarFacturas, importarCfdi, type Direccion } from './comprobantes'
+import { cancelarFacturas, importarCfdi } from './comprobantes'
 import { planearFacturas, type Lectura } from './plan-facturas'
 
-const CARPETAS: Record<Direccion, string> = {
-  emitida: posix.join('Facturas', 'Emitidas'),
-  recibida: posix.join('Facturas', 'Recibidas')
-}
+const EMITIDAS = posix.join('Facturas', 'Emitidas')
+const RECIBIDAS = posix.join('Facturas', 'Recibidas')
 
 /**
  * Every `.xml` under `rutaRelativa`, at any depth, as paths relative to the DMM OS root.
@@ -30,7 +28,8 @@ function xmls(root: string, rutaRelativa: string): string[] | null {
 }
 
 /**
- * Imports every CFDI under `Facturas/Emitidas` and `Facturas/Recibidas`. Re-running it is safe:
+ * Imports every CFDI under `Facturas/Emitidas` as Ingresos. The CFDIs under `Facturas/Recibidas`
+ * are read and counted, never imported: Costos are entered by hand. Re-running it is safe:
  * each CFDI is keyed by its UUID. Every file is read before anything is imported, because what
  * a CFDI records depends on the others: a Factura cancelada (filed in a cancel folder, or replaced
  * by relación 04) is not imported and cancels what an earlier run imported from it, and complementos
@@ -50,12 +49,13 @@ export function importarFacturas(db: Db, root: string): LogImportacion {
     noDisponibles: [],
     cancelados: 0,
     sustituidos: 0,
+    recibidas: 0,
     noCfdi: [],
     cambios: { cancelados: [], refechados: [], divididos: [], intactos: [] }
   }
 
-  const lecturas: (Lectura & { direccion: Direccion })[] = []
-  for (const [direccion, carpeta] of Object.entries(CARPETAS) as [Direccion, string][]) {
+  const lecturas: Lectura[] = []
+  for (const carpeta of [EMITIDAS, RECIBIDAS]) {
     const archivos = xmls(root, carpeta)
     if (archivos === null) {
       log.noDisponibles.push(carpeta)
@@ -64,21 +64,24 @@ export function importarFacturas(db: Db, root: string): LogImportacion {
     for (const archivo of archivos) {
       try {
         const cfdi = leerXml(readFileSync(join(root, archivo), 'utf8'))
-        if (cfdi) lecturas.push({ archivo, direccion, cfdi })
-        else log.noCfdi.push(archivo)
+        if (!cfdi) log.noCfdi.push(archivo)
+        else if (carpeta === RECIBIDAS) log.recibidas++
+        else lecturas.push({ archivo, cfdi })
       } catch (e) {
         log.errores.push({ archivo, error: mensaje(e) })
       }
     }
   }
 
+  // A received CFDI can neither cancel nor replace an issued one, and the complementos de pago that
+  // date issued invoices are filed under Emitidas, so the plan needs the emitidas alone.
   const plan = planearFacturas(lecturas)
   log.cancelados = plan.omitidas.carpeta
   log.sustituidos = plan.omitidas.sustituida
   const rfcs = new Set<string>()
-  for (const { archivo, direccion, cfdi } of plan.importar) {
+  for (const { archivo, cfdi } of plan.importar) {
     try {
-      const r = importarCfdi(db, cfdi, direccion, plan.pagos.get(cfdi.uuid))
+      const r = importarCfdi(db, cfdi, plan.pagos.get(cfdi.uuid))
       if (r.resultado === 'importado') log.importados++
       else if (r.resultado === 'duplicado') log.duplicados++
       else log.ignorados++

@@ -71,6 +71,8 @@ export const contactos = sqliteTable(
     telefono: text('telefono'),
     direccion: text('direccion'),
     notas: text('notas'),
+    /** Created by the Importación; a record the app creates keeps false. Reimportar desde cero removes only these. */
+    importado: integer('importado', { mode: 'boolean' }).notNull().default(false),
     creadoEn: creadoEn()
   },
   (t) => [uniqueIndex('contactos_rfc_unique').on(t.rfc)]
@@ -139,6 +141,8 @@ export const cotizaciones = sqliteTable(
     /** Never shown to the Contacto; become estimated Costos when the quote is accepted. */
     costosEstimados: text('costos_estimados', { mode: 'json' }).$type<CostoEstimado[]>().notNull().default([]),
     pdfRutaRelativa: text('pdf_ruta'),
+    /** Created by the Importación; a record the app creates keeps false. Reimportar desde cero removes only these. */
+    importado: integer('importado', { mode: 'boolean' }).notNull().default(false),
     creadoEn: creadoEn()
   },
   (t) => [
@@ -167,6 +171,8 @@ export const proyectos = sqliteTable(
     fechaEntrega: text('fecha_entrega'),
     fechaFin: text('fecha_fin'),
     notas: text('notas'),
+    /** Created by the Importación; a record the app creates keeps false. Reimportar desde cero removes only these. */
+    importado: integer('importado', { mode: 'boolean' }).notNull().default(false),
     creadoEn: creadoEn()
   },
   (t) => [
