@@ -206,6 +206,21 @@ describe('Reimportar desde cero', () => {
     expect(await h.importacion.aceptarVincular()).toEqual([])
     expect(conexion.db.select().from(proyectos).get()!.cotizacionId).not.toBeNull()
   })
+
+  it('answers a Sugerencia with another Proyecto and returns what is still pending', async () => {
+    const db = conexion.db
+    const frida = db.insert(contactos).values({ nombre: 'Frida' }).returning().get().id
+    const [web2023, web2027] = ['Web 2023', 'Web 2027'].map((nombre) => db.insert(proyectos).values({ nombre, contactoId: frida, categoria: 'website' }).returning().get().id)
+    const ingreso = db.insert(ingresos).values({ categoria: 'sin_factura', subtotal: 1000, total: 1000, fechaRegistro: '2026-09-01', contactoId: frida }).returning().get().id
+    const duplicado = db.insert(contactos).values({ nombre: 'Frida Comunicacion' }).returning().get().id
+    db.insert(sugerenciasImportacion).values({ entidad: 'ingreso', entidadId: ingreso, accion: 'vincular', proyectoId: web2023, motivo: 'monto' }).run()
+    db.insert(sugerenciasImportacion).values({ entidad: 'contacto', entidadId: duplicado, accion: 'fusionar', contactoId: frida, motivo: 'nombre' }).run()
+    const [vincular] = await h.importacion.sugerencias()
+
+    const quedan = await h.importacion.responder(vincular.id, { elegidas: [web2027] })
+    expect(quedan.map((s) => s.accion)).toEqual(['fusionar'])
+    expect(db.select().from(ingresos).where(eq(ingresos.id, ingreso)).get()!.proyectoId).toBe(web2027)
+  })
 })
 
 describe('Restauración', () => {

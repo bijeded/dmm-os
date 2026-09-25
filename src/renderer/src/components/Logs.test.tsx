@@ -12,7 +12,12 @@ const vincular: Sugerencia = {
   motivo: 'carpeta "Sonrieme" con el mismo nombre',
   creadoEn: '2026-09-12T09:14:00.000Z',
   registro: 'Cotización 475 · Sonrieme',
-  destino: 'Sonrieme'
+  destino: 'Sonrieme',
+  opciones: [
+    { id: 10, nombre: 'Sonrieme', sugerida: true },
+    { id: 11, nombre: 'Sonrieme Branding', sugerida: false }
+  ],
+  varias: false
 }
 const ubicacion: Sugerencia = {
   id: 2,
@@ -21,7 +26,9 @@ const ubicacion: Sugerencia = {
   motivo: 'cotización 300 aceptada sin carpeta: ¿archivado o no disponible?',
   creadoEn: '2026-09-12T09:14:01.000Z',
   registro: 'Proyecto Hotel Aura',
-  destino: null
+  destino: null,
+  opciones: [],
+  varias: false
 }
 
 const estado: EstadoImportacion = {
@@ -75,7 +82,12 @@ const fusionar: Sugerencia = {
   motivo: 'nombre parecido a "Sublime"',
   creadoEn: '2026-09-12T09:14:02.000Z',
   registro: 'Contacto Sublime Inspiración',
-  destino: 'Sublime'
+  destino: 'Sublime',
+  opciones: [
+    { id: 20, nombre: 'Sublime', sugerida: true },
+    { id: 21, nombre: 'Sublime Studio', sugerida: false }
+  ],
+  varias: false
 }
 
 let api: DmmApi['importacion']
@@ -147,8 +159,54 @@ describe('Configuración → Logs', () => {
     montar([ubicacion])
     await screen.findByText('Proyecto Hotel Aura')
     expect(screen.queryByRole('button', { name: 'Aceptar' })).toBe(null)
+    expect(screen.queryByRole('combobox')).toBe(null)
     fireEvent.click(screen.getByRole('button', { name: 'Archivado' }))
     await waitFor(() => expect(api.responder).toHaveBeenCalledWith(2, 'aceptada'))
+  })
+
+  it('presets the selector to the guess', async () => {
+    montar([vincular])
+    const selector = await screen.findByRole<HTMLSelectElement>('combobox', { name: /Vincular a/ })
+    expect(selector.value).toBe('10')
+    expect([...selector.options].map((o) => o.textContent)).toEqual(['Sonrieme', 'Sonrieme Branding'])
+  })
+
+  it('answers with another Proyecto', async () => {
+    montar([vincular])
+    fireEvent.change(await screen.findByRole('combobox', { name: /Vincular a/ }), { target: { value: '11' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Aceptar' }))
+    await waitFor(() => expect(api.responder).toHaveBeenCalledWith(1, { elegidas: [11] }))
+  })
+
+  it('merges into another Contacto', async () => {
+    montar([fusionar])
+    fireEvent.change(await screen.findByRole('combobox', { name: /Fusionar con/ }), { target: { value: '21' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Aceptar' }))
+    await waitFor(() => expect(api.responder).toHaveBeenCalledWith(3, { elegidas: [21] }))
+  })
+
+  it('shows no selector when the guess is the only opción', async () => {
+    montar([{ ...vincular, opciones: [vincular.opciones[0]] }])
+    expect(await screen.findByText(/→ Sonrieme/)).toBeTruthy()
+    expect(screen.queryByRole('combobox')).toBe(null)
+  })
+
+  it('goes back to the guess when the refreshed list no longer offers the pick', async () => {
+    montar([vincular, fusionar])
+    fireEvent.change(await screen.findByRole('combobox', { name: /Vincular a/ }), { target: { value: '11' } })
+    vi.mocked(api.responder).mockResolvedValueOnce([{ ...vincular, opciones: [vincular.opciones[0], { id: 12, nombre: 'Sonrieme 2', sugerida: false }] }])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Rechazar' })[1])
+    await waitFor(() => expect(screen.queryByText('Contacto Sublime Inspiración')).toBe(null))
+    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: /Vincular a/ }).value).toBe('10')
+  })
+
+  it('shows why an answer was refused', async () => {
+    montar([vincular])
+    vi.mocked(api.responder).mockRejectedValueOnce(new Error("Error invoking remote method 'importacion:responder': Error: Ese Proyecto ya no se puede elegir"))
+    fireEvent.change(await screen.findByRole('combobox', { name: /Vincular a/ }), { target: { value: '11' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Aceptar' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('Ese Proyecto ya no se puede elegir')
+    expect(screen.getByText('Cotización 475 · Sonrieme')).toBeTruthy()
   })
 
   it('says so when nothing is waiting', async () => {
@@ -315,5 +373,13 @@ describe('Aceptar todas', () => {
     expect(screen.getByText('Contacto Sublime Inspiración')).toBeTruthy()
     expect(screen.getByText('Proyecto Hotel Aura')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Aceptar todas' })).toBe(null)
+  })
+
+  it('keeps the guesses, ignoring a Proyecto picked but not sent', async () => {
+    montar([vincular, fusionar, ubicacion])
+    fireEvent.change(await screen.findByRole('combobox', { name: /Vincular a/ }), { target: { value: '11' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Aceptar todas' }))
+    await waitFor(() => expect(api.aceptarVincular).toHaveBeenCalledWith())
+    expect(api.responder).not.toHaveBeenCalled()
   })
 })

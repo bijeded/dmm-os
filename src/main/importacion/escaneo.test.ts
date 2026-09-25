@@ -318,6 +318,21 @@ describe('la carpeta de un Proyecto', () => {
     expect(escanearCarpetas(db, root).sugerencias).toBe(0)
   })
 
+  it('does not ask again once the link was corrected to another Proyecto', () => {
+    pdf(root, '2025', 'DMM - 475 - Clicme.pdf')
+    carpeta(root, 'Proyectos', 'Clicme')
+    escanearCarpetas(db, root)
+    const cotizacion = db.select().from(cotizaciones).get()!
+    const elegido = db.insert(proyectos).values({ nombre: 'Clicme Web', contactoId: cotizacion.contactoId, categoria: 'website' }).returning().get().id
+    const s = db.select().from(sugerenciasImportacion).get()!
+    responder(db, s.id, { elegidas: [elegido] })
+
+    expect(escanearCarpetas(db, root).sugerencias).toBe(0)
+    expect(db.select().from(sugerenciasImportacion).all()).toEqual([{ ...s, estado: 'corregida' }])
+    expect(db.select().from(proyectos).where(eq(proyectos.id, elegido)).get()!.cotizacionId).toBe(cotizacion.id)
+    expect(db.select().from(proyectos).where(eq(proyectos.id, s.proyectoId!)).get()!.cotizacionId).toBe(null)
+  })
+
   it('keeps the extra names of a legacy multi-project quote in the notes', () => {
     pdf(root, '2025', 'DMM - 475 - Clicme + Branding.pdf')
     carpeta(root, 'Proyectos', 'Clicme')

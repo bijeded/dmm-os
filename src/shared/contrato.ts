@@ -94,9 +94,13 @@ export const contrato = {
     reimportar: canal<[], ResultadoReimportar>(),
     /** What the last run of each importer found, so Logs survives leaving the screen. */
     estado: canal<[], EstadoImportacion>(),
-    /** The Sugerencias de importación still waiting for an accept/reject. */
+    /** The Sugerencias de importación still waiting for an answer, each with its opciones. */
     sugerencias: canal<[], Sugerencia[]>(),
-    /** Answers one Sugerencia, once, and returns the ones still pending. */
+    /**
+     * Answers one Sugerencia, once: accepts the guess, rejects it, or chooses among its opciones
+     * with `{ elegidas }`. Refused, changing nothing, when the answer is malformed or names an
+     * opción no longer offered. Returns the ones still pending.
+     */
     responder: canal<[id: number, respuesta: RespuestaSugerencia], Sugerencia[]>(),
     /** Aceptar todas: accepts every pending `vincular` Sugerencia at once, and returns the ones still pending. */
     aceptarVincular: canal<[], Sugerencia[]>()

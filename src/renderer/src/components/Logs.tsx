@@ -15,12 +15,13 @@ import type {
 } from '../../../shared/dominio'
 import { dia, pesos } from '../../../shared/formato'
 import { Aviso, Seccion, fecha, mensaje, useAccion } from './Seccion'
+import { campoCls } from './estilos'
 import { Button } from './ui/button'
 
 /**
  * Configuración → Logs: what each import run found, and the Sugerencias de importación it
- * left. A rescan reports; it never merges silently. Each Sugerencia is answered once, and an
- * answered one is never asked again.
+ * left. A rescan reports; it never merges silently. Each Sugerencia is answered once, with its
+ * guess or another of its opciones, and an answered one is never asked again.
  */
 export function Logs() {
   const api = window.dmm.importacion
@@ -48,6 +49,17 @@ export function Logs() {
 
   const contestar = (id: number, respuesta: RespuestaSugerencia) =>
     correr(async () => setSugerencias(await api.responder(id, respuesta)))
+
+  // The opción picked on each row, by Sugerencia id. A pick the refreshed list no longer offers
+  // falls back to the guess, so the selector never holds an id it cannot send.
+  const [elegidas, setElegidas] = useState<Record<number, number>>({})
+  const sugeridaDe = (s: Sugerencia) => s.opciones.find((o) => o.sugerida)?.id
+  const elegidaDe = (s: Sugerencia) =>
+    s.opciones.some((o) => o.id === elegidas[s.id]) ? elegidas[s.id] : sugeridaDe(s)
+  const aceptar = (s: Sugerencia) => {
+    const elegida = elegidaDe(s)
+    contestar(s.id, elegida === undefined || elegida === sugeridaDe(s) ? 'aceptada' : { elegidas: [elegida] })
+  }
 
   // A real scan makes the last preview stale.
   const escanear = () => importar(async () => {
@@ -134,7 +146,26 @@ export function Logs() {
             <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-2 text-[13px]">
               <span className="min-w-0">
                 {s.registro}
-                {s.destino && <span className="text-on-surface-muted"> → {s.destino}</span>}
+                {s.opciones.length > 1 ? (
+                  <span className="text-on-surface-muted">
+                    {' → '}
+                    <select
+                      aria-label={`${s.accion === 'fusionar' ? 'Fusionar con' : 'Vincular a'} (${s.registro})`}
+                      value={elegidaDe(s) ?? ''}
+                      onChange={(e) => setElegidas({ ...elegidas, [s.id]: Number(e.target.value) })}
+                      disabled={ocupado}
+                      className={campoCls}
+                    >
+                      {s.opciones.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                ) : (
+                  s.destino && <span className="text-on-surface-muted"> → {s.destino}</span>
+                )}
                 <span className="block text-on-surface-muted">{s.motivo}</span>
               </span>
               <span className="flex gap-2">
@@ -149,7 +180,7 @@ export function Logs() {
                   </>
                 ) : (
                   <>
-                    <Button disabled={ocupado} onClick={() => contestar(s.id, 'aceptada')}>
+                    <Button disabled={ocupado} onClick={() => aceptar(s)}>
                       Aceptar
                     </Button>
                     <Button variant="ghost" disabled={ocupado} onClick={() => contestar(s.id, 'rechazada')}>

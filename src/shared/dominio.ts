@@ -166,8 +166,24 @@ export const ACCIONES_SUGERENCIA = ['vincular', 'fusionar', 'ubicacion'] as cons
 export type AccionSugerencia = (typeof ACCIONES_SUGERENCIA)[number]
 export const ENTIDADES_SUGERENCIA = ['ingreso', 'costo', 'cotizacion', 'proyecto', 'contacto'] as const
 export type EntidadSugerencia = (typeof ENTIDADES_SUGERENCIA)[number]
-/** For `ubicacion`, where there is nothing to accept: `aceptada` is Archivado, `rechazada` No disponible. */
-export type RespuestaSugerencia = 'aceptada' | 'rechazada'
+/** An answer naming which of a Sugerencia's opciones were chosen, by id. */
+export interface Eleccion {
+  elegidas: number[]
+}
+/**
+ * `aceptada` takes the guess, `rechazada` refuses it, an `Eleccion` picks among the opciones.
+ * For `ubicacion`, where there is nothing to choose: `aceptada` is Archivado, `rechazada` No
+ * disponible.
+ */
+export type RespuestaSugerencia = 'aceptada' | 'rechazada' | Eleccion
+
+/** One choice a Sugerencia offers: a Proyecto to link to or a Contacto to merge into. */
+export interface OpcionSugerencia {
+  id: number
+  nombre: string
+  /** The guess, or what is pre-checked when several may be chosen. */
+  sugerida: boolean
+}
 
 /** A Sugerencia de importación as Logs shows it: what was guessed, about what, and why. */
 export interface Sugerencia {
@@ -181,6 +197,10 @@ export interface Sugerencia {
   registro: string
   /** The Proyecto to link to or the Contacto to merge into; `ubicacion` has none. */
   destino: string | null
+  /** What it can be answered with, sorted by nombre; empty when only the literals apply. */
+  opciones: OpcionSugerencia[]
+  /** Whether several opciones may be chosen at once. */
+  varias: boolean
 }
 
 /** The folders the app reads, and the state of the ones it cannot always reach. */

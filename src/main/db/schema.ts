@@ -401,7 +401,8 @@ export interface DeshacerSugerencia {
 }
 
 // Sugerencia de importación: a link the importer guessed, waiting in Logs for a one-time
-// accept/reject. The record it points at is already saved; only the link is in doubt.
+// answer: accept, reject, or another choice (`corregida`). The record it points at is
+// already saved; only the link is in doubt.
 export const sugerenciasImportacion = sqliteTable(
   'sugerencias_importacion',
   {
@@ -425,7 +426,7 @@ export const sugerenciasImportacion = sqliteTable(
     motivo: text('motivo').notNull(),
     /** What rejecting undoes; null for guesses that change nothing until accepted. */
     deshacer: text('deshacer', { mode: 'json' }).$type<DeshacerSugerencia>(),
-    estado: text('estado', { enum: ['pendiente', 'aceptada', 'rechazada'] })
+    estado: text('estado', { enum: ['pendiente', 'aceptada', 'rechazada', 'corregida'] })
       .notNull()
       .default('pendiente'),
     creadoEn: creadoEn()
