@@ -84,8 +84,10 @@ export function FichaProyecto() {
                   <Link to={`/contactos/${f.contactoId}`} className="text-primary-text">
                     {f.contacto}
                   </Link>
-                ) : (
+                ) : f.etiqueta === 'personal' ? (
                   'Personal'
+                ) : (
+                  'Sin Contacto'
                 )}
               </Fila>
               {f.clienteFinal && <Fila label="Cliente final">{f.clienteFinal}</Fila>}

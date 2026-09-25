@@ -251,6 +251,7 @@ function Corridas({ estado }: { estado: EstadoImportacion }) {
       {estado.carpetas && (
         <CorridaVista titulo="Carpetas" corrida={estado.carpetas} lineas={lineasCarpetas(estado.carpetas.log)}>
           <DetalleMapa log={estado.carpetas.log} />
+          <ProyectosSinContacto log={estado.carpetas.log} />
           <CotizacionesIncompletas log={estado.carpetas.log} />
         </CorridaVista>
       )}
@@ -362,7 +363,7 @@ function VistaPrevia({ log, titulo }: { log: LogCarpetas; titulo?: string }) {
           <PorOrigen titulo="Contactos nuevos" items={contactos.map((c) => ({ texto: c.nombre, origen: c.origen }))} />
           <PorOrigen
             titulo="Proyectos nuevos"
-            items={proyectos.map((p) => ({ texto: `${p.nombre} (${p.contacto})`, origen: p.origen }))}
+            items={proyectos.map((p) => ({ texto: `${p.nombre} (${p.contacto || 'sin Contacto'})`, origen: p.origen }))}
           />
           {rfcs.length > 0 && <span>RFC a asignar: {rfcs.map((r) => `${r.contacto} ${r.rfc}`).join(', ')}</span>}
           {log.noDisponibles.map((n) => (
@@ -378,6 +379,7 @@ function VistaPrevia({ log, titulo }: { log: LogCarpetas; titulo?: string }) {
         </>
       )}
       <DetalleMapa log={log} />
+      <ProyectosSinContacto log={log} />
       <CotizacionesNuevas log={log} />
       <CotizacionesIncompletas log={log} />
     </div>
@@ -418,6 +420,27 @@ function CotizacionesIncompletas({ log }: { log: LogCarpetas }) {
         {log.cotizacionesIncompletas.map((c) => (
           <li key={c.archivo}>
             {folioDmm(c.folio)} · {c.falta.map((f) => FALTAS[f]).join(', ')} · <span className="text-on-surface-muted">{c.archivo}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
+}
+
+/**
+ * The Proyectos the run created with no Contacto: nothing on disk said whose they are, so a map
+ * row should before the real run. When Cotizaciones of several Contactos name one, they are shown.
+ */
+function ProyectosSinContacto({ log }: { log: LogCarpetas }) {
+  if (log.proyectosSinContacto.length === 0) return null
+  return (
+    <details>
+      <summary className="cursor-pointer text-on-surface-muted">Proyectos sin Contacto ({log.proyectosSinContacto.length})</summary>
+      <ul className="m-0 flex list-none flex-col gap-0.5 p-0 pl-3">
+        {log.proyectosSinContacto.map((p) => (
+          <li key={p.ruta}>
+            {p.nombre} · <span className="text-on-surface-muted">{p.ruta}</span>
+            {p.contactos.length > 0 && ` · lo nombran ${p.contactos.join(', ')}`}
           </li>
         ))}
       </ul>

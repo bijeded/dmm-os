@@ -2,6 +2,7 @@ import { and, eq, isNotNull } from 'drizzle-orm'
 import type { OpcionSugerencia, Sugerencia, RespuestaSugerencia } from '../shared/dominio'
 import { monto } from '../shared/formato'
 import { partidasDelMonto, partidasGuardadas } from './importacion/pdf-cotizacion'
+import { heredarDeCotizacion } from './ciclo-proyecto'
 import { mejorEscrito } from './nombres'
 import { rutaDeProyecto } from './paths'
 import type { Db } from './db/index'
@@ -351,10 +352,15 @@ function vincular(tx: Tx, s: Fila, decision: Decision): void {
     // The guessed Proyecto lets go of the Cotización first, since a Cotización belongs to one
     // Proyecto. `aceptada` is set directly, as the guess did: imported history creates no
     // Ingresos or Costos (ADR-0002). The chosen Proyecto's notes and Cliente final stay as
-    // they are.
+    // they are; it takes the quote's categoría and fecha only where it has none.
     deshacerCotizacion(tx, s)
+    const cotizacion = tx.select().from(cotizaciones).where(eq(cotizaciones.id, s.entidadId)).get()!
+    const elegido = tx.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()
     tx.update(cotizaciones).set({ estado: 'aceptada' }).where(eq(cotizaciones.id, s.entidadId)).run()
-    tx.update(proyectos).set({ cotizacionId: s.entidadId }).where(eq(proyectos.id, proyectoId)).run()
+    tx.update(proyectos)
+      .set({ cotizacionId: s.entidadId, ...heredarDeCotizacion(elegido, cotizacion) })
+      .where(eq(proyectos.id, proyectoId))
+      .run()
   }
 }
 
@@ -375,9 +381,19 @@ function deshacerCotizacion(tx: Tx, s: Fila): void {
     previo?.clienteFinalEscrito !== undefined && proyecto?.clienteFinal === previo.clienteFinalEscrito
       ? null
       : (proyecto?.clienteFinal ?? null)
+  // So do the categoría and fecha de inicio it took from the quote, unless edited since.
+  const categoria =
+    previo?.categoriaEscrita !== undefined && proyecto?.categoria === previo.categoriaEscrita ? 'other' : proyecto?.categoria
+  const fechaInicio =
+    previo?.fechaInicioEscrita !== undefined && proyecto?.fechaInicio === previo.fechaInicioEscrita
+      ? null
+      : (proyecto?.fechaInicio ?? null)
   // A Cotización linked to the Proyecto by hand since is the user's.
   const cotizacionId = proyecto?.cotizacionId === s.entidadId ? null : (proyecto?.cotizacionId ?? null)
-  tx.update(proyectos).set({ cotizacionId, notas, clienteFinal }).where(eq(proyectos.id, proyectoId)).run()
+  tx.update(proyectos)
+    .set({ cotizacionId, notas, clienteFinal, fechaInicio, ...(categoria && { categoria }) })
+    .where(eq(proyectos.id, proyectoId))
+    .run()
 }
 
 /**

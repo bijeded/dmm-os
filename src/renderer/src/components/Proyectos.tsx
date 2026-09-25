@@ -45,7 +45,12 @@ export function Proyectos() {
     const q = normalizar(busqueda.trim())
     return todos.filter(
       (p) =>
-        (!contacto || (contacto === 'personal' ? p.etiqueta === 'personal' : String(p.contactoId) === contacto)) &&
+        (!contacto ||
+          (contacto === 'personal'
+            ? p.etiqueta === 'personal'
+            : contacto === 'sin_contacto'
+              ? p.etiqueta === 'cliente' && p.contactoId === null
+              : String(p.contactoId) === contacto)) &&
         (!anio || p.fechaInicio?.startsWith(anio)) &&
         (!categoria || p.categoria === categoria) &&
         (!estado || p.estado === estado) &&
@@ -96,6 +101,7 @@ export function Proyectos() {
             <select aria-label="Contacto" value={contacto} onChange={(e) => setContacto(e.target.value)} className={campoCls}>
               <option value="">Contacto: Todos</option>
               <option value="personal">Personal</option>
+              <option value="sin_contacto">Sin Contacto</option>
               {contactos.map(([id, nombre]) => (
                 <option key={id} value={id}>
                   {nombre}
@@ -152,7 +158,11 @@ export function Proyectos() {
                     {p.nombre}
                   </td>
                   <td data-label="Contacto" className={celdaCls}>
-                    {p.etiqueta === 'personal' ? <span className="text-on-surface-muted">Personal</span> : p.contacto}
+                    {p.etiqueta === 'personal' ? (
+                      <span className="text-on-surface-muted">Personal</span>
+                    ) : (
+                      (p.contacto ?? <span className="text-on-surface-muted">Sin Contacto</span>)
+                    )}
                     {p.clienteFinal && <span className="text-on-surface-muted"> · {p.clienteFinal}</span>}
                   </td>
                   <td data-label="Categoría" className={celdaCls}>

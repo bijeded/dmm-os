@@ -129,6 +129,11 @@ export interface LogCarpetas {
   filasMapa: { linea: number; problema: ProblemaFilaMapa; enDisco: string }[]
   /** Subfolders of a folder whose other subfolders the map declares Proyectos; not imported. */
   subcarpetasSinProyecto: string[]
+  /**
+   * Proyectos sin Contacto this run created: folders no map row, Contacto or Cotización
+   * attributes. `contactos` names the Contactos whose Cotizaciones name it, when several do.
+   */
+  proyectosSinContacto: { nombre: string; ruta: string; contactos: string[] }[]
   /** What this run created, named as it ended up, and where each came from. */
   nuevos: {
     contactos: { nombre: string; origen: OrigenImportado }[]

@@ -7,6 +7,7 @@ import { costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos,
 import { contacto, cotizacionAceptada, db, ingresoBase, proyecto, reiniciarDb } from './db/test-db'
 import { escanear } from './importacion'
 import { importarCarpetaProyecto } from './importacion/carpetas'
+import { resumenInicio } from './inicio'
 import { pdfDeTexto } from './importacion/pdf-prueba'
 import {
   borrarProyecto,
@@ -332,5 +333,11 @@ describe('listar', () => {
     expect(l.proyectos[0]).toMatchObject({ contacto: null, etiqueta: 'personal', carpeta: { estado: 'disponible' } })
     expect(l.conteo).toEqual({ en_curso: 1, pausado: 1, completado: 0, cancelado: 0 })
     expect(l.porCategoria).toMatchObject({ website: 1, ai: 1, app: 0 })
+  })
+
+  it('lists a Proyecto sin Contacto, and Inicio shows it en curso', () => {
+    const p = db.insert(proyectos).values({ nombre: 'Activista', categoria: 'other', estado: 'en_curso', importado: true }).returning().get()
+    expect(listarProyectos(db, root).proyectos).toEqual([expect.objectContaining({ id: p.id, etiqueta: 'cliente', contactoId: null, contacto: null })])
+    expect(resumenInicio(db, root, hoy, 30).proyectos.map((f) => f.nombre)).toEqual(['Activista'])
   })
 })

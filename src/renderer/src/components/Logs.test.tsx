@@ -47,6 +47,7 @@ const estado: EstadoImportacion = {
       mapa: 'leido',
       filasMapa: [{ linea: 7, problema: 'sin uso', enDisco: 'Appleseed Plataformma' }],
       subcarpetasSinProyecto: [],
+      proyectosSinContacto: [],
       nuevos: { contactos: [], proyectos: [], rfcs: [], cotizaciones: [] },
       cotizacionesIncompletas: []
     }
@@ -65,6 +66,7 @@ const vista: LogCarpetas = {
   mapa: 'leido',
   filasMapa: [{ linea: 4, problema: 'rfc generico', enDisco: 'Frida Communication' }],
   subcarpetasSinProyecto: ['Proyectos/DMM Studios/Multisite'],
+  proyectosSinContacto: [],
   nuevos: {
     contactos: [
       { nombre: 'Appleseed', origen: 'cotizacion' },
@@ -471,6 +473,40 @@ describe('¿Qué aceptó?', () => {
     await screen.findByText('Cotización 308 · 3 Moon Wishes')
     fireEvent.click(screen.getByRole('button', { name: 'Rechazar' }))
     await waitFor(() => expect(api.responder).toHaveBeenCalledWith(4, 'rechazada'))
+  })
+})
+
+describe('Proyectos sin Contacto', () => {
+  const sinContacto = (log: LogCarpetas): LogCarpetas => ({
+    ...log,
+    proyectosSinContacto: [
+      { nombre: 'Activista', ruta: 'Proyectos/Activista', contactos: [] },
+      { nombre: 'Tingo', ruta: 'Proyectos/Tingo', contactos: ['Lukka', 'Sublime'] }
+    ],
+    nuevos: { ...log.nuevos, proyectos: [{ nombre: 'Activista', contacto: '', origen: 'proyectos' }] }
+  })
+
+  it('lists them after a real scan, with the Contactos that name one', async () => {
+    montar([], { facturas: null, carpetas: { ...estado.carpetas!, log: sinContacto(estado.carpetas!.log) } })
+    const lista = (await screen.findByText('Proyectos sin Contacto (2)')).parentElement!.textContent
+    expect(lista).toContain('Activista · Proyectos/Activista')
+    expect(lista).toContain('Tingo · Proyectos/Tingo · lo nombran Lukka, Sublime')
+  })
+
+  it('lists them in Vista previa, and names a new one as sin Contacto', async () => {
+    montar([], estado, sinContacto(vista))
+    await screen.findByText(/3 importadas/)
+    fireEvent.click(screen.getByRole('button', { name: 'Vista previa' }))
+    expect(await screen.findByText('Proyectos sin Contacto (2)')).toBeTruthy()
+    expect(screen.getByText('Proyectos nuevos · Proyectos/ (1):').parentElement!.textContent).toContain('Activista (sin Contacto)')
+  })
+
+  it('lists them in Vista previa desde cero', async () => {
+    desdeCero = { log: sinContacto(vista), bloqueos: [] }
+    montar([])
+    await screen.findByText(/3 importadas/)
+    fireEvent.click(screen.getByRole('button', { name: 'Vista previa desde cero' }))
+    expect(await screen.findByText('Proyectos sin Contacto (2)')).toBeTruthy()
   })
 })
 

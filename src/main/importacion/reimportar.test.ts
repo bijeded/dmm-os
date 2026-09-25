@@ -183,7 +183,7 @@ describe('borrarImportado', () => {
     ajustes.escribir('hdd.root', '/Volumes/HDD')
     const intactas = [usoTokens, ahorroTokens, tareas, catalogo, settings]
     const antes = intactas.map((t) => db.select().from(t).all())
-    expect(cuantos()).toMatchObject({ contactos: 4, ingresos: 3, sugerenciasImportacion: 2 })
+    expect(cuantos()).toMatchObject({ contactos: 3, ingresos: 3, sugerenciasImportacion: 2 })
 
     db.transaction((tx) => borrarImportado(tx))
 
@@ -208,7 +208,7 @@ describe('reimportar', () => {
     importado()
     const alRespaldar: ReturnType<typeof cuantos>[] = []
     const r = await reimportar(db, entorno({ respaldar: () => alRespaldar.push(cuantos()) }))
-    expect(alRespaldar).toEqual([expect.objectContaining({ contactos: 4, ingresos: 3 })])
+    expect(alRespaldar).toEqual([expect.objectContaining({ contactos: 3, ingresos: 3 })])
     expect(r).toMatchObject({ reimportado: true, carpetas: { cotizaciones: { importadas: 2 } }, facturas: { importados: 3 } })
   })
 
