@@ -42,12 +42,14 @@ import {
 } from './proyectos'
 import { agregarTarea, borrarTarea, completarTarea, listarTareas } from './tareas'
 import { escanearCarpetas, importarFacturas, marcarHddNoDisponible } from './importacion'
+import { bloqueos, borrarImportado, reimportar } from './importacion/reimportar'
 import { ejecutarCli, leerUso, resumenAi, type EjecutarUso } from './ai'
 import { agentesYSkills, rutaAgenteOSkill } from './agentes-skills'
 import { archivosLab, buscarLab, carpetasLab, rutaEnLab, vistaPreviaLab } from './lab'
 import { dbAlDia } from './ledger'
 import { leerRutas } from './rutas'
-import { pendientes, responder } from './sugerencias'
+import { aceptarVincular, pendientes, responder } from './sugerencias'
+import { sql } from 'drizzle-orm'
 import { diaLocal } from '../shared/fechas'
 import type { EstadoImportacion } from '../shared/dominio'
 import type { AppInfo, DmmHandlers } from '../shared/contrato'
@@ -55,7 +57,7 @@ import type { AppInfo, DmmHandlers } from '../shared/contrato'
 export interface HandlersOptions {
   conexion: Conexion
   info: AppInfo
-  respaldos: Pick<Respaldos, 'estado' | 'crear' | 'configurar' | 'restaurar'>
+  respaldos: Pick<Respaldos, 'estado' | 'crear' | 'configurar' | 'restaurar' | 'antesDeReimportar'>
   /** What only Electron can do: ask the user for a path (undefined when cancelled) and open a folder. */
   elegirRespaldo: () => Promise<string | undefined>
   elegirHdd: () => Promise<string | undefined>
@@ -125,12 +127,39 @@ export function crearHandlers({
           copia.close()
         }
       },
+      vistaPreviaDesdeCero: () => {
+        const copia = conexion.copiaEnMemoria()
+        try {
+          // Off on the throwaway copy only: the preview runs even while hand-made records
+          // reference imported ones, and the scan never follows those references.
+          copia.db.run(sql`PRAGMA foreign_keys = OFF`)
+          borrarImportado(copia.db)
+          const log = escanearCarpetas(copia.db, info.dmmOsRoot, hddRoot(), hoy())
+          return { log, bloqueos: bloqueos(conexion.db, { root: info.dmmOsRoot, hddRoot: hddRoot() }) }
+        } finally {
+          copia.close()
+        }
+      },
+      reimportar: () => {
+        const r = reimportar(conexion.db, {
+          root: info.dmmOsRoot,
+          hddRoot: hddRoot(),
+          hoy: hoy(),
+          respaldar: () => void respaldos.antesDeReimportar()
+        })
+        if (r.reimportado) {
+          ultimo.carpetas = { corridoEn: ahora(), log: r.carpetas }
+          ultimo.facturas = { corridoEn: ahora(), log: r.facturas }
+        }
+        return r
+      },
       estado: () => ultimo,
       sugerencias: () => pendientes(conexion.db),
       responder: (id, respuesta) => {
         responder(conexion.db, id, respuesta, hoy())
         return pendientes(conexion.db)
-      }
+      },
+      aceptarVincular: () => aceptarVincular(conexion.db, hoy())
     },
     rutas: {
       leer: rutas,

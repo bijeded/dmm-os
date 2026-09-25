@@ -59,6 +59,14 @@ describe('Respaldos', () => {
     expect(valueOf(b.path, 'x')).toBe('1')
   })
 
+  it('lists a Respaldo taken before a reimport', () => {
+    const { conexion, respaldos } = setup()
+    const b = respaldos.antesDeReimportar()
+    conexion.close()
+    expect(b.motivo).toBe('antes-de-reimportar')
+    expect(listBackups(vault)).toEqual([expect.objectContaining({ archivo: b.archivo, motivo: 'antes-de-reimportar' })])
+  })
+
   it('keeps only the configured number per motivo, dropping the oldest', () => {
     let t = Date.parse('2026-01-01T00:00:00Z')
     const { conexion, respaldos } = setup({ now: () => new Date((t += day)) })

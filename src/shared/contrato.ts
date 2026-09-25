@@ -29,12 +29,14 @@ import type {
   ProyectoNuevo,
   Respaldo,
   RespuestaSugerencia,
+  ResultadoReimportar,
   ResultadoRestaurar,
   ResumenAi,
   ResumenFinanzas,
   ResumenInicio,
   Rutas,
   Sugerencia,
+  VistaPreviaDesdeCero,
   VistaPreviaLab
 } from './dominio'
 
@@ -68,7 +70,7 @@ export const contrato = {
     restaurar: canal<[path?: string], ResultadoRestaurar>()
   },
   importacion: {
-    /** Re-reads `Facturas/Emitidas` and `Facturas/Recibidas`; safe to run again at any time. */
+    /** Imports `Facturas/Emitidas` and counts `Facturas/Recibidas`; safe to run again at any time. */
     facturas: canal<[], LogImportacion>(),
     /**
      * Re-reads `Cotizaciones/`, `Clientes/`, `Proyectos/` and `Archivo/Proyectos/`, with the
@@ -80,12 +82,24 @@ export const contrato = {
      * a real scan would add and writes nothing, not even the last run Logs shows.
      */
     vistaPrevia: canal<[], LogCarpetas>(),
+    /**
+     * Vista previa desde cero: the folder scan on a throwaway copy with the Importación's records
+     * removed, so it shows what Reimportar desde cero would create, and why that would be refused.
+     */
+    vistaPreviaDesdeCero: canal<[], VistaPreviaDesdeCero>(),
+    /**
+     * Reimportar desde cero: takes a Respaldo, removes every record the Importación made and runs
+     * the folder scan and the Facturas run again. Refused, removing nothing, while anything would be lost.
+     */
+    reimportar: canal<[], ResultadoReimportar>(),
     /** What the last run of each importer found, so Logs survives leaving the screen. */
     estado: canal<[], EstadoImportacion>(),
     /** The Sugerencias de importación still waiting for an accept/reject. */
     sugerencias: canal<[], Sugerencia[]>(),
     /** Answers one Sugerencia, once, and returns the ones still pending. */
-    responder: canal<[id: number, respuesta: RespuestaSugerencia], Sugerencia[]>()
+    responder: canal<[id: number, respuesta: RespuestaSugerencia], Sugerencia[]>(),
+    /** Aceptar todas: accepts every pending `vincular` Sugerencia at once, and returns the ones still pending. */
+    aceptarVincular: canal<[], Sugerencia[]>()
   },
   rutas: {
     leer: canal<[], Rutas>(),

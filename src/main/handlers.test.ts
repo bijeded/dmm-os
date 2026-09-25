@@ -40,7 +40,8 @@ beforeEach(() => {
       estado: vi.fn(),
       crear: vi.fn(),
       configurar: vi.fn(),
-      restaurar: vi.fn(() => ({ restaurado: true }))
+      restaurar: vi.fn(() => ({ restaurado: true })),
+      antesDeReimportar: vi.fn()
     } as unknown as HandlersOptions['respaldos'],
     elegirRespaldo: vi.fn(async () => undefined),
     elegirHdd: vi.fn(async () => undefined),
@@ -130,6 +131,80 @@ describe('Vista previa', () => {
     const log = await h.importacion.vistaPrevia()
     expect(log.mapa).toEqual({ error: expect.stringContaining('_nombres.csv') })
     expect(log.nuevos.contactos).toEqual([])
+  })
+})
+
+describe('Reimportar desde cero', () => {
+  const MAPA = join('Clientes', '_nombres.csv')
+  /** Already imported without the map row for Appleseed Plataforma. */
+  const importado = async () => {
+    mkdirSync(join(root, 'Clientes', 'Sublime'), { recursive: true })
+    mkdirSync(join(root, 'Proyectos', 'Clicme'), { recursive: true })
+    mkdirSync(join(root, 'Cotizaciones', '2023'), { recursive: true })
+    mkdirSync(join(root, 'Cotizaciones', '2025'), { recursive: true })
+    writeFileSync(join(root, 'Cotizaciones', '2023', 'DMM - 312 - Appleseed Plataforma.pdf'), '%PDF-1.4')
+    writeFileSync(join(root, 'Cotizaciones', '2025', 'DMM - 475 - Clicme.pdf'), '%PDF-1.4')
+    writeFileSync(join(root, MAPA), 'en disco,contacto,proyecto\n')
+    await h.importacion.carpetas()
+    writeFileSync(join(root, MAPA), 'en disco,contacto,proyecto\nAppleseed Plataforma,Appleseed,Plataforma\n')
+  }
+  const nombres = () => conexion.db.select().from(contactos).all().map((c) => c.nombre).sort()
+
+  it('takes a Respaldo antes de reimportar and shows both runs as the last ones', async () => {
+    await importado()
+    const r = await h.importacion.reimportar()
+    expect(opciones.respaldos.antesDeReimportar).toHaveBeenCalledTimes(1)
+    expect(r).toMatchObject({ reimportado: true, carpetas: { cotizaciones: { importadas: 2 } } })
+    if (!r.reimportado) throw new Error('rechazado')
+    expect(await h.importacion.estado()).toEqual({
+      carpetas: { corridoEn: '2026-09-16T10:00:00.000Z', log: r.carpetas },
+      facturas: { corridoEn: '2026-09-16T10:00:00.000Z', log: r.facturas }
+    })
+    expect(nombres()).toEqual(['Appleseed', 'Clicme', 'Sublime'])
+  })
+
+  it('is refused while a hand-entered Ingreso exists, taking no Respaldo', async () => {
+    await importado()
+    conexion.db.insert(ingresos).values({ categoria: 'sin_factura', estado: 'pagado', subtotal: 1000, total: 1000, fechaRegistro: '2026-09-01' }).run()
+    expect(await h.importacion.reimportar()).toEqual({ reimportado: false, bloqueos: [{ motivo: 'a_mano', registro: 'ingreso', cantidad: 1 }] })
+    expect(opciones.respaldos.antesDeReimportar).not.toHaveBeenCalled()
+    expect(nombres()).toContain('Appleseed Plataforma')
+  })
+
+  it('previews desde cero without touching the live database, its Sugerencias or Logs', async () => {
+    await importado()
+    const antes = { nombres: nombres(), pendientes: await h.importacion.sugerencias(), estado: structuredClone(await h.importacion.estado()) }
+
+    const { log, bloqueos } = await h.importacion.vistaPreviaDesdeCero()
+    expect(bloqueos).toEqual([])
+    expect(log.nuevos.contactos.map((c) => c.nombre)).not.toContain('Appleseed Plataforma')
+    expect(log.nuevos.contactos.map((c) => c.nombre)).toContain('Appleseed')
+    expect(log.cotizaciones).toEqual({ importadas: 2, duplicadas: 0 })
+
+    expect(nombres()).toEqual(antes.nombres)
+    expect(nombres()).toContain('Appleseed Plataforma')
+    expect(await h.importacion.sugerencias()).toEqual(antes.pendientes)
+    expect(await h.importacion.estado()).toEqual(antes.estado)
+  })
+
+  it('still previews while a hand-entered Ingreso points at an imported Contacto, and names the block', async () => {
+    await importado()
+    const sublime = conexion.db.select().from(contactos).where(eq(contactos.nombre, 'Sublime')).get()!
+    conexion.db
+      .insert(ingresos)
+      .values({ categoria: 'sin_factura', estado: 'pagado', subtotal: 1000, total: 1000, fechaRegistro: '2026-09-01', contactoId: sublime.id })
+      .run()
+    const { log, bloqueos } = await h.importacion.vistaPreviaDesdeCero()
+    expect(log.cotizaciones.importadas).toBe(2)
+    expect(bloqueos).toEqual([{ motivo: 'a_mano', registro: 'ingreso', cantidad: 1 }])
+    expect(conexion.db.select().from(ingresos).get()!.contactoId).toBe(sublime.id)
+  })
+
+  it('accepts every pending vincular from Logs', async () => {
+    await importado()
+    expect((await h.importacion.sugerencias()).map((s) => s.accion)).toEqual(['vincular'])
+    expect(await h.importacion.aceptarVincular()).toEqual([])
+    expect(conexion.db.select().from(proyectos).get()!.cotizacionId).not.toBeNull()
   })
 })
 
@@ -845,7 +920,17 @@ describe('Every ledger command works Al día', () => {
   // Every entry of every section over the ledger. Typed against the handlers, so a new entry does not compile until it is listed here.
   const entradas: { [S in 'importacion' | 'contactos' | 'cotizaciones' | 'proyectos' | 'finanzas' | 'inicio' | 'ai']: Record<keyof DmmHandlers[S], Uso> } = {
     // Imported history is exempt (ADR-0002): the importer writes through the connection, and the next call brings it Al día.
-    importacion: { facturas: 'fuera', carpetas: 'fuera', vistaPrevia: 'fuera', estado: 'fuera', sugerencias: 'fuera', responder: 'fuera' },
+    importacion: {
+      facturas: 'fuera',
+      carpetas: 'fuera',
+      vistaPrevia: 'fuera',
+      vistaPreviaDesdeCero: 'fuera',
+      reimportar: 'fuera',
+      estado: 'fuera',
+      sugerencias: 'fuera',
+      responder: 'fuera',
+      aceptarVincular: 'fuera'
+    },
     contactos: { listar: () => h.contactos.listar(), ficha: (a) => h.contactos.ficha(a.contactoId), guardar: 'orden', borrar: 'orden', csv: () => h.contactos.csv() },
     cotizaciones: {
       listar: () => h.cotizaciones.listar(),

@@ -79,7 +79,7 @@ function sumar(corrida: Corrida, aportes: Aportes, origen: OrigenImportado): voi
  * The Mapa de nombres, or `null` when it exists but cannot be used: then the scan imports
  * nothing rather than import without it.
  */
-function leerMapaDe(root: string, log: LogCarpetas): Mapa | null {
+export function leerMapaDe(root: string, log: Pick<LogCarpetas, 'mapa'>): Mapa | null {
   let texto: string
   try {
     texto = readFileSync(join(root, RUTA_MAPA), 'utf8')

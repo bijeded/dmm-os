@@ -12,9 +12,9 @@
 
 ## 3. Reimport module
 
-- [ ] 3.1 Create `src/main/importacion/reimportar.ts` with `bloqueos(db, entorno)`: counts of Contactos, Cotizaciones and Proyectos with `importado = 0`, Ingresos and Costos without `cfdi_uuid`, definiciones de Ingreso and Costo, an unreadable map, and a set-up HDD whose `Proyectos` cannot be read. Pinned in `src/main/importacion/reimportar.test.ts`: one case per spec scenario under "Reimportar desde cero is refused when it would lose data", plus an edited imported Contacto that does not block.
-- [ ] 3.2 Add `borrarImportado(tx)` to the same module, deleting in the order of design.md §2. Pinned in `reimportar.test.ts`: after it, no Contacto, Cotización, Proyecto, `ubicaciones_archivo` row, CFDI Ingreso or Costo, or Sugerencia remains, while `uso_tokens`, `ahorro_tokens`, `tareas`, `catalogo` and `settings` are unchanged.
-- [ ] 3.3 Add `reimportar(db, entorno)`: guard, then Respaldo callback, then `borrarImportado` in one transaction, then `escanearCarpetas` and `importarFacturas`. Pinned in `reimportar.test.ts` on a fixture root:
+- [x] 3.1 Create `src/main/importacion/reimportar.ts` with `bloqueos(db, entorno)`: counts of Contactos, Cotizaciones and Proyectos with `importado = 0`, Ingresos and Costos without `cfdi_uuid`, definiciones de Ingreso and Costo, an unreadable map, and a set-up HDD whose `Proyectos` cannot be read. Pinned in `src/main/importacion/reimportar.test.ts`: one case per spec scenario under "Reimportar desde cero is refused when it would lose data", plus an edited imported Contacto that does not block.
+- [x] 3.2 Add `borrarImportado(tx)` to the same module, deleting in the order of design.md §2. Pinned in `reimportar.test.ts`: after it, no Contacto, Cotización, Proyecto, `ubicaciones_archivo` row, CFDI Ingreso or Costo, or Sugerencia remains, while `uso_tokens`, `ahorro_tokens`, `tareas`, `catalogo` and `settings` are unchanged.
+- [x] 3.3 Add `reimportar(db, entorno)`: guard, then Respaldo callback, then `borrarImportado` in one transaction, then `escanearCarpetas` and `importarFacturas`. Pinned in `reimportar.test.ts` on a fixture root:
   - a map fix reaches an imported quote (Frida)
   - an accepted *vincular* comes back pending
   - a USD Ingreso is reimported with its original amount
@@ -26,12 +26,12 @@
 
 ## 4. Aceptar todas
 
-- [ ] 4.1 Split `responder` in `src/main/sugerencias.ts` into a wrapper and `responderEn(tx, …)`, and add `aceptarVincular(db, hoy)`. Pinned in `src/main/sugerencias.test.ts`: with *vincular*, *fusionar* and *ubicación* pending, only the *vincular* are accepted and their links kept; a failure in one leaves all of them pending.
+- [x] 4.1 Split `responder` in `src/main/sugerencias.ts` into a wrapper and `responderEn(tx, …)`, and add `aceptarVincular(db, hoy)`. Pinned in `src/main/sugerencias.test.ts`: with *vincular*, *fusionar* and *ubicación* pending, only the *vincular* are accepted and their links kept; a failure in one leaves all of them pending.
 
 ## 5. IPC and Respaldo
 
-- [ ] 5.1 Add `antes-de-reimportar` to `MOTIVOS_RESPALDO`. Pinned by `src/main/backup.test.ts`: a Respaldo with that reason is listed.
-- [ ] 5.2 Declare `importacion.reimportar`, `importacion.vistaPreviaDesdeCero` and `importacion.aceptarVincular` in `src/shared/contrato.ts`, with `ResultadoReimportar`, `VistaPreviaDesdeCero` and `Bloqueo` types in `src/shared/dominio.ts`, and wire them thinly in `src/main/handlers.ts`. The reimport passes `respaldos` as the callback and stores both logs in `ultimo`. Vista previa desde cero removes on `copiaEnMemoria()` with foreign keys off (design.md §3). Pinned in `src/main/handlers.test.ts`:
+- [x] 5.1 Add `antes-de-reimportar` to `MOTIVOS_RESPALDO`. Pinned by `src/main/backup.test.ts`: a Respaldo with that reason is listed.
+- [x] 5.2 Declare `importacion.reimportar`, `importacion.vistaPreviaDesdeCero` and `importacion.aceptarVincular` in `src/shared/contrato.ts`, with `ResultadoReimportar`, `VistaPreviaDesdeCero` and `Bloqueo` types in `src/shared/dominio.ts`, and wire them thinly in `src/main/handlers.ts`. The reimport passes `respaldos` as the callback and stores both logs in `ultimo`. Vista previa desde cero removes on `copiaEnMemoria()` with foreign keys off (design.md §3). Pinned in `src/main/handlers.test.ts`:
   - a reimport takes a Respaldo *antes de reimportar* and updates `estado()`
   - Vista previa desde cero leaves the live database, its pending Sugerencias and `estado()` unchanged, and lists "Appleseed Plataforma" no more after a map fix
   - with a hand-entered Ingreso it still returns a preview, plus the block

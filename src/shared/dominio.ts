@@ -13,7 +13,7 @@ export type CategoriaIngreso = (typeof CATEGORIAS_INGRESO)[number]
 export const ESTADOS_FACTURACION = ['por_facturar', 'facturado'] as const
 export type EstadoFacturacion = (typeof ESTADOS_FACTURACION)[number]
 
-export const MOTIVOS_RESPALDO = ['semanal', 'migracion', 'manual', 'antes-de-restaurar'] as const
+export const MOTIVOS_RESPALDO = ['semanal', 'migracion', 'manual', 'antes-de-restaurar', 'antes-de-reimportar'] as const
 export type MotivoRespaldo = (typeof MOTIVOS_RESPALDO)[number]
 
 export interface Respaldo {
@@ -81,6 +81,30 @@ export interface CambioFactura {
    * Reembolso, or its complementos no longer match the Parcialidades already paid (`complementos`).
    */
   motivo: 'cancelada' | 'sustituida' | 'pagos' | 'editado' | 'reembolso' | 'complementos'
+}
+
+/** A kind of record made by hand, which Reimportar desde cero would lose. */
+export const REGISTROS_A_MANO = ['contacto', 'cotizacion', 'proyecto', 'ingreso', 'costo', 'definicion_ingreso', 'definicion_costo'] as const
+export type RegistroAMano = (typeof REGISTROS_A_MANO)[number]
+
+/**
+ * Why Reimportar desde cero is refused: records made by hand, of one kind and how many; a Mapa de
+ * nombres that cannot be read; or an external HDD that is set up but not connected.
+ */
+export type Bloqueo =
+  | { motivo: 'a_mano'; registro: RegistroAMano; cantidad: number }
+  | { motivo: 'mapa'; error: string }
+  | { motivo: 'hdd'; ruta: string }
+
+/** Reimportar desde cero: refused with its Bloqueos, or both runs it made on the emptied ledger. */
+export type ResultadoReimportar =
+  | { reimportado: false; bloqueos: Bloqueo[] }
+  | { reimportado: true; carpetas: LogCarpetas; facturas: LogImportacion }
+
+/** Vista previa desde cero: the folder scan a reimport would make, and why the reimport would be refused. */
+export interface VistaPreviaDesdeCero {
+  log: LogCarpetas
+  bloqueos: Bloqueo[]
 }
 
 /** What one rescan of `Cotizaciones/`, `Clientes/` and `Proyectos/` found. */

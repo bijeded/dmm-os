@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { Sugerencia, RespuestaSugerencia } from '../shared/dominio'
 import { mejorEscrito } from './nombres'
 import { rutaDeProyecto } from './paths'
@@ -101,17 +101,36 @@ export function responder(db: Db, id: number, respuesta: RespuestaSugerencia, ho
   db.transaction((tx) => {
     const s = tx.select().from(sugerenciasImportacion).where(eq(sugerenciasImportacion.id, id)).get()
     if (!s) throw new Error(`No existe la sugerencia ${id}`)
-    if (s.estado !== 'pendiente') throw new Error('Esa sugerencia ya fue respondida')
-
-    if (s.accion === 'vincular') vincular(tx, s, respuesta)
-    else if (s.accion === 'fusionar' && respuesta === 'aceptada') fusionar(tx, s.entidadId, s.contactoId!)
-    else if (s.accion === 'ubicacion') ubicacion(tx, s.entidadId, respuesta, hoy)
-
-    tx.update(sugerenciasImportacion).set({ estado: respuesta }).where(eq(sugerenciasImportacion.id, id)).run()
+    responderEn(tx, s, respuesta, hoy)
   })
 }
 
+/**
+ * Aceptar todas: accepts every pending `vincular`, exactly as accepting each one would, and
+ * leaves `fusionar` and `ubicacion` waiting. All of them or, if one fails, none. Returns what
+ * is still pending.
+ */
+export function aceptarVincular(db: Db, hoy = hoyLocal()): Sugerencia[] {
+  db.transaction((tx) => {
+    const esperando = and(eq(sugerenciasImportacion.estado, 'pendiente'), eq(sugerenciasImportacion.accion, 'vincular'))
+    for (const s of tx.select().from(sugerenciasImportacion).where(esperando).orderBy(sugerenciasImportacion.id).all())
+      responderEn(tx, s, 'aceptada', hoy)
+  })
+  return pendientes(db)
+}
+
 type Fila = typeof sugerenciasImportacion.$inferSelect
+
+/** Answers `s` inside the caller's transaction. */
+export function responderEn(tx: Tx, s: Fila, respuesta: RespuestaSugerencia, hoy: string): void {
+  if (s.estado !== 'pendiente') throw new Error('Esa sugerencia ya fue respondida')
+
+  if (s.accion === 'vincular') vincular(tx, s, respuesta)
+  else if (s.accion === 'fusionar' && respuesta === 'aceptada') fusionar(tx, s.entidadId, s.contactoId!)
+  else if (s.accion === 'ubicacion') ubicacion(tx, s.entidadId, respuesta, hoy)
+
+  tx.update(sugerenciasImportacion).set({ estado: respuesta }).where(eq(sugerenciasImportacion.id, s.id)).run()
+}
 
 /**
  * `vincular` attaches a record to the guessed Proyecto. An Ingreso or Costo is only linked on

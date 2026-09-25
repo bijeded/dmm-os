@@ -2,9 +2,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { escanearCarpetas } from './importacion'
-import { pendientes, responder } from './sugerencias'
+import { aceptarVincular, pendientes, responder } from './sugerencias'
 import { contactos, costos, cotizaciones, ingresos, proyectos, sugerenciasImportacion, ubicacionesArchivo } from './db/schema'
 import { db, ingresoBase, reiniciarDb } from './db/test-db'
 
@@ -255,5 +255,38 @@ describe('answering twice', () => {
     const { id } = unaSugerencia()
     responder(db, id, 'aceptada')
     expect(() => responder(db, id, 'rechazada')).toThrow()
+  })
+})
+
+describe('Aceptar todas', () => {
+  /** Two guessed Ingresos, a near-duplicate Contacto and a Proyecto with no folder, all pending. */
+  const mezcla = () => {
+    const c = contacto('Estudio Ocho')
+    const p = db.insert(proyectos).values({ nombre: 'Hospital Jardín', contactoId: c.id, categoria: 'website' }).returning().get()
+    const [a, b] = [1, 2].map(() => db.insert(ingresos).values({ categoria: 'sin_factura', ...ingresoBase, contactoId: c.id }).returning().get())
+    for (const i of [a, b])
+      db.insert(sugerenciasImportacion).values({ entidad: 'ingreso', entidadId: i.id, accion: 'vincular', proyectoId: p.id, motivo: 'fecha' }).run()
+    const duplicado = contacto('Estudio 8')
+    db.insert(sugerenciasImportacion)
+      .values({ entidad: 'contacto', entidadId: duplicado.id, accion: 'fusionar', contactoId: c.id, motivo: 'nombre parecido' })
+      .run()
+    db.insert(sugerenciasImportacion).values({ entidad: 'proyecto', entidadId: p.id, accion: 'ubicacion', motivo: 'sin carpeta' }).run()
+    return { proyectoId: p.id, ingresos: [a.id, b.id] }
+  }
+
+  it('accepts every pending vincular and leaves fusionar and ubicación waiting', () => {
+    const { proyectoId } = mezcla()
+    const quedan = aceptarVincular(db, '2026-09-24')
+    expect(quedan.map((s) => s.accion)).toEqual(['fusionar', 'ubicacion'])
+    expect(db.select().from(ingresos).all().map((i) => i.proyectoId)).toEqual([proyectoId, proyectoId])
+    expect(db.select().from(contactos).all()).toHaveLength(2)
+  })
+
+  it('accepts none when one of them fails', () => {
+    const [, segundo] = mezcla().ingresos
+    db.run(sql.raw(`create trigger falla before update of proyecto_id on ingresos when new.id = ${segundo} begin select raise(abort, 'falla'); end`))
+    expect(() => aceptarVincular(db)).toThrow('falla')
+    expect(pendientes(db).map((s) => s.accion)).toEqual(['vincular', 'vincular', 'fusionar', 'ubicacion'])
+    expect(db.select().from(ingresos).all().map((i) => i.proyectoId)).toEqual([null, null])
   })
 })
