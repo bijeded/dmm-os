@@ -206,8 +206,8 @@ function cotizacionesDeDisco(db: Db, root: string, corrida: Corrida, formato: 'a
       const rutaRelativa = posix.join(carpeta, archivo)
       const anioCarpeta = Number(anio) || new Date().getFullYear()
       const texto = corrida.pdfs.get(rutaRelativa)
-      const pdf = texto === undefined ? undefined : texto === null ? null : cotizacionDePdf(leerPdfCotizacion(texto, anioCarpeta), nombre.nombre)
       try {
+        const pdf = texto === undefined ? undefined : texto === null ? null : cotizacionDePdf(leerPdfCotizacion(texto, anioCarpeta), nombre.nombre)
         const r = importarCotizacion(db, { ...nombre, anio: anioCarpeta, rutaRelativa, pdf }, corrida.mapa)
         if (r.resultado === 'importado') {
           log.cotizaciones.importadas++

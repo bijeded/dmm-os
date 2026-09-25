@@ -1,5 +1,6 @@
 import { and, eq, isNotNull } from 'drizzle-orm'
-import type { Moneda, OpcionSugerencia, Sugerencia, RespuestaSugerencia } from '../shared/dominio'
+import type { OpcionSugerencia, Sugerencia, RespuestaSugerencia } from '../shared/dominio'
+import { monto } from '../shared/formato'
 import { partidasDelMonto, partidasGuardadas } from './importacion/pdf-cotizacion'
 import { mejorEscrito } from './nombres'
 import { rutaDeProyecto } from './paths'
@@ -37,9 +38,7 @@ export function proponer(db: Db | Tx, propuesta: Propuesta): boolean {
   return db.insert(sugerenciasImportacion).values(propuesta).onConflictDoNothing().run().changes > 0
 }
 
-const mxn = (centavos: number) => dinero(centavos, 'MXN')
-const dinero = (centavos: number, moneda: Moneda) =>
-  (centavos / 100).toLocaleString('es-MX', { style: 'currency', currency: moneda })
+const mxn = (centavos: number) => monto(centavos)
 
 /**
  * The Sugerencias still waiting for an answer, oldest first, each naming what it is about and
@@ -139,7 +138,7 @@ function opcionesDePartidas(db: Db | Tx, cotizacionId: number): OpcionSugerencia
   const facturadas = new Set(precioFacturado(db, c, indices.map((i) => ({ i, precio: partidas[i].precio }))))
   return indices.map((i) => ({
     id: i,
-    nombre: `${partidas[i].concepto} · ${dinero(partidas[i].precio, c.moneda)}`,
+    nombre: `${partidas[i].concepto} · ${monto(partidas[i].precio, c.moneda)}`,
     sugerida: facturadas.has(i)
   }))
 }
@@ -175,10 +174,10 @@ function precioFacturado(db: Db | Tx, c: typeof cotizaciones.$inferSelect, preci
   const ordenadas = [...facturas.entries()].sort(([ua, a], [ub, b]) => a.fecha.localeCompare(b.fecha) || ua.localeCompare(ub))
   for (const [, f] of ordenadas) {
     if (f.usd !== usd) continue
-    const monto = usd ? Math.round((f.original * f.subtotal) / (f.total || 1)) : f.subtotal
+    const facturado = usd ? Math.round((f.original * f.subtotal) / (f.total || 1)) : f.subtotal
     const cuadra = combinaciones.find((cs) => {
       const suma = cs.reduce((s, p) => s + p.precio, 0)
-      return usd ? Math.abs(suma - monto) <= monto * 0.01 : suma === monto
+      return usd ? Math.abs(suma - facturado) <= facturado * 0.01 : suma === facturado
     })
     if (cuadra) return cuadra.map((p) => p.i)
   }
@@ -319,8 +318,8 @@ function responderPartidas(tx: Tx, s: Fila, respuesta: unknown): void {
     estado = iguales ? 'aceptada' : 'corregida'
     const c = tx.select().from(cotizaciones).where(eq(cotizaciones.id, s.entidadId)).get()!
     const partidas = partidasGuardadas(c.items)
-    const monto = elegidas.reduce((suma, i) => suma + partidas[i].precio, 0)
-    tx.update(cotizaciones).set({ subtotal: monto, iva: 0, total: monto }).where(eq(cotizaciones.id, s.entidadId)).run()
+    const aceptado = elegidas.reduce((suma, i) => suma + partidas[i].precio, 0)
+    tx.update(cotizaciones).set({ subtotal: aceptado, iva: 0, total: aceptado }).where(eq(cotizaciones.id, s.entidadId)).run()
   }
   tx.update(sugerenciasImportacion).set({ estado }).where(eq(sugerenciasImportacion.id, s.id)).run()
 }

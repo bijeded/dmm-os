@@ -62,13 +62,13 @@ const esViñeta = (l: string) => /^[•·\-–*]/.test(l)
 
 // `Costo: $ 8,000.00 mensuales`, `Costo especial: US$260 Dlls.`, and `Price:` in the quotes
 // written in English; `Costo unitario` and `Costo extra` are not prices.
-const PRECIO = /^(?:Costo(?: especial)?|Price):\s*(US\s?\$|\$)\s*(\d{1,3}(?:,\d{3})*|\d+)(\.\d{1,2})?(.*)$/i
+const PRECIO = /^(?:Costo(?: especial)?|Price):\s*(US\s?\$|\$)\s*(\d{1,3}(?:,\d{3})+|\d+)(\.\d{1,2})?(.*)$/i
 const RECURRENTE =
   /\b(mensual(es)?|por mes|x mes|al mes|anual(es)?|por (un |1 )?ano|x (un |1 )?ano|trimestral|monthly|per month|a month|yearly|annual(ly)?|per year|a year)\b/
 const USD = /\b(usd|dlls?|dolares)\b/
-const MXN_IMPRESO = /\(\s*\$\s*(\d{1,3}(?:,\d{3})*|\d+)(\.\d{1,2})?\s*(mxn|pesos)/i
+const MXN_IMPRESO = /\(\s*\$\s*(\d{1,3}(?:,\d{3})+|\d+)(\.\d{1,2})?\s*(mxn|pesos)/i
 // `Costo: $ 65.00 por cuartilla` is a unit price; the `Total: $ 2,990.00` under it is what was quoted.
-const TOTAL = /^Total:\s*\$\s*(\d{1,3}(?:,\d{3})*|\d+)(\.\d{1,2})?/i
+const TOTAL = /^Total:\s*\$\s*(\d{1,3}(?:,\d{3})+|\d+)(\.\d{1,2})?/i
 const NOMBRE_ENTRE_COMILLAS = /[“"]\s*([^“”"]+?)\s*[”“"]/
 // Lines that carry a colon but never name a service.
 const NO_ES_SERVICIO = /^(nota|costo|atencion|asunto|incluye|el costo|los costos|opcional|importante)\b/
@@ -122,7 +122,7 @@ function etiquetaSobre(lineas: string[], i: number): string | null {
 /** `29 de octubre, 2021`, or `October 29, 2021` in the quotes written in English. */
 function fechaEn(linea: string): { dia: number; mes: number; año: number } | null {
   const l = plano(linea)
-  const es = l.match(/\b(\d{1,2}) ?de ([a-z]+),? (?:de )?(\d{4})\b/)
+  const es = l.match(/\b(\d{1,2}) ?de ([a-z]+),? (?:del? )?(\d{4})\b/)
   if (es) return { dia: Number(es[1]), mes: MESES.indexOf(es[2] === 'setiembre' ? 'septiembre' : es[2]) + 1, año: Number(es[3]) }
   const en = l.match(/\b([a-z]+) (\d{1,2})(?:st|nd|rd|th)?,? (\d{4})\b/)
   if (en) return { dia: Number(en[2]), mes: MONTHS.indexOf(en[1]) + 1, año: Number(en[3]) }
@@ -138,8 +138,8 @@ function leerFecha(lineas: string[], anio: number): { fecha: string; añoCorregi
   for (const l of lineas) {
     const f = fechaEn(l)
     if (!f || f.mes === 0 || f.dia < 1 || f.dia > 31) continue
-    // 29 de febrero moved to a year that has none is the 28th.
-    const dia = f.mes === 2 && f.dia === 29 && new Date(anio, 1, 29).getMonth() !== 1 ? 28 : f.dia
+    // A day the month does not have (`31 de febrero`, or the 29th moved to a common year) is its last.
+    const dia = Math.min(f.dia, new Date(anio, f.mes, 0).getDate())
     return {
       fecha: `${anio}-${String(f.mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`,
       añoCorregido: f.año !== anio
@@ -266,7 +266,8 @@ export function cotizacionDePdf(pdf: PdfCotizacion, nombre: string): CotizacionD
   const falta: FaltaPdf[] = []
   if (pdf.fecha === null) falta.push('fecha')
   if (pdf.añoCorregido) falta.push('año')
-  if (pdf.lineas.length === 0) falta.push('precio')
+  // No price at all, or only ones in a currency the quote cannot count: either way no Monto.
+  if (enMonto.length === 0) falta.push('precio')
 
   return {
     fecha: pdf.fecha,

@@ -293,6 +293,23 @@ describe('Reimportar desde cero y los PDFs de las Cotizaciones', () => {
     expect(leerPdfsCotizaciones).not.toHaveBeenCalled()
   })
 
+  it('asks again after reading the PDFs, and is refused if something was made by hand meanwhile', async () => {
+    importado()
+    const real = vi.mocked(leerPdfsCotizaciones).getMockImplementation()!
+    vi.mocked(leerPdfsCotizaciones).mockImplementationOnce(async (...args) => {
+      db.insert(costos).values({ nombre: 'Hosting', categoria: 'unico', estado: 'pagado', fecha: '2026-01-01', subtotal: 100, total: 100 }).run()
+      return real(...args)
+    })
+    const antes = db.select().from(contactos).all().length
+    let respaldado = false
+    expect(await reimportar(db, entorno({ respaldar: () => (respaldado = true) }))).toEqual({
+      reimportado: false,
+      bloqueos: [{ motivo: 'a_mano', registro: 'costo', cantidad: 1 }]
+    })
+    expect(respaldado).toBe(false)
+    expect(db.select().from(contactos).all()).toHaveLength(antes)
+  })
+
   it('is not refused on account of imported Cotizaciones that have items from their PDF', async () => {
     mapa()
     carpeta('Cotizaciones', '2021')

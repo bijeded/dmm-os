@@ -992,6 +992,18 @@ describe('¿Qué aceptó? al aceptar una Cotización con varios precios', () => 
     expect(preguntas()).toHaveLength(1)
   })
 
+  it('does not ask it for a quote made in the app, whose Monto is its own', async () => {
+    const sublime = db.insert(contactos).values({ nombre: 'Sublime' }).returning().get()
+    const partida = (concepto: string, precio: number) => ({ concepto, categoria: 'website' as const, cantidad: 1, precio })
+    db.insert(cotizaciones)
+      .values({ folio: 530, contactoId: sublime.id, nombre: 'Sublime', categoria: 'website', estado: 'enviada', fecha: '2026-01-10', items: [partida('Sitio', 100000), partida('Logo', 50000)], subtotal: 150000, iva: 24000, total: 174000 })
+      .run()
+    carpeta(root, 'Proyectos', 'Sublime')
+    await escanear(db, root)
+    expect(cotizacion(530)).toMatchObject({ estado: 'aceptada', iva: 24000, total: 174000 })
+    expect(preguntas()).toEqual([])
+  })
+
   it('does not ask it for a quote no folder delivers', async () => {
     pdfConTexto('2021', 'DMM - 308 - Sublime.pdf', ['Servicio: a:', 'Costo: $ 10,000.00', 'Servicio: b:', 'Costo: $ 4,000.00'])
     await escanear(db, root)

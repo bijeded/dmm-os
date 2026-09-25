@@ -428,7 +428,8 @@ function vincularCotizacion(db: Tx, mapa: Mapa, proyectoId: number, contactoId: 
       proyecto: { notasAntes, notasEscritas, ...(clienteFinal && { clienteFinalEscrito: clienteFinal }) }
     }
   })
-  const precios = partidasDelMonto(partidasGuardadas(candidata.items)).length
+  // Only an imported quote's prices are its PDF's, before IVA; one made in the app has its own Monto.
+  const precios = candidata.importado ? partidasDelMonto(partidasGuardadas(candidata.items)).length : 0
   const preguntada =
     precios >= 2 &&
     proponer(db, {

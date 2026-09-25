@@ -31,6 +31,7 @@ describe('leerPdfCotizacion: fecha', () => {
     expect(leer([], { fecha: 'Ciudad de México, 3 de MARZO, 2021.' }).fecha).toBe('2021-03-03')
     expect(leer([], { fecha: 'Ciudad de México, 5 de setiembre de 2021.' }).fecha).toBe('2021-09-05')
     expect(leer([], { fecha: 'Ciudad de México, 11de marzo, 2021.' }).fecha).toBe('2021-03-11')
+    expect(leer([], { fecha: 'Ciudad de México, 29 de octubre del 2021.' }).fecha).toBe('2021-10-29')
   })
 
   it('reads the date of a quote written in English', () => {
@@ -43,8 +44,9 @@ describe('leerPdfCotizacion: fecha', () => {
     expect(pdf.añoCorregido).toBe(true)
   })
 
-  it('moves 29 de febrero to the 28th in a year that has none', () => {
+  it('moves a day the month does not have to its last', () => {
     expect(leer([], { fecha: 'Ciudad de México, 29 de febrero, 2020.' }, 2021).fecha).toBe('2021-02-28')
+    expect(leer([], { fecha: 'Ciudad de México, 31 de abril, 2021.' }).fecha).toBe('2021-04-30')
   })
 
   it('is null with no date line', () => {
@@ -79,6 +81,15 @@ describe('leerPdfCotizacion: price lines', () => {
     expect(leer(['eBook “Meditaciones” : Diseño de libro electrónico:1', 'Costo: $ 5,000.00']).lineas[0].etiqueta).toBe(
       'eBook “Meditaciones” : Diseño de libro electrónico'
     )
+  })
+
+  it('reads amounts written without thousands commas', () => {
+    const pdf = leer(['Sitio web: diseño:', 'Costo: $ 8000.00', 'eBook: libro:', 'Costo: $ 65.00 por cuartilla', 'Total: $ 2990.00', 'A: a:', 'Costo: $ 260.00 USD ($5000.00 MXN)'])
+    expect(pdf.lineas.map((l) => [l.monto, l.mxnImpreso])).toEqual([
+      [800000, null],
+      [299000, null],
+      [26000, 500000]
+    ])
   })
 
   it('reads Costo especial, Price and amounts without cents', () => {

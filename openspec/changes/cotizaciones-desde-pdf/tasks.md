@@ -116,6 +116,6 @@
 
 ## 8. Review and checks
 
-- [ ] 8.1 Run `/code-review` on the branch diff and fix what it confirms.
-- [ ] 8.2 Run `/security-review`, since the change parses external PDFs in the main process, adds a dependency, reads files under `Cotizaciones/`, and widens what `importacion.responder` accepts. Fix what it confirms.
-- [ ] 8.3 Run `npm run typecheck`, `npm run lint`, `npm test` and `openspec validate cotizaciones-desde-pdf --strict`. All pass.
+- [x] 8.1 Run `/code-review` on the branch diff and fix what it confirms.
+- [x] 8.2 Run `/security-review`, since the change parses external PDFs in the main process, adds a dependency, reads files under `Cotizaciones/`, and widens what `importacion.responder` accepts. Fix what it confirms.
+- [x] 8.3 Run `npm run typecheck`, `npm run lint`, `npm test` and `openspec validate cotizaciones-desde-pdf --strict`. All pass.

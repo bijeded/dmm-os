@@ -94,9 +94,12 @@ export function borrarImportado(tx: Tx | Db): void {
  * then Facturas.
  */
 export async function reimportar(db: Db, entorno: Entorno): Promise<ResultadoReimportar> {
+  const antes = bloqueos(db, entorno)
+  if (antes.length > 0) return { reimportado: false, bloqueos: antes }
+  const pdfs = await leerPdfsCotizaciones(entorno.root)
+  // Asked again: while the files were read, something may have been made by hand.
   const b = bloqueos(db, entorno)
   if (b.length > 0) return { reimportado: false, bloqueos: b }
-  const pdfs = await leerPdfsCotizaciones(entorno.root)
   entorno.respaldar()
   db.transaction((tx) => borrarImportado(tx))
   const carpetas = escanearCarpetas(db, entorno.root, entorno.hddRoot, entorno.hoy, pdfs)
