@@ -50,6 +50,9 @@ The dialog amount is a **total** in the Cotización currency, matching how `falt
 ### 6. Linking a CFDI answers its Sugerencia
 Linking sets `proyectoId` on every non-cancelled Ingreso with that `cfdiUuid`, and pays the pending ones on the Fecha de pago. Each pending `vincular` Sugerencia for one of those Ingresos is answered through `responderEn(tx, s, { elegidas: [proyectoId] })`, so it goes through the same `vincular` as Logs. An Ingreso Sugerencia's opciones are every Proyecto of the Ingreso's Contacto, and candidates are filtered to this Proyecto's Contacto, so this Proyecto is always an opción. `decidir` records *aceptada* when it was the guess and *corregida* otherwise.
 
+### 6a. Reembolsos follow their Ingreso, and the dialog names the pending Ingresos it showed
+A CFDI Ingreso's Reembolsos carry no `cfdiUuid`, so the candidate's total is net of them, and linking moves them to the Proyecto too. Otherwise the gap would count money already given back. Every pending Ingreso not marked Incobrable is paid, so `CobroAlCompletar.pendientes` carries the ids the dialog showed. `planCobro` refuses when they no longer match, for example after a Periodo generado appeared at midnight.
+
 ### 7. Channels
 In `contrato.ts` `proyectos`:
 - `opcionesCobro: canal<[id: number], OpcionesCobro>()`

@@ -28,6 +28,6 @@
 
 ## 5. Review and checks
 
-- [ ] 5.1 Run `/code-review` on the branch diff and fix what it confirms
-- [ ] 5.2 Run `/security-review`, since the change touches `src/shared/contrato.ts`, `src/main/handlers.ts` and the preload, and fix what it confirms
-- [ ] 5.3 Run `npm run typecheck`, `npm run lint` and `npm test`, and confirm all three pass
+- [x] 5.1 Run `/code-review` on the branch diff and fix what it confirms
+- [x] 5.2 Run `/security-review`, since the change touches `src/shared/contrato.ts`, `src/main/handlers.ts` and the preload, and fix what it confirms
+- [x] 5.3 Run `npm run typecheck`, `npm run lint` and `npm test`, and confirm all three pass

@@ -261,7 +261,7 @@ describe('adivinar el Proyecto', () => {
     emitida(cfdiXml())
     importar()
     const { cfdiUuid } = db.select().from(ingresos).get()!
-    completarConCobro(db, root, p.id, { fecha: '2026-09-18', incobrables: [], pago: { tipo: 'cfdi', cfdiUuid: cfdiUuid! }, tipoCambio: null }, '2026-09-18')
+    completarConCobro(db, root, p.id, { fecha: '2026-09-18', pendientes: [], incobrables: [], pago: { tipo: 'cfdi', cfdiUuid: cfdiUuid! }, tipoCambio: null }, '2026-09-18')
     expect(importar()).toMatchObject({ importados: 0, sugerencias: 0 })
     expect(db.select().from(ingresos).all()).toEqual([expect.objectContaining({ proyectoId: p.id })])
     expect(db.select().from(sugerenciasImportacion).all().map((s) => s.estado)).toEqual(['aceptada'])

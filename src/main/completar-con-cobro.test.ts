@@ -1,8 +1,9 @@
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { MENSAJE_FECHA_FUTURA, MENSAJE_MONTO_EXCEDIDO, cobroValido, opcionesCobro, planCobro } from './completar-con-cobro'
+import { MENSAJE_FECHA_FUTURA, MENSAJE_MONTO_EXCEDIDO, MENSAJE_PENDIENTES_CAMBIARON, cobroValido, opcionesCobro, planCobro } from './completar-con-cobro'
 import { cotizaciones, ingresos, proyectos } from './db/schema'
 import { contacto, db, proyecto, reiniciarDb } from './db/test-db'
+import { reembolsar } from './movimientos'
 import { MENSAJE_MONTO } from '../shared/montos'
 import type { CobroAlCompletar, OpcionesCobro } from '../shared/dominio'
 
@@ -75,6 +76,13 @@ describe('opcionesCobro', () => {
     ])
   })
 
+  it('an invoice’s total is net of its Reembolsos', () => {
+    const p = proyecto(contactoId, cotizacion().id)
+    const f = ingreso({ cfdiUuid: 'A', fechaPago: '2026-07-01' })
+    reembolsar(db, f.id, 44_000, '2026-07-05')
+    expect(opcionesCobro(db, p.id).facturas).toEqual([expect.objectContaining({ cfdiUuid: 'A', subtotal: 900_000, total: 1_000_000 })])
+  })
+
   it('for a USD Cotización, lists only USD invoices by their USD amounts', () => {
     const p = proyecto(contactoId, cotizacion({ moneda: 'USD', subtotal: 100_000, iva: 0, total: 100_000, tipoCambio: 18.5 }).id)
     ingreso({ cfdiUuid: 'MXN' })
@@ -111,6 +119,7 @@ describe('planCobro', () => {
   })
   const cobro = (cambios: Partial<CobroAlCompletar> = {}): CobroAlCompletar => ({
     fecha: '2026-09-15',
+    pendientes: [],
     incobrables: [],
     pago: { tipo: 'sin_factura', monto: 900_000 },
     tipoCambio: null,
@@ -167,7 +176,7 @@ describe('planCobro', () => {
       { id: 1, fecha: null, categoria: 'factura' as const, monto: 580_000 },
       { id: 2, fecha: null, categoria: 'factura' as const, monto: 580_000 }
     ]
-    expect(planCobro(o({ pendientes, falta: 0 }), cobro({ incobrables: [2], pago: null }), hoy)).toEqual({
+    expect(planCobro(o({ pendientes, falta: 0 }), cobro({ pendientes: [1, 2], incobrables: [2], pago: null }), hoy)).toEqual({
       fecha: '2026-09-15',
       pagar: [1],
       incobrables: [2],
@@ -185,7 +194,9 @@ describe('planCobro', () => {
       [o(), cobro({ pago: { tipo: 'sin_factura', monto: 900_001 } }), MENSAJE_MONTO_EXCEDIDO],
       [o(), cobro({ pago: { tipo: 'sin_factura', monto: 0 } }), MENSAJE_MONTO],
       [o({ facturas: [factura] }), cobro({ pago: { tipo: 'cfdi', cfdiUuid: 'B' } }), 'Esa factura ya no se puede vincular'],
-      [o(), cobro({ incobrables: [5] }), 'Ese ingreso ya no está pendiente'],
+      [o({ pendientes: [{ id: 5, fecha: null, categoria: 'factura', monto: 1 }] }), cobro({ pendientes: [5], incobrables: [6] }), 'Ese ingreso ya no está pendiente'],
+      [o({ pendientes: [{ id: 5, fecha: null, categoria: 'factura', monto: 1 }] }), cobro(), MENSAJE_PENDIENTES_CAMBIARON],
+      [o(), cobro({ pendientes: [5] }), MENSAJE_PENDIENTES_CAMBIARON],
       [o({ moneda: 'USD' }), cobro({ tipoCambio: null }), 'Escribe el tipo de cambio'],
       [o({ moneda: 'USD' }), cobro({ tipoCambio: 0 }), 'Escribe el tipo de cambio']
     ]
@@ -195,9 +206,9 @@ describe('planCobro', () => {
 
 describe('cobroValido', () => {
   it('passes the dialog’s answer through, and refuses any other shape', () => {
-    const bueno = { fecha: hoy, incobrables: [1], pago: { tipo: 'cfdi', cfdiUuid: 'A' }, tipoCambio: null }
+    const bueno = { fecha: hoy, pendientes: [1], incobrables: [1], pago: { tipo: 'cfdi', cfdiUuid: 'A' }, tipoCambio: null }
     expect(cobroValido(bueno)).toBe(bueno)
-    for (const malo of [null, 'x', { ...bueno, fecha: 1 }, { ...bueno, incobrables: [1.5] }, { ...bueno, pago: { tipo: 'sin_factura', monto: '9' } }, { ...bueno, tipoCambio: '18' }])
+    for (const malo of [null, 'x', { ...bueno, fecha: 1 }, { ...bueno, incobrables: [1.5] }, { ...bueno, pendientes: undefined }, { ...bueno, pago: { tipo: 'sin_factura', monto: '9' } }, { ...bueno, tipoCambio: '18' }])
       expect(() => cobroValido(malo)).toThrow('Cobro no válido')
   })
 })

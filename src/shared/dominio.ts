@@ -541,7 +541,7 @@ export interface IngresoPorSaldar {
 export interface FacturaPorVincular {
   cfdiUuid: string
   fecha: string
-  /** Before IVA and total, in the Cotización's currency. */
+  /** Before IVA, and the total net of its Reembolsos (what counts toward the gap), in the Cotización's currency. */
   subtotal: number
   total: number
   /** Whether a Parcialidad is still pending; linking marks it paid on the Fecha de pago. */
@@ -576,6 +576,8 @@ export type PagoAlCompletar =
 export interface CobroAlCompletar {
   /** `YYYY-MM-DD`, not after today. */
   fecha: string
+  /** The pending Ingresos the dialog showed; refused if they are no longer exactly the pending ones. */
+  pendientes: number[]
   /** The pending Ingresos marked Incobrable; every other one is Cobrado. */
   incobrables: number[]
   /** `null` when nothing is missing after the pending Ingresos. */

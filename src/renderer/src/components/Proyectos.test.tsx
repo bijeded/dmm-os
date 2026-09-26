@@ -215,7 +215,7 @@ describe('Completar con cobro', () => {
     return dialogo
   }
   const confirmar = (dialogo: HTMLElement) => fireEvent.click(within(dialogo).getByRole('button', { name: 'Completar' }))
-  const cobro = (cambios: object) => expect.objectContaining({ fecha: hoy(), incobrables: [], tipoCambio: null, ...cambios })
+  const cobro = (cambios: object) => expect.objectContaining({ fecha: hoy(), pendientes: [], incobrables: [], tipoCambio: null, ...cambios })
 
   it('sin factura records the whole gap as paid and shows the Proyecto completed', async () => {
     const dialogo = await abrir()
@@ -273,7 +273,7 @@ describe('Completar con cobro', () => {
     expect(within(dialogo).queryByText('¿Con factura?')).toBeNull()
     fireEvent.change(within(dialogo).getAllByLabelText('Pago de $5,800.00')[1], { target: { value: 'incobrable' } })
     confirmar(dialogo)
-    await waitFor(() => expect(api.completarConCobro).toHaveBeenCalledWith(1, cobro({ incobrables: [12], pago: null })))
+    await waitFor(() => expect(api.completarConCobro).toHaveBeenCalledWith(1, cobro({ pendientes: [11, 12], incobrables: [12], pago: null })))
   })
 
   it('refuses a future Fecha de pago without asking main', async () => {

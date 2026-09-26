@@ -65,7 +65,7 @@ export function CompletarConCobro({ id, onCompletado, onCerrar }: { id: number; 
   const confirmar = () => {
     if (fecha > hoy()) return setError('La fecha de pago no puede ser futura')
     correr(async () => {
-      const cobro: CobroAlCompletar = { fecha, incobrables, pago: pago(), tipoCambio: moneda === 'USD' ? Number(tipoCambio) : null }
+      const cobro: CobroAlCompletar = { fecha, pendientes: o?.pendientes.map((i) => i.id) ?? [], incobrables, pago: pago(), tipoCambio: moneda === 'USD' ? Number(tipoCambio) : null }
       onCompletado(await window.dmm.proyectos.completarConCobro(id, cobro))
     })
   }

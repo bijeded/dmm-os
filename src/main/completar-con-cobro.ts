@@ -18,6 +18,7 @@ type Ingreso = typeof ingresos.$inferSelect
 
 export const MENSAJE_FECHA_FUTURA = 'La fecha de pago no puede ser futura'
 export const MENSAJE_MONTO_EXCEDIDO = 'El monto no puede ser mayor a lo que falta'
+export const MENSAJE_PENDIENTES_CAMBIARON = 'Los pagos pendientes cambiaron; vuelve a abrir Completar'
 
 /** A USD invoice's subtotal in USD, from its USD total in the proportion of its pesos (as `precioFacturado` reads it). */
 const subtotalUsd = (original: number, subtotal: number, total: number) => Math.round((original * subtotal) / (total || 1))
@@ -31,8 +32,9 @@ function leerProyecto(db: Db, id: number) {
 
 /**
  * The Contacto's issued invoices on no Proyecto, not cancelled, in the Cotización's currency: one
- * per CFDI, its Parcialidades together. Those whose subtotal is the Cotización's come first (a USD
- * one within 1%, for the rounding of its USD amount), then the newest.
+ * per CFDI, its Parcialidades together, its total net of their Reembolsos (what stayed). Those whose
+ * subtotal is the Cotización's come first (a USD one within 1%, for the rounding of its USD amount),
+ * then the newest.
  */
 function facturasPorVincular(db: Db, contactoId: number | null, moneda: Moneda, subtotalCotizacion: number | null): FacturaPorVincular[] {
   if (contactoId === null) return []
@@ -45,9 +47,11 @@ function facturasPorVincular(db: Db, contactoId: number | null, moneda: Moneda, 
     if ((i.monedaOriginal === 'USD') !== (moneda === 'USD')) continue
     porUuid.set(i.cfdiUuid!, [...(porUuid.get(i.cfdiUuid!) ?? []), i])
   }
+  const reembolsos = reembolsosDe(db, [...porUuid.values()].flat().map((i) => i.id))
   const facturas = [...porUuid.entries()].map(([cfdiUuid, filas]) => {
     const suma = (f: (i: Ingreso) => number) => filas.reduce((s, i) => s + f(i), 0)
-    const total = suma((i) => montoEn(i, moneda))
+    const devuelto = reembolsos.filter((r) => filas.some((i) => i.id === r.reembolsoDeId)).reduce((s, r) => s + montoEn(r, moneda), 0)
+    const total = suma((i) => montoEn(i, moneda)) + devuelto
     const subtotal = moneda === 'USD' ? subtotalUsd(total, suma((i) => i.subtotal), suma((i) => i.total)) : suma((i) => i.subtotal)
     const coincide =
       subtotalCotizacion !== null && (moneda === 'USD' ? Math.abs(subtotal - subtotalCotizacion) <= subtotalCotizacion * 0.01 : subtotal === subtotalCotizacion)
@@ -62,6 +66,9 @@ function facturasPorVincular(db: Db, contactoId: number | null, moneda: Moneda, 
   })
   return facturas.sort((a, b) => Number(b.coincide) - Number(a.coincide) || b.fecha.localeCompare(a.fecha) || a.cfdiUuid.localeCompare(b.cfdiUuid))
 }
+
+/** The Reembolsos given back against Ingresos `ids`: they go wherever their Ingreso goes. */
+const reembolsosDe = (db: Db, ids: number[]) => (ids.length ? db.select().from(ingresos).where(inArray(ingresos.reembolsoDeId, ids)).all() : [])
 
 /** What the Completar con cobro dialog shows for Proyecto `id`. Refused when its estado allows no Completar. */
 export function opcionesCobro(db: Db, id: number): OpcionesCobro {
@@ -105,6 +112,8 @@ export function cobroValido(x: unknown): CobroAlCompletar {
     typeof c !== 'object' ||
     c === null ||
     typeof c.fecha !== 'string' ||
+    !Array.isArray(c.pendientes) ||
+    !c.pendientes.every(entero) ||
     !Array.isArray(c.incobrables) ||
     !c.incobrables.every(entero) ||
     !pagoValido ||
@@ -143,6 +152,8 @@ export function planCobro(o: OpcionesCobro, cobro: CobroAlCompletar, hoy: string
   if (!/^\d{4}-\d{2}-\d{2}$/.test(cobro.fecha)) throw new Error('La fecha no es válida')
   if (cobro.fecha > hoy) throw new Error(MENSAJE_FECHA_FUTURA)
   const ids = new Set(o.pendientes.map((i) => i.id))
+  // Every pending Ingreso not marked Incobrable is paid, so the dialog must have shown exactly these.
+  if (cobro.pendientes.length !== ids.size || !cobro.pendientes.every((id) => ids.has(id))) throw new Error(MENSAJE_PENDIENTES_CAMBIARON)
   if (!cobro.incobrables.every((id) => ids.has(id))) throw new Error('Ese ingreso ya no está pendiente')
   const incobrables = new Set(cobro.incobrables)
 
@@ -207,7 +218,7 @@ export function registrarCobro(tx: Tx, id: number, plan: PlanCobro, hoy: string)
   const filas = tx
     .select()
     .from(ingresos)
-    .where(and(eq(ingresos.cfdiUuid, plan.cfdi), ne(ingresos.estado, 'cancelado')))
+    .where(and(eq(ingresos.cfdiUuid, plan.cfdi), eq(ingresos.contactoId, p.contactoId!), isNull(ingresos.proyectoId), ne(ingresos.estado, 'cancelado')))
     .all()
   const filaIds = filas.map((i) => i.id)
   for (const s of tx
@@ -223,6 +234,7 @@ export function registrarCobro(tx: Tx, id: number, plan: PlanCobro, hoy: string)
     )
     .all())
     responderEn(tx, s, { elegidas: [id] }, hoy)
-  tx.update(ingresos).set({ proyectoId: id }).where(inArray(ingresos.id, filaIds)).run()
+  const movidos = [...filaIds, ...reembolsosDe(tx, filaIds).map((r) => r.id)]
+  tx.update(ingresos).set({ proyectoId: id }).where(inArray(ingresos.id, movidos)).run()
   for (const i of filas) if (i.estado === 'pendiente') pagarIngreso(tx, i.id, plan.fecha)
 }
