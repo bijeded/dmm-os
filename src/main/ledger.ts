@@ -57,3 +57,12 @@ export const fechaIngresoSql = sql<string | null>`coalesce(${sql.join(
   FECHAS_INGRESO.map((columna) => ingresos[columna]),
   sql`, `
 )})`
+
+/**
+ * Which Ingresos count as income: pending or paid. A cancelled or Incobrable one never does, in any
+ * figure (Finanzas, Inicio, AI, the Contacto Ficha, Cobros).
+ */
+export const cuentaComoIngreso = (i: Pick<Ingreso, 'estado'>) => i.estado === 'pendiente' || i.estado === 'pagado'
+
+/** Which Ingresos settle a Cotización: paid or Incobrable. Incobrable settles it without counting as income. */
+export const saldaCotizacion = (i: Pick<Ingreso, 'estado'>) => i.estado === 'pagado' || i.estado === 'incobrable'

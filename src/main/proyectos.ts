@@ -8,7 +8,8 @@ import { contactos, cotizaciones, proyectos, ubicacionesArchivo } from './db/sch
 import { folioDe } from './cotizar'
 import { rutaDeProyecto } from './paths'
 import { accionesProyecto, completarEsperaPago, exigirProyecto } from './ciclo-proyecto'
-import { CATEGORIAS, ESTADOS_PROYECTO, type AccionProyecto, type CarpetaProyecto, type Categoria, type EstadoProyecto, type FichaProyecto, type ListaProyectos, type ProyectoNuevo } from '../shared/dominio'
+import { opcionesCobro, planCobro, registrarCobro } from './completar-con-cobro'
+import { CATEGORIAS, ESTADOS_PROYECTO, type AccionProyecto, type CarpetaProyecto, type Categoria, type CobroAlCompletar, type EstadoProyecto, type FichaProyecto, type ListaProyectos, type ProyectoNuevo } from '../shared/dominio'
 
 /** Reads the Proyecto and refuses the action unless its lifecycle allows it. */
 function leerPara(db: Db, accion: AccionProyecto, id: number) {
@@ -212,6 +213,21 @@ export function reanudarProyecto(db: Db, root: string, id: number): FichaProyect
 export function completarProyecto(db: Db, root: string, id: number, hoy: string): FichaProyecto {
   leerPara(db, 'completar', id)
   db.update(proyectos).set({ estado: 'completado', fechaFin: hoy }).where(eq(proyectos.id, id)).run()
+  return fichaProyecto(db, root, id)
+}
+
+/**
+ * Completar con cobro: records the dialog's payment and completes the Proyecto in one transaction.
+ * The guard is judged again on what was written, so an answer that leaves anything missing writes
+ * nothing.
+ */
+export function completarConCobro(db: Db, root: string, id: number, cobro: CobroAlCompletar, hoy: string): FichaProyecto {
+  db.transaction((tx) => {
+    registrarCobro(tx, id, planCobro(opcionesCobro(tx, id), cobro, hoy), hoy)
+    const p = leer(tx, id)
+    exigirProyecto('completar', p.estado, estadoCobro(tx, id))
+    tx.update(proyectos).set({ estado: 'completado', fechaFin: hoy }).where(eq(proyectos.id, id)).run()
+  })
   return fichaProyecto(db, root, id)
 }
 

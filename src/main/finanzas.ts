@@ -3,7 +3,7 @@ import { calendarioPeriodos, type PeriodoCosto } from './db/calendario'
 import { coberturaCostos } from './db/cobertura'
 import { periodoDe, sumarAnios, sumarDias, sumarMeses } from '../shared/fechas'
 import { monedaDe } from './dinero'
-import { fechaIngreso } from './ledger'
+import { cuentaComoIngreso, fechaIngreso } from './ledger'
 import { accionesCostos, origenCosto, type Costo } from './ciclo-costo'
 import { accionesIngresos, origenIngreso, type Ingreso } from './ciclo-ingreso'
 import { contactos, costos, ingresos, proyectos } from './db/schema'
@@ -44,8 +44,8 @@ export function rangos(periodo: PeriodoFinanzas, hoy: string, primero = hoy): { 
 }
 
 
-/** Money that did or will move: cancelled and uncollectible Ingresos, and cancelled Costos, don't count. */
-const cuentaIngreso = (i: Ingreso) => (i.estado === 'pendiente' || i.estado === 'pagado') && fechaIngreso(i) !== null
+/** Money that did or will move: only Ingresos that count as income and are dated, and Costos not cancelled. */
+const cuentaIngreso = (i: Ingreso) => cuentaComoIngreso(i) && fechaIngreso(i) !== null
 const cuentaCosto = (c: Costo) => c.estado !== 'cancelado'
 
 const dentro = (fecha: string | null, rango: Rango) => fecha !== null && fecha >= rango.desde && fecha <= rango.hasta

@@ -2,17 +2,22 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { MENSAJE_SIN_PAGAR, NOMBRES_CATEGORIA, NOMBRES_ESTADO_PROYECTO, type FichaProyecto as Ficha } from '../../../shared/dominio'
 import { dia, folioDmm, monto, pesos } from '../../../shared/formato'
+import { CompletarConCobro } from './CompletarConCobro'
 import { NOMBRES_CARPETA } from './Proyectos'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { tituloCls } from './estilos'
 import { useRuta } from './ruta'
 
-/** The Proyecto's record: its data, its folder, what is still owed and what can happen to it next. */
+/**
+ * The Proyecto's record: its data, its folder, what is still owed and what can happen to it next.
+ * Completar on a Proyecto not fully paid opens Completar con cobro instead of being refused.
+ */
 export function FichaProyecto() {
   const id = Number(useParams().id)
   const navigate = useNavigate()
   const [ficha, setFicha] = useState<Ficha | null>(null)
+  const [cobrando, setCobrando] = useState(false)
   const { error, ocupado, correr } = useAccion()
 
   useEffect(() => {
@@ -60,7 +65,7 @@ export function FichaProyecto() {
               </Button>
             )}
             {(puede('completar') || f.falta) && (
-              <Button disabled={ocupado || f.falta !== null} aria-describedby={f.falta ? 'sin-completar' : undefined} onClick={accion(api.completar)}>
+              <Button disabled={ocupado} aria-describedby={f.falta ? 'sin-completar' : undefined} onClick={f.falta ? () => setCobrando(true) : accion(api.completar)}>
                 Completar
               </Button>
             )}
@@ -73,6 +78,16 @@ export function FichaProyecto() {
         )}
       </div>
       <Aviso error={error} />
+      {cobrando && (
+        <CompletarConCobro
+          id={id}
+          onCerrar={() => setCobrando(false)}
+          onCompletado={(nueva) => {
+            setFicha(nueva)
+            setCobrando(false)
+          }}
+        />
+      )}
 
       {f && (
         <div className="g-split grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] items-start gap-[18px]">

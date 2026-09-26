@@ -33,6 +33,7 @@ import {
   borrarProyecto,
   cancelarProyecto,
   carpetaAbrible,
+  completarConCobro,
   completarProyecto,
   fichaProyecto,
   guardarProyecto,
@@ -50,6 +51,7 @@ import { archivosLab, buscarLab, carpetasLab, rutaEnLab, vistaPreviaLab } from '
 import { dbAlDia } from './ledger'
 import { leerRutas } from './rutas'
 import { aceptarVincular, pendientes, responder } from './sugerencias'
+import { cobroValido, opcionesCobro } from './completar-con-cobro'
 import { sql } from 'drizzle-orm'
 import { diaLocal } from '../shared/fechas'
 import type { EstadoImportacion } from '../shared/dominio'
@@ -220,6 +222,8 @@ export function crearHandlers({
       pausar: (id) => pausarProyecto(alDiaDb(), info.dmmOsRoot, id),
       reanudar: (id) => reanudarProyecto(alDiaDb(), info.dmmOsRoot, id),
       completar: (id) => completarProyecto(alDiaDb(), info.dmmOsRoot, id, hoy()),
+      opcionesCobro: (id) => opcionesCobro(alDiaDb(), id),
+      completarConCobro: (id, cobro) => completarConCobro(alDiaDb(), info.dmmOsRoot, id, cobroValido(cobro), hoy()),
       cancelar: (id) => cancelarProyecto(alDiaDb(), info.dmmOsRoot, id, hoy()),
       borrar: (id) => borrarProyecto(alDiaDb(), id),
       abrirCarpeta: async (id) => {

@@ -528,6 +528,64 @@ export type AccionProyecto = 'editar' | 'borrar' | 'pausar' | 'reanudar' | 'comp
 /** Why Completar is held back: the Ficha shows it beside what is unpaid, and the command refuses with it. */
 export const MENSAJE_SIN_PAGAR = 'El proyecto se completa cuando esté pagado por completo'
 
+/** A pending Ingreso of the Proyecto the Completar con cobro dialog settles, as Cobrado or Incobrable. */
+export interface IngresoPorSaldar {
+  id: number
+  fecha: string | null
+  categoria: CategoriaIngreso
+  /** In the Cotización's currency (USD cents for a USD one), else centavos. */
+  monto: number
+}
+
+/** An issued invoice of the Contacto on no Proyecto, which Completar con cobro can link: its Parcialidades together. */
+export interface FacturaPorVincular {
+  cfdiUuid: string
+  fecha: string
+  /** Before IVA, and the total net of its Reembolsos (what counts toward the gap), in the Cotización's currency. */
+  subtotal: number
+  total: number
+  /** Whether a Parcialidad is still pending; linking marks it paid on the Fecha de pago. */
+  pendiente: boolean
+  /** Its subtotal is the Cotización's: listed first. */
+  coincide: boolean
+}
+
+/** What the Completar con cobro dialog shows for a Proyecto that is not fully paid. */
+export interface OpcionesCobro {
+  moneda: Moneda
+  /** The Cotización's subtotal and total; `null` without a one-off or installment Cotización. */
+  subtotalCotizacion: number | null
+  totalCotizacion: number | null
+  /** Paid and Incobrable so far, in `moneda`. */
+  saldado: number
+  pendientes: IngresoPorSaldar[]
+  /** What is still missing once every pending Ingreso is settled, in `moneda`. */
+  falta: number
+  /** The Cotización's tipo de cambio, the dialog's default for a USD one. */
+  tipoCambio: number | null
+  facturas: FacturaPorVincular[]
+}
+
+/** How what is still missing was paid: without an invoice, by a CFDI in `Facturas/Emitidas`, or by an invoice not on disk. */
+export type PagoAlCompletar =
+  | { tipo: 'sin_factura'; monto: number }
+  | { tipo: 'cfdi'; cfdiUuid: string }
+  | { tipo: 'factura_fuera_de_disco'; monto: number; conIva: boolean }
+
+/** The Completar con cobro dialog's answer. Amounts are totals in the Cotización's currency. */
+export interface CobroAlCompletar {
+  /** `YYYY-MM-DD`, not after today. */
+  fecha: string
+  /** The pending Ingresos the dialog showed; refused if they are no longer exactly the pending ones. */
+  pendientes: number[]
+  /** The pending Ingresos marked Incobrable; every other one is Cobrado. */
+  incobrables: number[]
+  /** `null` when nothing is missing after the pending Ingresos. */
+  pago: PagoAlCompletar | null
+  /** Pesos per USD, for a USD Cotización. */
+  tipoCambio: number | null
+}
+
 /**
  * Where a Proyecto's files are. `disponible`: its folder is there to open. `archivado`: its
  * files left `Proyectos/` for long-term storage. `no_disponible`: a folder the app knows but

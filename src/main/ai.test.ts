@@ -454,7 +454,7 @@ describe('Proyectos AI', () => {
 
 describe('Ingreso cards', () => {
   /** An Ingreso of a Proyecto AI, paid on `fecha` unless `pendiente`. */
-  const ingreso = (proyectoId: number, fecha: string, subtotal: number, estado: 'pagado' | 'pendiente' = 'pagado') =>
+  const ingreso = (proyectoId: number, fecha: string, subtotal: number, estado: 'pagado' | 'pendiente' | 'incobrable' = 'pagado') =>
     db
       .insert(ingresos)
       .values({ categoria: 'sin_factura', estado, subtotal, iva: 0, total: subtotal, proyectoId, fechaRegistro: fecha, fechaPago: estado === 'pagado' ? fecha : null })
@@ -504,6 +504,12 @@ describe('Ingreso cards', () => {
     reembolsar(db, septiembre.id, 200_000, HOY)
     expect(resumenAi(db, ajustes, DISCO, 'mes', HOY).ingresoAi).toBe(1_000_000 + 800_000 - 200_000)
     expect(resumenAi(db, ajustes, DISCO, 'todo', HOY).ingresoAi).toBe(2_900_000 + 1_000_000 + 800_000 - 200_000)
+  })
+
+  it('never counts an Incobrable Ingreso', () => {
+    ingreso(aura.id, '2026-09-02', 1_000_000)
+    ingreso(aura.id, '2026-09-02', 50_000, 'incobrable')
+    expect(resumenAi(db, ajustes, DISCO, 'mes', HOY).ingresoAi).toBe(1_000_000)
   })
 
   it('counts a Reembolso in the period it was given back', () => {

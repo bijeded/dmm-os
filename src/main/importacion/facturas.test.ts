@@ -8,6 +8,7 @@ import { leerCfdi } from '../cfdi'
 import { estadoCobro } from '../cobranza'
 import { resumenFinanzas } from '../finanzas'
 import { reembolsar } from '../movimientos'
+import { completarConCobro } from '../proyectos'
 import { contactos, costos, cotizaciones, ingresos, proyectos, sugerenciasImportacion } from '../db/schema'
 import { contacto, cotizacionAceptada, db, proyecto, reiniciarDb } from '../db/test-db'
 import { cfdiXml, complementoXml, RFC_CLIENTE, RFC_DMM, type PagoXml } from '../test-cfdi'
@@ -253,6 +254,17 @@ describe('adivinar el Proyecto', () => {
     const s = db.select().from(sugerenciasImportacion).get()!
     expect(s).toMatchObject({ entidad: 'ingreso', entidadId: ingreso.id, proyectoId: p.id, estado: 'pendiente' })
     expect(s.motivo).toMatch(/monto/)
+  })
+
+  it('an invoice linked by Completar con cobro is not imported again or suggested again', () => {
+    const p = proyectoCotizado(116_000)
+    emitida(cfdiXml())
+    importar()
+    const { cfdiUuid } = db.select().from(ingresos).get()!
+    completarConCobro(db, root, p.id, { fecha: '2026-09-18', pendientes: [], incobrables: [], pago: { tipo: 'cfdi', cfdiUuid: cfdiUuid! }, tipoCambio: null }, '2026-09-18')
+    expect(importar()).toMatchObject({ importados: 0, sugerencias: 0 })
+    expect(db.select().from(ingresos).all()).toEqual([expect.objectContaining({ proyectoId: p.id })])
+    expect(db.select().from(sugerenciasImportacion).all().map((s) => s.estado)).toEqual(['aceptada'])
   })
 
   it('suggests the only Proyecto open at that date when no amount matches', () => {

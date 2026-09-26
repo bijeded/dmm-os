@@ -138,6 +138,35 @@ describe('resumen', () => {
   })
 })
 
+describe('Incobrable', () => {
+  const incobrable = (cambios: Partial<typeof ingresos.$inferInsert> = {}) =>
+    db
+      .insert(ingresos)
+      .values({ categoria: 'sin_factura', estado: 'incobrable', subtotal: 1000, iva: 0, total: 1000, contactoId, fechaRegistro: '2026-09-10', ...cambios })
+      .returning()
+      .get()
+
+  it('counts in no figure, in MXN or USD, but is listed as Incobrable', () => {
+    nuevoIngreso(db, ingreso({ subtotal: 8000, fecha: '2026-09-10' }), hoy)
+    incobrable()
+    incobrable({ subtotal: 1850, total: 1850, montoOriginal: 100, monedaOriginal: 'USD' })
+    const r = resumenFinanzas(db, 'mes', hoy, 30)
+    expect(r.actual).toMatchObject({ ingresos: 8000, ingresosSinFactura: 8000, ivaIngresos: 0 })
+    expect(r.real).toBe(8000)
+    expect(r.serie.reduce((s, p) => s + p.ingresos, 0)).toBe(8000)
+    expect(r.cobranza).toEqual([])
+    expect(Object.values(r.cobros).flat()).toEqual([])
+    expect(r.ingresos.filter((i) => i.estado === 'incobrable')).toHaveLength(2)
+  })
+
+  it('offers only Eliminar on its row, and deleting it removes it', () => {
+    const i = incobrable()
+    expect(resumenFinanzas(db, 'mes', hoy, 30).ingresos.find((f) => f.id === i.id)!.acciones).toEqual(['borrar'])
+    borrarIngreso(db, i.id)
+    expect(resumenFinanzas(db, 'mes', hoy, 30).ingresos).toEqual([])
+  })
+})
+
 describe('Cobranza vencida', () => {
   it('is an invoiced, unpaid Ingreso older than the configured days', () => {
     facturaPendiente('2026-08-01')

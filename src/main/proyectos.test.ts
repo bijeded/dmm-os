@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, ubicacionesArchivo } from './db/schema'
+import { costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos, sugerenciasImportacion, ubicacionesArchivo } from './db/schema'
 import { contacto, cotizacionAceptada, db, ingresoBase, proyecto, reiniciarDb } from './db/test-db'
 import { escanear } from './importacion'
 import { importarCarpetaProyecto } from './importacion/carpetas'
@@ -13,6 +13,7 @@ import {
   borrarProyecto,
   cancelarProyecto,
   carpetaAbrible,
+  completarConCobro,
   completarProyecto,
   crearCarpeta,
   fichaProyecto,
@@ -21,7 +22,8 @@ import {
   pausarProyecto,
   reanudarProyecto
 } from './proyectos'
-import type { ProyectoNuevo } from '../shared/dominio'
+import { borrarIngreso, reembolsar } from './movimientos'
+import { MENSAJE_SIN_PAGAR, type ProyectoNuevo } from '../shared/dominio'
 
 let root: string
 let contactoId: number
@@ -161,6 +163,130 @@ describe('estado', () => {
   })
 })
 
+describe('Completar con cobro', () => {
+  const lukka = () => contacto('Lukka').id
+  const cotizacion = (c: number, cambios: Partial<typeof cotizaciones.$inferInsert> = {}) =>
+    db.insert(cotizaciones).values({ contactoId: c, folio: 30, categoria: 'website', estado: 'aceptada', fecha: '2026-06-01', subtotal: 900_000, iva: 0, total: 900_000, ...cambios }).returning().get()
+  const suyos = (proyectoId: number) => db.select().from(ingresos).where(eq(ingresos.proyectoId, proyectoId)).all()
+  const sinFactura = (monto: number) => ({ tipo: 'sin_factura' as const, monto })
+
+  it('Lukka’s web project: records the $9,000 paid without an invoice and completes it', () => {
+    const c = lukka()
+    const p = proyecto(c, cotizacion(c).id)
+    expect(() => completarProyecto(db, root, p.id, hoy)).toThrow(MENSAJE_SIN_PAGAR)
+
+    const f = completarConCobro(db, root, p.id, { fecha: '2026-09-15', pendientes: [], incobrables: [], pago: sinFactura(900_000), tipoCambio: null }, hoy)
+    expect(f).toMatchObject({ estado: 'completado', fechaFin: hoy, cobrado: 900_000, falta: null })
+    expect(suyos(p.id)).toEqual([
+      expect.objectContaining({ categoria: 'sin_factura', estado: 'pagado', subtotal: 900_000, iva: 0, total: 900_000, contactoId: c, fechaRegistro: '2026-09-15', fechaPago: '2026-09-15' })
+    ])
+  })
+
+  it('a USD Cotización paid in part: the rest is Incobrable, both keep their USD amount', () => {
+    const c = lukka()
+    const p = proyecto(c, cotizacion(c, { moneda: 'USD', subtotal: 100_000, total: 100_000, tipoCambio: 17.9 }).id)
+    completarConCobro(db, root, p.id, { fecha: hoy, pendientes: [], incobrables: [], pago: sinFactura(90_000), tipoCambio: 18.5 }, hoy)
+    expect(suyos(p.id).map(({ estado, total, montoOriginal }) => ({ estado, total, montoOriginal }))).toEqual([
+      { estado: 'pagado', total: 1_665_000, montoOriginal: 90_000 },
+      { estado: 'incobrable', total: 185_000, montoOriginal: 10_000 }
+    ])
+    expect(fichaProyecto(db, root, p.id).estado).toBe('completado')
+  })
+
+  it('con factura: links the CFDI and answers its pending Sugerencia, creating no Ingreso', () => {
+    const c = lukka()
+    const p = proyecto(c, cotizacion(c).id)
+    const otro = proyecto(c, null)
+    const factura = db
+      .insert(ingresos)
+      .values({ categoria: 'factura', estadoFacturacion: 'facturado', estado: 'pendiente', subtotal: 900_000, iva: 144_000, total: 1_044_000, contactoId: c, cfdiUuid: 'UUID-1', fechaRegistro: '2026-07-01' })
+      .returning()
+      .get()
+    const s = db
+      .insert(sugerenciasImportacion)
+      .values({ entidad: 'ingreso', entidadId: factura.id, accion: 'vincular', proyectoId: otro.id, motivo: 'monto' })
+      .returning()
+      .get()
+
+    completarConCobro(db, root, p.id, { fecha: '2026-09-10', pendientes: [], incobrables: [], pago: { tipo: 'cfdi', cfdiUuid: 'UUID-1' }, tipoCambio: null }, hoy)
+    expect(db.select().from(ingresos).all()).toEqual([{ ...factura, proyectoId: p.id, estado: 'pagado', fechaPago: '2026-09-10' }])
+    expect(db.select().from(sugerenciasImportacion).where(eq(sugerenciasImportacion.id, s.id)).get()!.estado).toBe('corregida')
+    expect(fichaProyecto(db, root, p.id).estado).toBe('completado')
+  })
+
+  it('a linked CFDI brings its Reembolsos, and only what stayed counts toward the gap', () => {
+    const c = lukka()
+    const p = proyecto(c, cotizacion(c, { subtotal: 1_000_000, iva: 160_000, total: 1_160_000 }).id)
+    const factura = db
+      .insert(ingresos)
+      .values({ categoria: 'factura', estadoFacturacion: 'facturado', estado: 'pagado', subtotal: 1_000_000, iva: 160_000, total: 1_160_000, contactoId: c, cfdiUuid: 'UUID-3', fechaRegistro: '2026-07-01', fechaPago: '2026-07-01' })
+      .returning()
+      .get()
+    reembolsar(db, factura.id, 500_000, '2026-07-05')
+    completarConCobro(db, root, p.id, { fecha: hoy, pendientes: [], incobrables: [], pago: { tipo: 'cfdi', cfdiUuid: 'UUID-3' }, tipoCambio: null }, hoy)
+    expect(suyos(p.id).map(({ estado, total }) => ({ estado, total }))).toEqual([
+      { estado: 'pagado', total: 1_160_000 },
+      { estado: 'pagado', total: -500_000 },
+      { estado: 'incobrable', total: 500_000 }
+    ])
+  })
+
+  it('a Sugerencia that guessed this Proyecto is recorded aceptada', () => {
+    const c = lukka()
+    const p = proyecto(c, cotizacion(c).id)
+    const factura = db
+      .insert(ingresos)
+      .values({ categoria: 'factura', estadoFacturacion: 'facturado', estado: 'pagado', subtotal: 900_000, iva: 144_000, total: 1_044_000, contactoId: c, cfdiUuid: 'UUID-2', fechaRegistro: '2026-07-01', fechaPago: '2026-07-01' })
+      .returning()
+      .get()
+    db.insert(sugerenciasImportacion).values({ entidad: 'ingreso', entidadId: factura.id, accion: 'vincular', proyectoId: p.id, motivo: 'monto' }).run()
+    completarConCobro(db, root, p.id, { fecha: hoy, pendientes: [], incobrables: [], pago: { tipo: 'cfdi', cfdiUuid: 'UUID-2' }, tipoCambio: null }, hoy)
+    expect(db.select().from(sugerenciasImportacion).get()!.estado).toBe('aceptada')
+    expect(db.select().from(ingresos).get()!.fechaPago).toBe('2026-07-01')
+  })
+
+  it('a Proyecto made in the app has its pending Parcialidades paid or marked Incobrable', () => {
+    const c = lukka()
+    const p = proyecto(c, cotizacion(c, { subtotal: 1_000_000, iva: 160_000, total: 1_160_000 }).id)
+    const parcialidad = { categoria: 'factura' as const, estadoFacturacion: 'por_facturar' as const, estado: 'pendiente' as const, subtotal: 500_000, iva: 80_000, total: 580_000, contactoId: c, proyectoId: p.id }
+    const [primera, segunda] = db.insert(ingresos).values([parcialidad, parcialidad]).returning().all()
+    completarConCobro(db, root, p.id, { fecha: '2026-09-12', pendientes: [primera.id, segunda.id], incobrables: [segunda.id], pago: null, tipoCambio: null }, hoy)
+    expect(suyos(p.id).map(({ id, estado, fechaPago }) => ({ id, estado, fechaPago }))).toEqual([
+      { id: primera.id, estado: 'pagado', fechaPago: '2026-09-12' },
+      { id: segunda.id, estado: 'incobrable', fechaPago: null }
+    ])
+    expect(fichaProyecto(db, root, p.id)).toMatchObject({ estado: 'completado', cobrado: 500_000 })
+  })
+
+  it('a refused answer writes nothing and leaves the Proyecto en curso', () => {
+    const c = lukka()
+    const p = proyecto(c, cotizacion(c).id)
+    const pendiente = db.insert(ingresos).values({ categoria: 'sin_factura', estado: 'pendiente', subtotal: 100_000, iva: 0, total: 100_000, contactoId: c, proyectoId: p.id }).returning().get()
+    const antes = db.select().from(ingresos).all()
+    expect(() => completarConCobro(db, root, p.id, { fecha: hoy, pendientes: [pendiente.id], incobrables: [], pago: sinFactura(900_000), tipoCambio: null }, hoy)).toThrow('El monto no puede ser mayor a lo que falta')
+    // A pending Ingreso the dialog never showed is never paid behind the owner's back.
+    expect(() => completarConCobro(db, root, p.id, { fecha: hoy, pendientes: [], incobrables: [], pago: sinFactura(800_000), tipoCambio: null }, hoy)).toThrow('Los pagos pendientes cambiaron')
+    expect(db.select().from(ingresos).all()).toEqual(antes)
+    expect(fichaProyecto(db, root, p.id).estado).toBe('en_curso')
+  })
+
+  it('refuses a cancelled Proyecto', () => {
+    const c = lukka()
+    const p = proyecto(c, cotizacion(c).id)
+    db.update(proyectos).set({ estado: 'cancelado' }).where(eq(proyectos.id, p.id)).run()
+    expect(() => completarConCobro(db, root, p.id, { fecha: hoy, pendientes: [], incobrables: [], pago: sinFactura(900_000), tipoCambio: null }, hoy)).toThrow(/se puede completar/)
+    expect(suyos(p.id)).toEqual([])
+  })
+
+  it('plain Completar still refuses an imported Proyecto with a gap, as it does one made in the app', () => {
+    const c = lukka()
+    const importado = proyecto(c, cotizacion(c).id)
+    const hecho = guardarProyecto(db, root, nuevo({ contactoId: c }), hoy)
+    db.update(proyectos).set({ cotizacionId: cotizacion(c, { folio: 31 }).id }).where(eq(proyectos.id, hecho.id)).run()
+    for (const id of [importado.id, hecho.id]) expect(() => completarProyecto(db, root, id, hoy)).toThrow(MENSAJE_SIN_PAGAR)
+  })
+})
+
 describe('sin ingresos registrados', () => {
   const cotizacion = (folio: number) =>
     db.insert(cotizaciones).values({ contactoId, folio, categoria: 'website', estado: 'aceptada', fecha: hoy, subtotal: 2000, iva: 320, total: 2320 }).returning().get()
@@ -181,6 +307,22 @@ describe('sin ingresos registrados', () => {
     // Entered by hand in Finanzas, uninvoiced and without IVA: the flag clears itself.
     db.insert(ingresos).values({ fechaRegistro: hoy, subtotal: 2320, total: 2320, categoria: 'sin_factura', proyectoId: p.id, estado: 'pagado' }).run()
     expect(marcado(p.id)).toBe(false)
+  })
+
+  it('clears once paid and Incobrable reach the total, and shows again once the Incobrable is deleted', () => {
+    const p = completado(cotizacion(9).id)
+    archivar(p.id)
+    db.insert(ingresos).values({ fechaRegistro: hoy, subtotal: 2000, total: 2000, categoria: 'sin_factura', proyectoId: p.id, estado: 'pagado' }).run()
+    const resto = db
+      .insert(ingresos)
+      .values({ fechaRegistro: hoy, subtotal: 320, total: 320, categoria: 'sin_factura', proyectoId: p.id, estado: 'incobrable' })
+      .returning()
+      .get()
+    expect(marcado(p.id)).toBe(false)
+
+    borrarIngreso(db, resto.id)
+    expect(marcado(p.id)).toBe(true)
+    expect(fichaProyecto(db, root, p.id).estado).toBe('completado')
   })
 
   it('leaves out a Proyecto still en curso, one with no Cotización, one with no folder, and a monthly one', () => {
