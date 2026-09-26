@@ -109,7 +109,9 @@ function handlers() {
       completar: sinFicha,
       cancelar: sinFicha,
       borrar: vi.fn(),
-      abrirCarpeta: vi.fn(async () => {})
+      abrirCarpeta: vi.fn(async () => {}),
+      opcionesCobro: sinFicha,
+      completarConCobro: sinFicha
     },
     finanzas: {
       coberturaCostos: vi.fn(() => [{ anio: 2025, sinDatos: true }]),

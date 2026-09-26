@@ -2,6 +2,7 @@ import { eq, inArray } from 'drizzle-orm'
 import type { Db } from './db'
 import { cotizaciones, ingresos, proyectos } from './db/schema'
 import { montoEn } from './dinero'
+import { saldaCotizacion } from './ledger'
 
 export interface EstadoCobro {
   /** Pending Ingresos, centavos before IVA. */
@@ -14,8 +15,8 @@ export interface EstadoCobro {
 
 /**
  * Pending and paid Ingresos of the Proyecto, before IVA, and whether it is fully paid: nothing
- * pending and, for a Proyecto from a one-off or installment Cotización, paid Ingresos (net of
- * Reembolsos) reaching the quote's total. A USD quote is compared in USD, by each Ingreso's
+ * pending and, for a Proyecto from a one-off or installment Cotización, paid and Incobrable
+ * Ingresos (net of Reembolsos) reaching the quote's total. A USD quote is compared in USD, by each Ingreso's
  * original amount. A monthly quote has no total to reach.
  */
 export function estadoCobro(db: Db, proyectoId: number): EstadoCobro {
@@ -50,8 +51,8 @@ function cobro(c: typeof cotizaciones.$inferSelect | undefined, suyos: Ingreso[]
   let faltante = 0
   const usd = c?.moneda === 'USD'
   if (c && c.facturacion !== 'mensual') {
-    const pagado = pagados.reduce((s, i) => s + montoEn(i, usd ? 'USD' : 'MXN', c.tipoCambio), 0)
-    faltante = Math.max(0, c.total - pagado)
+    const saldado = suyos.filter(saldaCotizacion).reduce((s, i) => s + montoEn(i, usd ? 'USD' : 'MXN', c.tipoCambio), 0)
+    faltante = Math.max(0, c.total - saldado)
   }
   const pagadoCompleto = pendientes.length === 0 && faltante === 0
   return {

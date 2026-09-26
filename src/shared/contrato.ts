@@ -5,6 +5,7 @@ import type {
   CarpetaAbrible,
   CarpetaLab,
   CoberturaAnual,
+  CobroAlCompletar,
   ConceptoCatalogo,
   ConceptoNuevo,
   ConfigRespaldos,
@@ -24,6 +25,7 @@ import type {
   ListaTareas,
   LogCarpetas,
   LogImportacion,
+  OpcionesCobro,
   PeriodoAi,
   PeriodoFinanzas,
   ProyectoNuevo,
@@ -161,6 +163,10 @@ export const contrato = {
     reanudar: canal<[id: number], FichaProyecto>(),
     /** Refused while any Ingreso is pending: a Proyecto is only completed once fully paid. */
     completar: canal<[id: number], FichaProyecto>(),
+    /** What the Completar con cobro dialog offers for a Proyecto not fully paid. */
+    opcionesCobro: canal<[id: number], OpcionesCobro>(),
+    /** Completar con cobro: records the dialog's payment and completes the Proyecto, all or nothing. */
+    completarConCobro: canal<[id: number, cobro: CobroAlCompletar], FichaProyecto>(),
     /** Cancels the Proyecto and its Cotización (Cancelación con pagos). */
     cancelar: canal<[id: number], FichaProyecto>(),
     /** Borrar vs cancelar: refused when it has anything linked. Its folder stays on disk. */

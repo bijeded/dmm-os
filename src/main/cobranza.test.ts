@@ -94,6 +94,27 @@ describe('estadoCobro', () => {
     expect(estadoCobro(db, p.id).pagadoCompleto).toBe(true)
   })
 
+  it('Incobrable Ingresos settle the quote but are not cobrado', () => {
+    const p = proyecto(contactoId, cotizacion({ subtotal: 900000, iva: 0, total: 900000 }).id)
+    ingreso(p.id, { subtotal: 800000, iva: 0, total: 800000 })
+    ingreso(p.id, { subtotal: 100000, iva: 0, total: 100000, estado: 'incobrable' })
+    expect(estadoCobro(db, p.id)).toEqual({ porCobrar: 0, cobrado: 800000, pagadoCompleto: true, falta: null })
+  })
+
+  it('a USD quote is settled by paid and Incobrable USD amounts', () => {
+    const p = proyecto(contactoId, cotizacion({ moneda: 'USD', subtotal: 100000, iva: 0, total: 100000, tipoCambio: 18.5 }).id)
+    ingreso(p.id, { subtotal: 1665000, iva: 0, total: 1665000, montoOriginal: 90000, monedaOriginal: 'USD' })
+    expect(estadoCobro(db, p.id).falta).toEqual({ pendientes: 0, faltante: 10000, moneda: 'USD' })
+    ingreso(p.id, { subtotal: 185000, iva: 0, total: 185000, montoOriginal: 10000, monedaOriginal: 'USD', estado: 'incobrable' })
+    expect(estadoCobro(db, p.id)).toMatchObject({ cobrado: 1665000, pagadoCompleto: true })
+  })
+
+  it('an Incobrable Ingreso on a Proyecto with no Cotización changes nothing', () => {
+    const p = proyecto(contactoId, null)
+    ingreso(p.id, { estado: 'incobrable' })
+    expect(estadoCobro(db, p.id)).toEqual({ porCobrar: 0, cobrado: 0, pagadoCompleto: true, falta: null })
+  })
+
   it('a monthly Cotización has no total to reach', () => {
     const p = proyecto(contactoId, cotizacion({ facturacion: 'mensual' }).id)
     expect(estadoCobro(db, p.id).pagadoCompleto).toBe(true)

@@ -22,7 +22,7 @@ One unit of work with its own status and billing. A follow-on phase (e.g. monthl
 _Avoid_: engagement
 
 **En curso**:
-Proyecto status meaning work is active, or delivered but not fully paid. A Proyecto is only completed once fully paid. What makes a Contacto an active client (along with paused).
+Proyecto status meaning work is active, or delivered but not fully paid. A Proyecto is only completed once fully paid: nothing pending and, for a one-off or installment Cotización, paid and Incobrable Ingresos reaching its total. What makes a Contacto an active client (along with paused).
 _Avoid_: active (for projects)
 
 **Periodo generado**:
@@ -85,8 +85,15 @@ The pending Ingresos dated this month or earlier (or not yet dated), split into 
 _Avoid_: "Cobranza" for this grouping (Cobranza is every pending Ingreso, whatever its date)
 
 **Sin ingresos registrados**:
-A completed Proyecto with files somewhere (local or external HDD) and a one-off or installment Cotización whose paid Ingresos never reached the quote total. Usually imported history (ADR-0002) whose uninvoiced Ingresos are still to be entered by hand. Derived, never stored: it clears once the Ingresos are entered.
+A completed Proyecto with files somewhere (local or external HDD) and a one-off or installment Cotización whose paid and Incobrable Ingresos never reached the quote total. Usually imported history (ADR-0002) whose uninvoiced Ingresos are still to be entered by hand, or a Proyecto whose Completar con cobro Ingreso was deleted afterwards. Derived, never stored: it clears once the Ingresos are entered.
 _Avoid_: "sin pagar" (it is about what the app has recorded, not what the client owes)
+
+**Incobrable**:
+An Ingreso that will never be paid: what a client did not pay of a Cotización (a discount, a debt written off), recorded only by Completar con cobro. It settles the Cotización, so its Proyecto can be completed, but it never counts as income in any figure (only pending and paid Ingresos do). Finanzas lists it, labelled, and deleting it there is its only undo.
+_Avoid_: condonado
+
+**Completar con cobro**:
+What Completar does on a Proyecto that is not fully paid: a dialog asks for the Fecha de pago and records the payment the guard asks for, then completes the Proyecto, all or nothing. Pending Ingresos are marked paid on that date or Incobrable. What is still missing after them was paid without an invoice (a `sin_factura` Ingreso), by a CFDI already in `Facturas/Emitidas` (linked to the Proyecto, answering its *vincular* Sugerencia de importación), or by an invoice not on disk (a `factura` Ingreso, only then). A smaller amount leaves the rest Incobrable. A USD Cotización is settled in USD at the tipo de cambio the dialog asks for. Deleting what it recorded does not reopen the Proyecto.
 
 **Sin datos**:
 What a period shows for margin or profit when it has no Costos recorded. Never estimated.
@@ -164,7 +171,7 @@ What a Proyecto AI cost in a period: its Asignación de costo plus the Costos li
 _Avoid_: costo pagado
 
 **Cancelación con pagos**:
-When a Proyecto/Cotización is cancelled, paid Ingresos stay paid, pending Ingresos become cancelled or uncollectible, pending estimated Costos are cancelled.
+When a Proyecto/Cotización is cancelled, paid Ingresos stay paid, pending Ingresos become cancelled, pending estimated Costos are cancelled.
 
 **Respaldo**:
 A dated copy of the whole database in Vault, labelled by motivo (semanal, migración, manual, antes de restaurar, antes de reimportar). Retention counts each motivo separately. No migration runs without one.

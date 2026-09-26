@@ -2,8 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
-import type { FichaProyecto as Ficha, FilaProyecto, ListaContactos, ListaProyectos } from '../../../shared/dominio'
+import type { FichaProyecto as Ficha, FilaProyecto, ListaContactos, ListaProyectos, OpcionesCobro } from '../../../shared/dominio'
 import type { DmmApi } from '../../../shared/contrato'
+import { hoy } from '../../../shared/fechas'
 import { FichaProyecto } from './FichaProyecto'
 import { NuevoProyecto } from './NuevoProyecto'
 import { Proyectos } from './Proyectos'
@@ -63,6 +64,17 @@ const contactos: ListaContactos = {
   top: []
 }
 
+const opciones: OpcionesCobro = {
+  moneda: 'MXN',
+  subtotalCotizacion: 900_000,
+  totalCotizacion: 900_000,
+  saldado: 0,
+  pendientes: [],
+  falta: 900_000,
+  tipoCambio: null,
+  facturas: []
+}
+
 let api: DmmApi['proyectos']
 let router: ReturnType<typeof createMemoryRouter>
 
@@ -89,7 +101,9 @@ beforeEach(() => {
     completar: vi.fn(async () => ficha),
     cancelar: vi.fn(async () => ({ ...ficha, estado: 'cancelado' as const, acciones: [] })),
     borrar: vi.fn(async () => {}),
-    abrirCarpeta: vi.fn(async () => {})
+    abrirCarpeta: vi.fn(async () => {}),
+    opcionesCobro: vi.fn(async () => opciones),
+    completarConCobro: vi.fn(async () => ({ ...ficha, estado: 'completado' as const, falta: null, acciones: ['editar' as const] }))
   }
   window.dmm = { proyectos: api, contactos: { listar: vi.fn(async () => contactos) } } as unknown as DmmApi
 })
@@ -175,7 +189,7 @@ describe('FichaProyecto', () => {
     montar('/proyectos/1')
     expect(await screen.findByRole('heading', { name: 'Sitio web' })).toBeTruthy()
     const completar = screen.getByRole('button', { name: 'Completar' })
-    expect(completar).toHaveProperty('disabled', true)
+    expect(completar).toHaveProperty('disabled', false)
     expect(document.getElementById(completar.getAttribute('aria-describedby')!)!.textContent).toMatch(
       /1 pago pendiente por cobrar · faltan \$27,840\.00 para el total de la cotización/
     )
@@ -188,6 +202,100 @@ describe('FichaProyecto', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Cancelar proyecto' }))
     await waitFor(() => expect(api.cancelar).toHaveBeenCalledWith(1))
     expect(await screen.findByText('Cancelado')).toBeTruthy()
+  })
+})
+
+describe('Completar con cobro', () => {
+  const abrir = async (cambios: Partial<OpcionesCobro> = {}) => {
+    vi.mocked(api.opcionesCobro).mockResolvedValue({ ...opciones, ...cambios })
+    montar('/proyectos/1')
+    fireEvent.click(await screen.findByRole('button', { name: 'Completar' }))
+    const dialogo = await screen.findByRole('dialog', { name: 'Completar con cobro' })
+    await within(dialogo).findByText(/falta/)
+    return dialogo
+  }
+  const confirmar = (dialogo: HTMLElement) => fireEvent.click(within(dialogo).getByRole('button', { name: 'Completar' }))
+  const cobro = (cambios: object) => expect.objectContaining({ fecha: hoy(), incobrables: [], tipoCambio: null, ...cambios })
+
+  it('sin factura records the whole gap as paid and shows the Proyecto completed', async () => {
+    const dialogo = await abrir()
+    expect(api.completar).not.toHaveBeenCalled()
+    fireEvent.click(within(dialogo).getByLabelText('No'))
+    expect((within(dialogo).getByLabelText('Monto recibido (MXN)') as HTMLInputElement).value).toBe('9000.00')
+    confirmar(dialogo)
+    await waitFor(() => expect(api.completarConCobro).toHaveBeenCalledWith(1, cobro({ pago: { tipo: 'sin_factura', monto: 900_000 } })))
+    expect(await screen.findByText('Completado')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('a partial amount says what stays Incobrable', async () => {
+    const dialogo = await abrir()
+    fireEvent.click(within(dialogo).getByLabelText('No'))
+    fireEvent.change(within(dialogo).getByLabelText('Monto recibido (MXN)'), { target: { value: '8,000' } })
+    expect(within(dialogo).getByText('$1,000.00 quedará como incobrable.')).toBeTruthy()
+    confirmar(dialogo)
+    await waitFor(() => expect(api.completarConCobro).toHaveBeenCalledWith(1, cobro({ pago: { tipo: 'sin_factura', monto: 800_000 } })))
+  })
+
+  it('a USD Cotización asks for the tipo de cambio, filled with the quote’s', async () => {
+    const dialogo = await abrir({ moneda: 'USD', subtotalCotizacion: 100_000, totalCotizacion: 100_000, falta: 100_000, tipoCambio: 17.9 })
+    const tasa = within(dialogo).getByLabelText('Tipo de cambio') as HTMLInputElement
+    expect(tasa.value).toBe('17.9')
+    fireEvent.change(tasa, { target: { value: '18.5' } })
+    fireEvent.click(within(dialogo).getByLabelText('No'))
+    confirmar(dialogo)
+    await waitFor(() => expect(api.completarConCobro).toHaveBeenCalledWith(1, cobro({ pago: { tipo: 'sin_factura', monto: 100_000 }, tipoCambio: 18.5 })))
+  })
+
+  it('con factura links the chosen CFDI', async () => {
+    const dialogo = await abrir({ facturas: [{ cfdiUuid: 'ABCDEF12-0000', fecha: '2026-07-01', subtotal: 900_000, total: 1_044_000, pendiente: false, coincide: true }] })
+    fireEvent.click(within(dialogo).getByLabelText('Sí'))
+    fireEvent.click(within(dialogo).getByLabelText(/coincide con la cotización/))
+    confirmar(dialogo)
+    await waitFor(() => expect(api.completarConCobro).toHaveBeenCalledWith(1, cobro({ pago: { tipo: 'cfdi', cfdiUuid: 'ABCDEF12-0000' } })))
+  })
+
+  it('an invoice not on disk is entered with its amount, IVA included', async () => {
+    const dialogo = await abrir()
+    fireEvent.click(within(dialogo).getByLabelText('Sí'))
+    expect(within(dialogo).getByText('El contacto no tiene facturas sin proyecto.')).toBeTruthy()
+    fireEvent.click(within(dialogo).getByLabelText('La factura no está en Facturas/Emitidas'))
+    confirmar(dialogo)
+    await waitFor(() => expect(api.completarConCobro).toHaveBeenCalledWith(1, cobro({ pago: { tipo: 'factura_fuera_de_disco', monto: 900_000, conIva: true } })))
+  })
+
+  it('pending Ingresos are Cobrado or Incobrable, with no ¿Con factura? when they cover the gap', async () => {
+    const pendientes = [
+      { id: 11, fecha: '2026-09-01', categoria: 'factura' as const, monto: 580_000 },
+      { id: 12, fecha: '2026-10-01', categoria: 'factura' as const, monto: 580_000 }
+    ]
+    const dialogo = await abrir({ pendientes, falta: 0 })
+    expect(within(dialogo).queryByText('¿Con factura?')).toBeNull()
+    fireEvent.change(within(dialogo).getAllByLabelText('Pago de $5,800.00')[1], { target: { value: 'incobrable' } })
+    confirmar(dialogo)
+    await waitFor(() => expect(api.completarConCobro).toHaveBeenCalledWith(1, cobro({ incobrables: [12], pago: null })))
+  })
+
+  it('refuses a future Fecha de pago without asking main', async () => {
+    const dialogo = await abrir()
+    fireEvent.change(within(dialogo).getByLabelText('Fecha de pago'), { target: { value: '2999-01-01' } })
+    fireEvent.click(within(dialogo).getByLabelText('No'))
+    confirmar(dialogo)
+    expect(await within(dialogo).findByText('La fecha de pago no puede ser futura')).toBeTruthy()
+    expect(api.completarConCobro).not.toHaveBeenCalled()
+  })
+
+  it('shows why main refused, and closing writes nothing', async () => {
+    vi.mocked(api.completarConCobro).mockRejectedValue(new Error('El monto no puede ser mayor a lo que falta'))
+    const dialogo = await abrir()
+    confirmar(dialogo)
+    expect(await within(dialogo).findByText('Indica si el pago fue con factura')).toBeTruthy()
+    fireEvent.click(within(dialogo).getByLabelText('No'))
+    confirmar(dialogo)
+    expect(await within(dialogo).findByText('El monto no puede ser mayor a lo que falta')).toBeTruthy()
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(api.completar).not.toHaveBeenCalled()
   })
 })
 

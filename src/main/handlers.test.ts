@@ -1052,6 +1052,8 @@ describe('Every ledger command works Al día', () => {
       pausar: 'orden',
       reanudar: 'orden',
       completar: 'orden',
+      opcionesCobro: (a) => h.proyectos.opcionesCobro(a.proyectoId),
+      completarConCobro: 'orden',
       cancelar: 'orden',
       borrar: 'orden',
       abrirCarpeta: 'orden'
@@ -1109,6 +1111,15 @@ describe('Every ledger command works Al día', () => {
     expect(estadoDelLedger(a)).toEqual(alDiaEnSeptiembre)
     const antes = filas()
     expect(await uso(a)).toEqual(primera)
+    expect(filas()).toEqual(antes)
+  })
+
+  it('Completar con cobro refuses an answer of the wrong shape and writes nothing', async () => {
+    const id = await mensualEnviada('2026-08-10')
+    const { proyectoId } = await h.cotizaciones.aceptar(id)
+    const antes = filas()
+    for (const cobro of [null, {}, { fecha: '2026-09-16', incobrables: ['1'], pago: null, tipoCambio: null }, { fecha: '2026-09-16', incobrables: [], pago: { tipo: 'efectivo', monto: 1 }, tipoCambio: null }])
+      await expect(async () => h.proyectos.completarConCobro(proyectoId!, cobro as never)).rejects.toThrow('Cobro no válido')
     expect(filas()).toEqual(antes)
   })
 
