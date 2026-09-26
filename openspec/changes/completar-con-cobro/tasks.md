@@ -20,7 +20,7 @@
 ## 3. The dialog
 
 - [x] 3.1 In `src/renderer/src/components/FichaProyecto.tsx`, enable Completar when `falta` is set and open a `role="dialog"` Completar con cobro dialog (following `FormContacto.tsx`). It has Fecha de pago, pending Ingresos as Cobrado/Incobrable, ¿Con factura?, the CFDI list with "La factura no está en Facturas/Emitidas", the editable amount with the Incobrable rest shown, and a tipo de cambio for USD. It shows main's refusals in place and writes nothing on close. Verify in `src/renderer/src/components/Proyectos.test.tsx` (where the FichaProyecto tests live): sin factura MXN, USD with rate, con factura link, invoice not on disk, partial amount, pending Ingresos, future fecha, main's refusal, close without writing
-- [ ] 3.2 Run the app and complete an imported Proyecto with a gap through the dialog. Check Proyectos, Finanzas and Inicio afterwards (ask before using browser automation)
+- [x] 3.2 Run the app and complete an imported Proyecto with a gap through the dialog. Check Proyectos, Finanzas and Inicio afterwards (ask before using browser automation)
 
 ## 4. Domain docs
 
