@@ -228,6 +228,16 @@ describe('Finanzas', () => {
     await waitFor(() => expect(api.asignarProyecto).toHaveBeenCalledWith(90, null))
   })
 
+  it('opens Asignar proyecto from the Cobrado list too, drawn outside every card', async () => {
+    api.resumen = vi.fn(async () => resumen({ cobrado: [ingreso(564, { contacto: 'Omar Rodriguez', estado: 'pagado', acciones: ['reembolsar', 'asignarProyecto'] })], ingresos: [] }))
+    montar()
+    const cobrado = (await screen.findByRole('heading', { name: 'Cobrado' })).closest('section')!
+    fireEvent.click(await within(cobrado).findByRole('button', { name: 'Asignar proyecto' }))
+    const dialogo = await screen.findByRole('dialog')
+    expect(dialogo.closest('section')).toBeNull()
+    expect(api.opcionesAsignar).toHaveBeenCalledWith(564)
+  })
+
   it('selects Ningún proyecto when the invoice sits on a Proyecto it cannot be put on again', async () => {
     api.resumen = vi.fn(async () => resumen({ ingresos: [ingreso(481, { acciones: ['asignarProyecto'] })] }))
     vi.mocked(api.opcionesAsignar).mockResolvedValueOnce({ actual: 99, sinContacto: false, proyectos: [{ id: 24, nombre: 'Cantina 48', contacto: 'Omar Rodriguez', estado: 'completado' }] })
