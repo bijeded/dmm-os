@@ -33,7 +33,7 @@
 - [x] 6.1 Add Fusionar en… to `FichaContacto.tsx`: a `role="dialog"` with the Contacto `<select>` (not itself), the counts that move and that this Contacto will be deleted, main's refusal in place, navigation to the destino on success, nothing written on close. Verify in `src/renderer/src/components/FichaContacto.test.tsx`
 - [x] 6.2 Add Cambiar contacto to `FichaProyecto.tsx` and `FichaCotizacion.tsx`, showing the preview (what moves, which Contacto will be deleted) and main's refusals. Make the Contacto field in `NuevoProyecto.tsx` read-only for a Proyecto that has one. Verify in `src/renderer/src/components/Proyectos.test.tsx` and `src/renderer/src/components/Cotizaciones.test.tsx`
 - [x] 6.3 Add Asignar proyecto to the Ingresos rows in `Finanzas.tsx`: a `role="dialog"` with the Proyecto `<select>` (current marked, Contacto names shown when the Ingreso has none, Ningún proyecto), main's refusal in place, list refreshed on success. Verify in `src/renderer/src/components/Finanzas.test.tsx`
-- [ ] 6.4 Run the app against a copy of the live database and fix Cantina 48: Cambiar contacto to Omar Rodriguez (Contacto "Cantina 48" deleted), then Asignar proyecto on its CFDI Ingresos; check Contactos, Proyectos, Finanzas and Logs afterwards (ask before using browser automation)
+- [x] 6.4 Run the app against a copy of the live database and fix Cantina 48: Cambiar contacto to Omar Rodriguez (Contacto "Cantina 48" deleted), then Asignar proyecto on its CFDI Ingresos; check Contactos, Proyectos, Finanzas and Logs afterwards (ask before using browser automation)
 
 ## 7. Domain docs
 
