@@ -512,7 +512,7 @@ describe('cotizaciones', () => {
     })
   }
   const llevarA = { borrador: [], enviada: ['enviar'], aceptada: ['enviar', 'aceptar'], rechazada: ['enviar', 'rechazar'], cancelada: ['enviar', 'cancelar'] } as const
-  const hacer = (a: AccionCotizacion, f: FichaCotizacion) =>
+  const hacer = (a: Exclude<AccionCotizacion, 'cambiarContacto'>, f: FichaCotizacion) =>
     a === 'editar' ? h.cotizaciones.guardar({ ...f, notas: 'x' }) : a === 'borrar' ? h.cotizaciones.borrar(f.id) : h.cotizaciones[a](f.id)
 
   it.each(Object.keys(llevarA) as (keyof typeof llevarA)[])('offers in the Ficha exactly the actions a %s Cotización accepts', async (estado) => {
@@ -554,7 +554,7 @@ describe('proyectos', () => {
   const personal = () =>
     h.proyectos.guardar({ nombre: `P${++n}`, etiqueta: 'personal', contactoId: null, clienteFinal: null, categoria: 'website', fechaInicio: '', fechaEntrega: null, notas: null })
   const llevarA = { en_curso: [], pausado: ['pausar'], completado: ['completar'], cancelado: ['cancelar'] } as const
-  const hacer = async (a: AccionProyecto, f: FichaProyecto) => (a === 'editar' ? h.proyectos.guardar({ ...f, notas: 'x' }) : h.proyectos[a](f.id))
+  const hacer = async (a: Exclude<AccionProyecto, 'cambiarContacto'>, f: FichaProyecto) => (a === 'editar' ? h.proyectos.guardar({ ...f, notas: 'x' }) : h.proyectos[a](f.id))
 
   it.each(ESTADOS_PROYECTO)('offers in the Ficha exactly the actions a %s Proyecto accepts', async (estado) => {
     for (const accion of ['editar', 'borrar', 'pausar', 'reanudar', 'completar', 'cancelar'] as const) {
@@ -655,7 +655,8 @@ describe('Finanzas offers on each row exactly the actions its command accepts', 
     pagar: 'Solo se marca pagado un ingreso pendiente',
     cancelar: 'Solo se cancela un ingreso pendiente',
     borrar: 'Este ingreso tiene registros vinculados; cancélalo en lugar de borrarlo',
-    reembolsar: 'Solo se reembolsa un ingreso pagado'
+    reembolsar: 'Solo se reembolsa un ingreso pagado',
+    asignarProyecto: 'Solo una factura importada se asigna a un proyecto'
   }
   const RECHAZOS_COSTO: Record<AccionCosto, string> = {
     pagar: 'Solo se marca pagado un costo pendiente',
@@ -675,9 +676,9 @@ describe('Finanzas offers on each row exactly the actions its command accepts', 
     ['Reembolso parcial', ['borrar']],
     ['reembolsado del todo', [], { rechazos: { reembolsar: MENSAJE_REEMBOLSO_EXCEDIDO } }],
     ['Reembolso total', ['borrar']],
-    ['USD pagado y reembolsado en parte', ['reembolsar']],
+    ['USD pagado y reembolsado en parte', ['reembolsar', 'asignarProyecto']],
     ['Reembolso en USD', ['borrar']],
-    ['de un CFDI', ['reembolsar']],
+    ['de un CFDI', ['reembolsar', 'asignarProyecto']],
     ['de un Periodo', ['pagar', 'cancelar']],
     ['de un Periodo cancelado', [], { fueraDelResumen: true }]
   ]
@@ -693,7 +694,7 @@ describe('Finanzas offers on each row exactly the actions its command accepts', 
   ]
 
   const hacerIngreso = (hh: DmmHandlers, a: AccionIngreso, id: number) =>
-    a === 'reembolsar' ? hh.finanzas.reembolsar(id, 1) : hh.finanzas[`${a}Ingreso` as const](id)
+    a === 'reembolsar' ? hh.finanzas.reembolsar(id, 1) : a === 'asignarProyecto' ? hh.finanzas.asignarProyecto(id, null) : hh.finanzas[`${a}Ingreso` as const](id)
   const hacerCosto = (hh: DmmHandlers, a: AccionCosto, id: number) => hh.finanzas[`${a}Costo` as const](id)
 
   /** Every seeded row by its name in the table, through the handlers as the owner would. */
@@ -1033,7 +1034,15 @@ describe('Every ledger command works Al día', () => {
       responder: 'fuera',
       aceptarVincular: 'fuera'
     },
-    contactos: { listar: () => h.contactos.listar(), ficha: (a) => h.contactos.ficha(a.contactoId), guardar: 'orden', borrar: 'orden', csv: () => h.contactos.csv() },
+    contactos: {
+      listar: () => h.contactos.listar(),
+      ficha: (a) => h.contactos.ficha(a.contactoId),
+      guardar: 'orden',
+      borrar: 'orden',
+      fusionar: 'orden',
+      previaCambio: 'orden',
+      csv: () => h.contactos.csv()
+    },
     cotizaciones: {
       listar: () => h.cotizaciones.listar(),
       ficha: (a) => h.cotizaciones.ficha(a.enviada),
@@ -1043,6 +1052,7 @@ describe('Every ledger command works Al día', () => {
       rechazar: 'orden',
       cancelar: 'orden',
       borrar: 'orden',
+      cambiarContacto: 'orden',
       abrirPdf: 'orden'
     },
     proyectos: {
@@ -1056,6 +1066,7 @@ describe('Every ledger command works Al día', () => {
       completarConCobro: 'orden',
       cancelar: 'orden',
       borrar: 'orden',
+      cambiarContacto: 'orden',
       abrirCarpeta: 'orden'
     },
     finanzas: {
@@ -1072,7 +1083,9 @@ describe('Every ledger command works Al día', () => {
       pagarCosto: 'orden',
       cancelarCosto: 'orden',
       borrarCosto: 'orden',
-      detenerCosto: 'orden'
+      detenerCosto: 'orden',
+      opcionesAsignar: 'orden',
+      asignarProyecto: 'orden'
     },
     inicio: { resumen: () => h.inicio.resumen() },
     // Usage and files on disk, not money.
@@ -1111,6 +1124,23 @@ describe('Every ledger command works Al día', () => {
     expect(estadoDelLedger(a)).toEqual(alDiaEnSeptiembre)
     const antes = filas()
     expect(await uso(a)).toEqual(primera)
+    expect(filas()).toEqual(antes)
+  })
+
+  it('the corrections refuse ids and entidades of the wrong shape and write nothing', async () => {
+    const a = await agosto()
+    const antes = filas()
+    const malos = [0, -1, 1.5, '1', null, undefined] as never[]
+    for (const malo of malos) {
+      await expect(async () => h.contactos.fusionar(malo, a.contactoId)).rejects.toThrow('Identificador no válido')
+      await expect(async () => h.contactos.fusionar(a.contactoId, malo)).rejects.toThrow('Identificador no válido')
+      await expect(async () => h.contactos.previaCambio('proyecto', malo, a.contactoId)).rejects.toThrow('Identificador no válido')
+      await expect(async () => h.cotizaciones.cambiarContacto(malo, a.contactoId)).rejects.toThrow('Identificador no válido')
+      await expect(async () => h.proyectos.cambiarContacto(a.proyectoId, malo)).rejects.toThrow('Identificador no válido')
+      await expect(async () => h.finanzas.opcionesAsignar(malo)).rejects.toThrow('Identificador no válido')
+      if (malo !== null) await expect(async () => h.finanzas.asignarProyecto(1, malo)).rejects.toThrow('Identificador no válido')
+    }
+    await expect(async () => h.contactos.previaCambio('contacto' as never, a.proyectoId, a.contactoId)).rejects.toThrow('Identificador no válido')
     expect(filas()).toEqual(antes)
   })
 

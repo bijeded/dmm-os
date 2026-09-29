@@ -418,7 +418,7 @@ export const ESTADOS_COTIZACION = ['borrador', 'enviada', 'aceptada', 'rechazada
 export type EstadoCotizacion = (typeof ESTADOS_COTIZACION)[number]
 
 /** What can be done to a quote; which ones apply depends on its estado and is decided in main. */
-export type AccionCotizacion = 'editar' | 'borrar' | 'enviar' | 'aceptar' | 'rechazar' | 'cancelar'
+export type AccionCotizacion = 'editar' | 'borrar' | 'enviar' | 'aceptar' | 'rechazar' | 'cancelar' | 'cambiarContacto'
 
 export const NOMBRES_ESTADO_COTIZACION: Record<EstadoCotizacion, string> = {
   borrador: 'Borrador',
@@ -523,7 +523,20 @@ export const ETIQUETAS_PROYECTO = ['cliente', 'personal'] as const
 export type EtiquetaProyecto = (typeof ETIQUETAS_PROYECTO)[number]
 
 /** What can be done to a Proyecto; which ones apply depends on its estado and is decided in main. */
-export type AccionProyecto = 'editar' | 'borrar' | 'pausar' | 'reanudar' | 'completar' | 'cancelar'
+export type AccionProyecto = 'editar' | 'borrar' | 'pausar' | 'reanudar' | 'completar' | 'cancelar' | 'cambiarContacto'
+
+/** Where Cambiar contacto starts: the Cotización or the Proyecto; either moves both. */
+export const ENTIDADES_CAMBIO_CONTACTO = ['cotizacion', 'proyecto'] as const
+export type EntidadCambioContacto = (typeof ENTIDADES_CAMBIO_CONTACTO)[number]
+
+/** What Cambiar contacto would move, and the Contacto it would leave with nothing and delete. */
+export interface PreviaCambioContacto {
+  cotizaciones: number
+  proyectos: number
+  ingresos: number
+  /** The name of the Contacto that would be deleted, or `null` when it keeps other records. */
+  borraContacto: string | null
+}
 
 /** Why Completar is held back: the Ficha shows it beside what is unpaid, and the command refuses with it. */
 export const MENSAJE_SIN_PAGAR = 'El proyecto se completa cuando esté pagado por completo'
@@ -852,7 +865,23 @@ export interface PuntoFinanzas {
   costosAnterior: number | null
 }
 
-export type AccionIngreso = 'pagar' | 'cancelar' | 'borrar' | 'reembolsar'
+export type AccionIngreso = 'pagar' | 'cancelar' | 'borrar' | 'reembolsar' | 'asignarProyecto'
+
+/** A Proyecto Asignar proyecto can move an invoice to. */
+export interface ProyectoAsignable {
+  id: number
+  nombre: string
+  contacto: string | null
+  estado: EstadoProyecto
+}
+
+/** What the Asignar proyecto dialog offers for an invoice: its current Proyecto and where it can go. */
+export interface OpcionesAsignar {
+  actual: number | null
+  /** Whether the invoice has no Contacto, so choosing a Proyecto gives it that Proyecto's. */
+  sinContacto: boolean
+  proyectos: ProyectoAsignable[]
+}
 export type AccionCosto = 'pagar' | 'cancelar' | 'borrar' | 'detener'
 
 export const ESTADOS_INGRESO = ['pendiente', 'pagado', 'cancelado', 'incobrable'] as const

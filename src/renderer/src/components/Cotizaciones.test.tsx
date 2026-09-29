@@ -84,11 +84,15 @@ beforeEach(() => {
     rechazar: vi.fn(async () => ficha),
     cancelar: vi.fn(async () => ficha),
     borrar: vi.fn(async () => {}),
+    cambiarContacto: vi.fn(async () => ({ ...ficha, contactoId: 8, contacto: 'Omar Rodriguez' })),
     abrirPdf: vi.fn(async () => {})
   }
   window.dmm = {
     cotizaciones: api,
-    contactos: { listar: vi.fn(async () => ({ contactos: [{ id: 7, nombre: 'Clínica Sol' }], conteo: {}, top: [] })) },
+    contactos: {
+      listar: vi.fn(async () => ({ contactos: [{ id: 7, nombre: 'Clínica Sol' }, { id: 8, nombre: 'Omar Rodriguez' }], conteo: {}, top: [] })),
+      previaCambio: vi.fn(async () => ({ cotizaciones: 1, proyectos: 1, ingresos: 2, borraContacto: null }))
+    },
     catalogo: { listar: vi.fn(async () => [{ id: 1, concepto: 'Landing page', categoria: 'website', precio: 950_000 }]) }
   } as unknown as DmmApi
 })
@@ -183,5 +187,27 @@ describe('Ficha de cotización', () => {
     await waitFor(() => expect(api.aceptar).toHaveBeenCalledWith(2))
     expect((await screen.findByRole('link', { name: 'Ver proyecto' })).getAttribute('href')).toBe('/proyectos/4')
     expect(screen.queryByRole('button', { name: 'Aceptada' })).toBeNull()
+  })
+
+  it('moves a sent quote and its Proyecto to another Contacto with Cambiar contacto', async () => {
+    api.ficha = vi.fn(async (): Promise<Ficha> => ({ ...ficha, acciones: [...ficha.acciones, 'cambiarContacto'] }))
+    montar('/cotizaciones/2')
+    fireEvent.click(await screen.findByRole('button', { name: 'Cambiar contacto' }))
+    const dialogo = screen.getByRole('dialog')
+    await within(dialogo).findByRole('option', { name: 'Omar Rodriguez' })
+    fireEvent.change(within(dialogo).getByRole('combobox', { name: 'Contacto' }), { target: { value: '8' } })
+    const previa = await within(dialogo).findByText(/Pasan a Omar Rodriguez: 1 cotización, 1 proyecto y 2 ingresos\.$/)
+    expect(previa.textContent).not.toMatch(/se elimina/)
+    expect(window.dmm.contactos.previaCambio).toHaveBeenCalledWith('cotizacion', 2, 8)
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cambiar contacto' }))
+    await waitFor(() => expect(api.cambiarContacto).toHaveBeenCalledWith(2, 8))
+    expect(await screen.findByRole('link', { name: 'Omar Rodriguez' })).toBeTruthy()
+  })
+
+  it('offers no Cambiar contacto on a draft', async () => {
+    api.ficha = vi.fn(async (): Promise<Ficha> => ({ ...ficha, estado: 'borrador', acciones: ['editar', 'borrar', 'enviar'] }))
+    montar('/cotizaciones/2')
+    await screen.findByRole('button', { name: 'Editar' })
+    expect(screen.queryByRole('button', { name: 'Cambiar contacto' })).toBeNull()
   })
 })

@@ -124,7 +124,7 @@ A `Proyectos/` folder (in `Proyectos/`, `Archivo/Proyectos/` or on the external 
 The folder scan follows the Mapa de nombres only when a file or folder is first imported: editing the map later moves, renames or removes nothing already imported. The one exception is an RFC, which a later scan still gives to a Contacto that has none. A map edit reaches records already imported only through Reimportar desde cero.
 
 **Reimportar desde cero**:
-Removing every record the Importación made (its Contactos, Cotizaciones, Proyectos and their locations, the Ingresos and Costos that carry a CFDI UUID, and every Sugerencia de importación) and running the folder scan and the Facturas run again, from Configuración → Logs, after a confirmation and a Respaldo *antes de reimportar*. Answers to Sugerencias and edits to imported records are lost. Refused, removing nothing, while anything made by hand exists (a Contacto, Cotización or Proyecto created in the app, an Ingreso or Costo with no CFDI UUID, a recurring definition), while the Mapa de nombres cannot be read, or while a set-up external HDD is not connected. AI token usage, Tareas, the Catálogo and settings are untouched.
+Removing every record the Importación made (its Contactos, Cotizaciones, Proyectos and their locations, the Ingresos and Costos that carry a CFDI UUID, and every Sugerencia de importación) and running the folder scan and the Facturas run again, from Configuración → Logs, after a confirmation and a Respaldo *antes de reimportar*. Answers to Sugerencias and edits to imported records are lost. Refused, removing nothing, while anything made by hand exists (a Contacto, Cotización or Proyecto created in the app, an Ingreso or Costo with no CFDI UUID, a recurring definition), while the Mapa de nombres cannot be read, or while a set-up external HDD is not connected. AI token usage, Tareas, the Catálogo and settings are untouched. Corrections made with Fusionar Contacto, Cambiar Contacto or Asignar proyecto are edits to imported records, and are lost the same way.
 _Avoid_: reset, borrar todo
 
 **Factura cancelada**:
@@ -134,7 +134,16 @@ A CFDI filed in a folder whose name starts with "cancel" (e.g. `Canceladas`), or
 One payment of an invoice, recorded as its own Ingreso dated on that payment's day. An invoice paid in several payments (as its complementos de pago record) is split into Parcialidades that add up exactly to it; an open balance is one more, still pending. The same word names each of the pending Ingresos a Plan de cobro splits a Cotización into.
 
 **Proyecto sin Contacto**:
-A client Proyecto the Importación could not attribute: its folder matched no map row, no Contacto of its name, and no Cotización of a single Contacto. Logs and Vista previa list it, with the Contactos whose Cotizaciones name it when several do, so a map row can settle it before the real run. It is assigned a Contacto from its Ficha. Not a personal Proyecto, which never has one.
+A client Proyecto the Importación could not attribute: its folder matched no map row, no Contacto of its name, and no Cotización of a single Contacto. Logs and Vista previa list it, with the Contactos whose Cotizaciones name it when several do, so a map row can settle it before the real run. It is assigned a Contacto from Editar, which also gives it to its Ingresos that have none; once a Proyecto has a Contacto, Editar no longer changes it (Cambiar Contacto does). Not a personal Proyecto, which never has one.
+
+**Fusionar Contacto**:
+Merging a Contacto by hand into another the owner chooses, from its Ficha (*Fusionar en…*): its Cotizaciones, Proyectos, Ingresos and recurring definitions move, the chosen Contacto keeps its name and takes the other's details where it has none, and the merged one is deleted. Refused when both hold different RFCs. A pending *fusionar* Sugerencia de importación about it is answered by it. Not undoable.
+
+**Cambiar Contacto**:
+Moving a Cotización and the Proyecto it led to (or a Proyecto with no Cotización) to another Contacto, with their Ingresos and recurring definitions, from either Ficha. Refused while any of their Ingresos comes from a CFDI (the invoice names its receptor; Fusionar Contacto is for the same company under two names) or a Sugerencia de importación about them is pending. The Contacto it leaves with nothing is deleted. Changes no estado, amount or date.
+
+**Asignar proyecto**:
+Putting an imported invoice on another Proyecto of its Contacto, or on none, from its row in Finanzas: all its Parcialidades and their Reembolsos move together, and a pending *vincular* Sugerencia de importación for them is answered. An invoice with no Contacto (its RFC is on none) can go to any client Proyecto and takes that Proyecto's Contacto, without giving it the RFC. The Proyectos' estados do not change.
 
 **Mapa de nombres**:
 `Clientes/_nombres.csv`, edited by the user, telling the folder scan what each name on disk means: its Contacto and, optionally, its Proyecto, Cliente final and the Contacto's RFC. A row keyed `<folder>/<subfolder>` makes that subfolder a Proyecto of its own. A map that exists but cannot be read stops the scan, and rows that matched nothing are reported in Logs.

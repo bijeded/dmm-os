@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router'
 import { NOMBRES_CATEGORIA_COSTO, NOMBRES_ESTADO_INGRESO, NOMBRES_PERIODO_FINANZAS, PERIODOS_FINANZAS, type FilaCosto, type FilaIngreso, type PeriodoFinanzas, type PuntoFinanzas, type ResumenFinanzas } from '../../../shared/dominio'
 import { dia, normalizar, pesos } from '../../../shared/formato'
 import { centavosDe } from '../../../shared/montos'
+import { AsignarProyecto } from './Atribucion'
 import { Aviso, Cifra, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { celdaCls, etiquetaCls, inputCls, tituloCls } from './estilos'
@@ -32,6 +33,7 @@ export function Finanzas() {
   const [busqueda, setBusqueda] = useState('')
   const [vencidas, setVencidas] = useState(false)
   const [reembolso, setReembolso] = useState<{ id: number; monto: string; moneda: 'MXN' | 'USD' } | null>(null)
+  const [asignando, setAsignando] = useState<number | null>(null)
   const { error, ocupado, correr } = useAccion()
 
   const cargar = (p = periodo) => correr(async () => setResumen(await window.dmm.finanzas.resumen(p)))
@@ -70,6 +72,11 @@ export function Finanzas() {
       {i.acciones.includes('reembolsar') && (
         <button type="button" disabled={ocupado} className={accionCls} onClick={() => setReembolso({ id: i.id, monto: (i.reembolsable / 100).toFixed(2), moneda: i.moneda })}>
           Reembolsar
+        </button>
+      )}
+      {i.acciones.includes('asignarProyecto') && (
+        <button type="button" disabled={ocupado} className={accionCls} onClick={() => setAsignando(i.id)}>
+          Asignar proyecto
         </button>
       )}
       {i.acciones.includes('borrar') && (
@@ -296,6 +303,16 @@ export function Finanzas() {
               Cancelar
             </Button>
           </div>
+        )}
+        {asignando !== null && (
+          <AsignarProyecto
+            ingresoId={asignando}
+            onCerrar={() => setAsignando(null)}
+            onAsignado={() => {
+              setAsignando(null)
+              cargar()
+            }}
+          />
         )}
         <TablaIngresos filas={ingresos} acciones={accionesIngreso} vacio="Ningún ingreso coincide." />
       </section>

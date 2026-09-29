@@ -62,6 +62,8 @@ function handlers() {
         throw new Error('sin ficha')
       }),
       borrar: vi.fn(),
+      fusionar: vi.fn(() => 1),
+      previaCambio: vi.fn(() => ({ cotizaciones: 0, proyectos: 0, ingresos: 0, borraContacto: null })),
       csv: vi.fn(() => '')
     },
     catalogo: {
@@ -94,6 +96,9 @@ function handlers() {
         throw new Error('sin ficha')
       }),
       borrar: vi.fn(),
+      cambiarContacto: vi.fn(() => {
+        throw new Error('sin ficha')
+      }),
       abrirPdf: vi.fn(async () => {})
     },
     proyectos: {
@@ -111,7 +116,8 @@ function handlers() {
       borrar: vi.fn(),
       abrirCarpeta: vi.fn(async () => {}),
       opcionesCobro: sinFicha,
-      completarConCobro: sinFicha
+      completarConCobro: sinFicha,
+      cambiarContacto: sinFicha
     },
     finanzas: {
       coberturaCostos: vi.fn(() => [{ anio: 2025, sinDatos: true }]),
@@ -126,7 +132,9 @@ function handlers() {
       pagarCosto: vi.fn(),
       cancelarCosto: vi.fn(),
       borrarCosto: vi.fn(),
-      detenerCosto: vi.fn()
+      detenerCosto: vi.fn(),
+      opcionesAsignar: vi.fn(() => ({ actual: null, sinContacto: false, proyectos: [] })),
+      asignarProyecto: vi.fn()
     },
     tareas: {
       listar: vi.fn(() => ({ pendientes: [], hechas: [], diasHechas: 30 })),

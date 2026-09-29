@@ -1,18 +1,18 @@
 import { existsSync, mkdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import type { Db } from './db'
 import { estadoCobro, estadosCobro } from './cobranza'
 import { cancelar, RegistroVinculadoError } from './db/cancelacion'
-import { contactos, cotizaciones, proyectos, ubicacionesArchivo } from './db/schema'
+import { contactos, cotizaciones, ingresos, proyectos, ubicacionesArchivo } from './db/schema'
 import { folioDe } from './cotizar'
 import { rutaDeProyecto } from './paths'
-import { accionesProyecto, completarEsperaPago, exigirProyecto } from './ciclo-proyecto'
+import { accionesProyecto, completarEsperaPago, exigirProyecto, type AccionPorEstado } from './ciclo-proyecto'
 import { opcionesCobro, planCobro, registrarCobro } from './completar-con-cobro'
-import { CATEGORIAS, ESTADOS_PROYECTO, type AccionProyecto, type CarpetaProyecto, type Categoria, type CobroAlCompletar, type EstadoProyecto, type FichaProyecto, type ListaProyectos, type ProyectoNuevo } from '../shared/dominio'
+import { CATEGORIAS, ESTADOS_PROYECTO, type CarpetaProyecto, type Categoria, type CobroAlCompletar, type EstadoProyecto, type FichaProyecto, type ListaProyectos, type ProyectoNuevo } from '../shared/dominio'
 
 /** Reads the Proyecto and refuses the action unless its lifecycle allows it. */
-function leerPara(db: Db, accion: AccionProyecto, id: number) {
+function leerPara(db: Db, accion: AccionPorEstado, id: number) {
   const p = leer(db, id)
   exigirProyecto(accion, p.estado, estadoCobro(db, id))
   return p
@@ -119,7 +119,7 @@ export function fichaProyecto(db: Db, root: string, id: number): FichaProyecto {
     porCobrar,
     cobrado,
     falta: completarEsperaPago(p.estado, cobro) ? falta : null,
-    acciones: accionesProyecto(p.estado, cobro)
+    acciones: accionesProyecto(p.estado, cobro, p)
   }
 }
 
@@ -155,9 +155,9 @@ const fecha = (f: string | null) => {
 }
 
 /**
- * Creates a Proyecto en curso and scaffolds its folder, or edits one. The Contacto of a
- * Proyecto that came from a Cotización is the quote's and does not change; its estado only
- * changes through its actions.
+ * Creates a Proyecto en curso and scaffolds its folder, or edits one. Editing sets a Contacto only
+ * on a Proyecto that has none; once it has one it changes only through Cambiar contacto. Its estado
+ * only changes through its actions.
  */
 export function guardarProyecto(db: Db, root: string, p: ProyectoNuevo, hoy: string): FichaProyecto {
   const nombre = p.nombre.trim()
@@ -186,12 +186,22 @@ export function guardarProyecto(db: Db, root: string, p: ProyectoNuevo, hoy: str
     return fichaProyecto(db, root, id)
   }
   const actual = leerPara(db, 'editar', p.id)
-  if (actual.cotizacionId !== null) {
-    if (personal) throw new Error('Un proyecto de una cotización no puede ser personal')
+  if (actual.cotizacionId !== null && personal) throw new Error('Un proyecto de una cotización no puede ser personal')
+  if (actual.contactoId !== null) {
+    if (personal) throw new Error('Un proyecto con contacto no puede volverse personal')
     valores.contactoId = actual.contactoId
   }
-  db.update(proyectos).set(valores).where(eq(proyectos.id, p.id)).run()
-  return fichaProyecto(db, root, p.id)
+  const id = p.id
+  db.transaction((tx) => {
+    tx.update(proyectos).set(valores).where(eq(proyectos.id, id)).run()
+    // A Proyecto sin Contacto that gets one gives it to its Ingresos that have none.
+    if (valores.contactoId !== null)
+      tx.update(ingresos)
+        .set({ contactoId: valores.contactoId })
+        .where(and(eq(ingresos.proyectoId, id), isNull(ingresos.contactoId)))
+        .run()
+  })
+  return fichaProyecto(db, root, id)
 }
 
 function cambiarEstado(db: Db, root: string, id: number, estado: EstadoProyecto) {

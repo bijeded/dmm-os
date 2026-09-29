@@ -9,9 +9,14 @@ describe('el ciclo de una Cotización', () => {
   })
 
   it('closes out a sent quote, and only cancels an accepted one', () => {
-    expect(accionesCotizacion('enviada', sinProyecto)).toEqual(['aceptar', 'rechazar', 'cancelar'])
-    expect(accionesCotizacion('aceptada', sinProyecto)).toEqual(['cancelar'])
-    for (const estado of ['rechazada', 'cancelada', 'expirada'] as const) expect(accionesCotizacion(estado, sinProyecto)).toEqual([])
+    expect(accionesCotizacion('enviada', sinProyecto)).toEqual(['aceptar', 'rechazar', 'cancelar', 'cambiarContacto'])
+    expect(accionesCotizacion('aceptada', sinProyecto)).toEqual(['cancelar', 'cambiarContacto'])
+    for (const estado of ['rechazada', 'cancelada', 'expirada'] as const) expect(accionesCotizacion(estado, sinProyecto)).toEqual(['cambiarContacto'])
+  })
+
+  it('changes a draft’s Contacto by editing it, never with Cambiar contacto', () => {
+    expect(accionesCotizacion('borrador', sinProyecto)).not.toContain('cambiarContacto')
+    expect(() => exigirCotizacion('cambiarContacto', 'borrador', sinProyecto)).toThrow('El contacto de un borrador se cambia al editarlo')
   })
 
   it('refuses with its own message', () => {
@@ -21,8 +26,8 @@ describe('el ciclo de una Cotización', () => {
 
   it('cancels only while its Proyecto can be cancelled too', () => {
     const proyecto = (estado: 'en_curso' | 'completado') => ({ proyecto: { estado, cobro: { pagadoCompleto: true } } })
-    expect(accionesCotizacion('aceptada', proyecto('en_curso'))).toEqual(['cancelar'])
-    expect(accionesCotizacion('aceptada', proyecto('completado'))).toEqual([])
+    expect(accionesCotizacion('aceptada', proyecto('en_curso'))).toEqual(['cancelar', 'cambiarContacto'])
+    expect(accionesCotizacion('aceptada', proyecto('completado'))).toEqual(['cambiarContacto'])
     expect(() => exigirCotizacion('cancelar', 'aceptada', proyecto('completado'))).toThrow(/proyecto en curso o pausado/)
   })
 })

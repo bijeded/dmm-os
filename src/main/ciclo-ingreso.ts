@@ -44,10 +44,14 @@ function rechazo(accion: AccionIngreso, i: Ingreso, ctx: ContextoIngreso): strin
     case 'reembolsar':
       if (!reembolsableIngreso(i)) return 'Solo se reembolsa un ingreso pagado'
       return restante(i, ctx.reembolsos).original > 0 ? null : MENSAJE_REEMBOLSO_EXCEDIDO
+    // An imported invoice moves between Proyectos; its Reembolsos go with it, never on their own.
+    case 'asignarProyecto':
+      if (i.cfdiUuid === null || i.reembolsoDeId !== null) return 'Solo una factura importada se asigna a un proyecto'
+      return i.estado === 'cancelado' ? 'Una factura cancelada no se asigna a un proyecto' : null
   }
 }
 
-const ACCIONES: AccionIngreso[] = ['pagar', 'cancelar', 'borrar', 'reembolsar']
+const ACCIONES: AccionIngreso[] = ['pagar', 'cancelar', 'borrar', 'reembolsar', 'asignarProyecto']
 
 /**
  * What each of `filas` offers on its Finanzas row: exactly the actions `exigirIngreso` accepts, and

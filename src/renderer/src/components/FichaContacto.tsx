@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { NOMBRES_ESTADO_CONTACTO, type FichaContacto as Ficha, type Movimiento } from '../../../shared/dominio'
 import { dia, pesos } from '../../../shared/formato'
+import { FusionarContacto } from './Atribucion'
 import { FormContacto } from './FormContacto'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
@@ -42,6 +43,7 @@ export function FichaContacto() {
   const [filtro, setFiltro] = useState<(typeof filtros)[number][0]>('todo')
   const [confirmar, setConfirmar] = useState(false)
   const [editando, setEditando] = useState(false)
+  const [fusionando, setFusionando] = useState(false)
   const { error, ocupado, correr } = useAccion()
 
   const cargar = () => correr(async () => setFicha(await window.dmm.contactos.ficha(id)))
@@ -79,6 +81,9 @@ export function FichaContacto() {
             <Button variant="secondary" disabled={ocupado} onClick={() => setConfirmar(true)}>
               Eliminar
             </Button>
+            <Button variant="secondary" disabled={ocupado} onClick={() => setFusionando(true)}>
+              Fusionar en…
+            </Button>
             <Button disabled={ocupado} onClick={() => setEditando(true)}>
               Editar
             </Button>
@@ -86,6 +91,18 @@ export function FichaContacto() {
         )}
       </div>
       <Aviso error={error} />
+
+      {fusionando && c && ficha && (
+        <FusionarContacto
+          contacto={c}
+          cuenta={{ cotizaciones: ficha.cotizaciones.total, proyectos: ficha.proyectos }}
+          onCerrar={() => setFusionando(false)}
+          onFusionado={(destino) => {
+            setFusionando(false)
+            navigate(`/contactos/${destino}`)
+          }}
+        />
+      )}
 
       {editando && c && <FormContacto inicial={c} onGuardado={guardado} onCerrar={() => setEditando(false)} />}
 

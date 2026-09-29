@@ -13,7 +13,12 @@ const REGLAS: Record<AccionCotizacion, { en: readonly EstadoCotizacion[]; mensaj
   enviar: { en: ['borrador'], mensaje: 'Solo un borrador se puede enviar' },
   aceptar: { en: ['enviada'], mensaje: 'Solo una cotización enviada se puede aceptar' },
   rechazar: { en: ['enviada'], mensaje: 'Solo una cotización enviada se puede rechazar' },
-  cancelar: { en: ['enviada', 'aceptada'], mensaje: 'Solo una cotización enviada o aceptada se puede cancelar' }
+  cancelar: { en: ['enviada', 'aceptada'], mensaje: 'Solo una cotización enviada o aceptada se puede cancelar' },
+  // A draft's Contacto is changed by editing it.
+  cambiarContacto: {
+    en: ['enviada', 'aceptada', 'rechazada', 'cancelada', 'expirada'],
+    mensaje: 'El contacto de un borrador se cambia al editarlo'
+  }
 }
 
 /**
