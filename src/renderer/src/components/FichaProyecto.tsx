@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { MENSAJE_SIN_PAGAR, NOMBRES_CATEGORIA, NOMBRES_ESTADO_PROYECTO, type FichaProyecto as Ficha } from '../../../shared/dominio'
 import { dia, folioDmm, monto, pesos } from '../../../shared/formato'
+import { CambiarContacto } from './Atribucion'
 import { CompletarConCobro } from './CompletarConCobro'
 import { NOMBRES_CARPETA } from './Proyectos'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
@@ -18,6 +19,7 @@ export function FichaProyecto() {
   const navigate = useNavigate()
   const [ficha, setFicha] = useState<Ficha | null>(null)
   const [cobrando, setCobrando] = useState(false)
+  const [cambiandoContacto, setCambiandoContacto] = useState(false)
   const { error, ocupado, correr } = useAccion()
 
   useEffect(() => {
@@ -54,6 +56,11 @@ export function FichaProyecto() {
                 Editar
               </Button>
             )}
+            {puede('cambiarContacto') && (
+              <Button variant="secondary" disabled={ocupado} onClick={() => setCambiandoContacto(true)}>
+                Cambiar contacto
+              </Button>
+            )}
             {puede('pausar') && (
               <Button variant="secondary" disabled={ocupado} onClick={accion(api.pausar)}>
                 Pausar
@@ -78,6 +85,18 @@ export function FichaProyecto() {
         )}
       </div>
       <Aviso error={error} />
+      {cambiandoContacto && f?.contactoId != null && (
+        <CambiarContacto<Ficha>
+          entidad="proyecto"
+          id={id}
+          contactoId={f.contactoId}
+          onCerrar={() => setCambiandoContacto(false)}
+          onCambiado={(nueva) => {
+            setFicha(nueva)
+            setCambiandoContacto(false)
+          }}
+        />
+      )}
       {cobrando && (
         <CompletarConCobro
           id={id}

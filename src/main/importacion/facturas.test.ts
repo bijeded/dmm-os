@@ -9,6 +9,7 @@ import { estadoCobro } from '../cobranza'
 import { resumenFinanzas } from '../finanzas'
 import { reembolsar } from '../movimientos'
 import { completarConCobro } from '../proyectos'
+import { asignarProyecto } from '../atribucion'
 import { contactos, costos, cotizaciones, ingresos, proyectos, sugerenciasImportacion } from '../db/schema'
 import { contacto, cotizacionAceptada, db, proyecto, reiniciarDb } from '../db/test-db'
 import { cfdiXml, complementoXml, RFC_CLIENTE, RFC_DMM, type PagoXml } from '../test-cfdi'
@@ -265,6 +266,31 @@ describe('adivinar el Proyecto', () => {
     expect(importar()).toMatchObject({ importados: 0, sugerencias: 0 })
     expect(db.select().from(ingresos).all()).toEqual([expect.objectContaining({ proyectoId: p.id })])
     expect(db.select().from(sugerenciasImportacion).all().map((s) => s.estado)).toEqual(['aceptada'])
+  })
+
+  it('an invoice moved by Asignar proyecto keeps its Proyecto and Contacto on the next run', () => {
+    const guess = proyectoCotizado(116_000)
+    const otro = proyectoCotizado(500_000, 101)
+    emitida(cfdiXml())
+    importar()
+    const factura = db.select().from(ingresos).get()!
+    asignarProyecto(db, factura.id, otro.id, '2026-09-18')
+    expect(importar()).toMatchObject({ importados: 0, sugerencias: 0 })
+    expect(db.select().from(ingresos).all()).toEqual([expect.objectContaining({ proyectoId: otro.id, contactoId: guess.contactoId })])
+    expect(db.select().from(sugerenciasImportacion).all().map((s) => s.estado)).toEqual(['corregida'])
+  })
+
+  it('an invoice with no Contacto keeps the Contacto Asignar proyecto gave it on the next run', () => {
+    const c = contacto('Omar Rodriguez')
+    const p = db.insert(proyectos).values({ nombre: 'La Boom', contactoId: c.id, categoria: 'website' }).returning().get()
+    emitida(cfdiXml())
+    importar()
+    const factura = db.select().from(ingresos).get()!
+    expect(factura.contactoId).toBeNull()
+    asignarProyecto(db, factura.id, p.id, '2026-09-18')
+    expect(importar()).toMatchObject({ importados: 0 })
+    expect(db.select().from(ingresos).all()).toEqual([expect.objectContaining({ proyectoId: p.id, contactoId: c.id })])
+    expect(db.select().from(contactos).get()!.rfc).toBeNull()
   })
 
   it('suggests the only Proyecto open at that date when no amount matches', () => {

@@ -23,6 +23,7 @@ import {
   reanudarProyecto
 } from './proyectos'
 import { borrarIngreso, reembolsar } from './movimientos'
+import { asignarProyecto } from './atribucion'
 import { MENSAJE_SIN_PAGAR, type ProyectoNuevo } from '../shared/dominio'
 
 let root: string
@@ -84,6 +85,37 @@ describe('guardar', () => {
     const p = proyecto(contactoId, c.id)
     const otro = contacto('Hotel Aura').id
     expect(guardarProyecto(db, root, nuevo({ id: p.id, contactoId: otro }), hoy).contactoId).toBe(contactoId)
+  })
+
+  it('keeps the Contacto of a Proyecto that has one, even with no Cotización', () => {
+    const { id } = guardarProyecto(db, root, nuevo(), hoy)
+    const otro = contacto('Hotel Aura').id
+    expect(guardarProyecto(db, root, nuevo({ id, contactoId: otro }), hoy).contactoId).toBe(contactoId)
+    expect(() => guardarProyecto(db, root, nuevo({ id, etiqueta: 'personal', contactoId: null }), hoy)).toThrow('Un proyecto con contacto no puede volverse personal')
+  })
+
+  it('gives a Proyecto sin Contacto its Contacto, and that Contacto to its Ingresos that have none', () => {
+    const bosque = db.insert(proyectos).values({ nombre: 'Bosque', categoria: 'website', importado: true }).returning().get()
+    const versa = contacto('Versa').id
+    const factura = db
+      .insert(ingresos)
+      .values({ ...ingresoBase, categoria: 'factura', estadoFacturacion: 'facturado', estado: 'pagado', cfdiUuid: 'bosque', proyectoId: bosque.id })
+      .returning()
+      .get()
+    const f = guardarProyecto(db, root, nuevo({ id: bosque.id, nombre: 'Bosque', contactoId: versa }), hoy)
+    expect(f).toMatchObject({ contactoId: versa, contacto: 'Versa', acciones: expect.arrayContaining(['cambiarContacto']) })
+    expect(db.select().from(ingresos).where(eq(ingresos.id, factura.id)).get()!.contactoId).toBe(versa)
+  })
+
+  it('leaves an invoice with no Contacto alone when a Proyecto that has one is edited', () => {
+    const { id } = guardarProyecto(db, root, nuevo(), hoy)
+    const factura = db
+      .insert(ingresos)
+      .values({ ...ingresoBase, categoria: 'factura', estadoFacturacion: 'facturado', estado: 'pagado', cfdiUuid: 'padre', proyectoId: id })
+      .returning()
+      .get()
+    guardarProyecto(db, root, nuevo({ id, notas: 'Solo una nota' }), hoy)
+    expect(db.select().from(ingresos).where(eq(ingresos.id, factura.id)).get()!.contactoId).toBeNull()
   })
 
   it('a rescan finds the scaffolded folder as the same Proyecto', () => {
@@ -149,7 +181,7 @@ describe('estado', () => {
     ]).run()
     db.insert(costos).values({ nombre: 'Hosting', categoria: 'unico', estimado: true, subtotal: 500, total: 500, fecha: hoy, proyectoId: p.id }).run()
 
-    expect(cancelarProyecto(db, root, p.id, hoy)).toMatchObject({ estado: 'cancelado', fechaFin: hoy, acciones: [] })
+    expect(cancelarProyecto(db, root, p.id, hoy)).toMatchObject({ estado: 'cancelado', fechaFin: hoy, acciones: ['cambiarContacto'] })
     expect(db.select().from(cotizaciones).get()!.estado).toBe('cancelada')
     expect(db.select().from(ingresos).all().map((i) => i.estado)).toEqual(['pagado', 'cancelado'])
     expect(db.select().from(costos).get()!.estado).toBe('cancelado')
@@ -157,9 +189,9 @@ describe('estado', () => {
 
   it('lists the actions each estado allows', () => {
     const { id } = guardarProyecto(db, root, nuevo(), hoy)
-    expect(fichaProyecto(db, root, id).acciones).toEqual(['editar', 'borrar', 'pausar', 'completar', 'cancelar'])
-    expect(pausarProyecto(db, root, id).acciones).toEqual(['editar', 'borrar', 'reanudar', 'completar', 'cancelar'])
-    expect(completarProyecto(db, root, id, hoy).acciones).toEqual(['editar'])
+    expect(fichaProyecto(db, root, id).acciones).toEqual(['editar', 'borrar', 'pausar', 'completar', 'cancelar', 'cambiarContacto'])
+    expect(pausarProyecto(db, root, id).acciones).toEqual(['editar', 'borrar', 'reanudar', 'completar', 'cancelar', 'cambiarContacto'])
+    expect(completarProyecto(db, root, id, hoy).acciones).toEqual(['editar', 'cambiarContacto'])
   })
 })
 
@@ -403,6 +435,22 @@ describe('sin ingresos registrados con el Monto del PDF', () => {
     expect(sinDinero()).toEqual([0, 0, 0, 0])
     expect(marcado(p.id)).toBe(false)
   })
+
+  it('follows invoices Asignar proyecto moves, without changing either Proyecto’s estado', async () => {
+    const p = await importarEntregada('Costo: $ 9,000.00')
+    const otro = db.insert(proyectos).values({ nombre: 'Otro', contactoId: p.contactoId, categoria: 'website', estado: 'completado' }).returning().get()
+    const factura = db
+      .insert(ingresos)
+      .values({ fechaRegistro: hoy, subtotal: 900000, iva: 144000, total: 1044000, categoria: 'factura', estadoFacturacion: 'facturado', cfdiUuid: 'C-48', contactoId: p.contactoId, estado: 'pagado', fechaPago: hoy })
+      .returning()
+      .get()
+    expect(marcado(p.id)).toBe(true)
+    asignarProyecto(db, factura.id, p.id, hoy)
+    expect(marcado(p.id)).toBe(false)
+    asignarProyecto(db, factura.id, otro.id, hoy)
+    expect(marcado(p.id)).toBe(true)
+    expect(db.select().from(proyectos).where(eq(proyectos.id, p.id)).get()!.estado).toBe('completado')
+  })
 })
 
 describe('borrar', () => {
@@ -481,5 +529,21 @@ describe('listar', () => {
     const p = db.insert(proyectos).values({ nombre: 'Activista', categoria: 'other', estado: 'en_curso', importado: true }).returning().get()
     expect(listarProyectos(db, root).proyectos).toEqual([expect.objectContaining({ id: p.id, etiqueta: 'cliente', contactoId: null, contacto: null })])
     expect(resumenInicio(db, root, hoy, 30).proyectos.map((f) => f.nombre)).toEqual(['Activista'])
+  })
+})
+
+describe('an invoice assigned to a Proyecto en curso', () => {
+  it('counts in its Por cobrar while pending, keeps Completar refused, and leaves it en curso', () => {
+    const { id } = guardarProyecto(db, root, nuevo(), hoy)
+    const factura = db
+      .insert(ingresos)
+      .values({ ...ingresoBase, categoria: 'factura', estadoFacturacion: 'facturado', cfdiUuid: 'P-1', contactoId, estado: 'pendiente' })
+      .returning()
+      .get()
+    asignarProyecto(db, factura.id, id, hoy)
+    const f = fichaProyecto(db, root, id)
+    expect(f).toMatchObject({ estado: 'en_curso', porCobrar: 1000 })
+    expect(f.acciones).not.toContain('completar')
+    expect(() => completarProyecto(db, root, id, hoy)).toThrow(MENSAJE_SIN_PAGAR)
   })
 })

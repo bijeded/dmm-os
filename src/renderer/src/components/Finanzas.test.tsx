@@ -104,7 +104,16 @@ beforeEach(() => {
     pagarCosto: vi.fn(async () => {}),
     cancelarCosto: vi.fn(async () => {}),
     borrarCosto: vi.fn(async () => {}),
-    detenerCosto: vi.fn(async () => {})
+    detenerCosto: vi.fn(async () => {}),
+    opcionesAsignar: vi.fn(async () => ({
+      actual: null,
+      sinContacto: false,
+      proyectos: [
+        { id: 25, nombre: 'Cantina Rooftop', contacto: 'Omar Rodriguez', estado: 'completado' as const },
+        { id: 24, nombre: 'Cantina 48', contacto: 'Omar Rodriguez', estado: 'completado' as const }
+      ]
+    })),
+    asignarProyecto: vi.fn(async () => {})
   }
   window.dmm = {
     finanzas: api,
@@ -188,6 +197,61 @@ describe('Finanzas', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Monto del reembolso' }), { target: { value: '1,500.50' } })
     fireEvent.click(screen.getByRole('button', { name: 'Registrar reembolso' }))
     await waitFor(() => expect(api.reembolsar).toHaveBeenCalledWith(3, 150_050))
+  })
+
+  it('assigns an imported invoice to a Proyecto and reads Finanzas again', async () => {
+    api.resumen = vi.fn(async () => resumen({ ingresos: [ingreso(481, { contacto: 'Omar Rodriguez', estado: 'pagado', acciones: ['reembolsar', 'asignarProyecto'] })] }))
+    montar()
+    const delPeriodo = (await screen.findByRole('heading', { name: 'Ingresos del periodo' })).closest('section')!
+    fireEvent.click(await within(delPeriodo).findByRole('button', { name: 'Asignar proyecto' }))
+    const dialogo = screen.getByRole('dialog')
+    const select = await within(dialogo).findByRole('combobox', { name: 'Proyecto' })
+    expect(api.opcionesAsignar).toHaveBeenCalledWith(481)
+    expect(within(dialogo).getAllByRole('option').map((o) => o.textContent)).toEqual(['Ningún proyecto', 'Cantina Rooftop · Completado', 'Cantina 48 · Completado'])
+    fireEvent.change(select, { target: { value: '24' } })
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Asignar' }))
+    await waitFor(() => expect(api.asignarProyecto).toHaveBeenCalledWith(481, 24))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(api.resumen).toHaveBeenCalledTimes(2))
+  })
+
+  it('names each Proyecto’s Contacto for an invoice with none, and says it takes that Contacto', async () => {
+    api.resumen = vi.fn(async () => resumen({ ingresos: [ingreso(90, { contacto: null, acciones: ['asignarProyecto'] })] }))
+    vi.mocked(api.opcionesAsignar).mockResolvedValueOnce({ actual: 24, sinContacto: true, proyectos: [{ id: 24, nombre: 'La Boom', contacto: 'Omar Rodriguez', estado: 'en_curso' }] })
+    montar()
+    fireEvent.click(await screen.findByRole('button', { name: 'Asignar proyecto' }))
+    const dialogo = screen.getByRole('dialog')
+    expect(await within(dialogo).findByRole('option', { name: 'La Boom · Omar Rodriguez · En curso (actual)' })).toBeTruthy()
+    expect(within(dialogo).getByText(/toma el del proyecto que elijas/)).toBeTruthy()
+    fireEvent.change(within(dialogo).getByRole('combobox', { name: 'Proyecto' }), { target: { value: '' } })
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Asignar' }))
+    await waitFor(() => expect(api.asignarProyecto).toHaveBeenCalledWith(90, null))
+  })
+
+  it('selects Ningún proyecto when the invoice sits on a Proyecto it cannot be put on again', async () => {
+    api.resumen = vi.fn(async () => resumen({ ingresos: [ingreso(481, { acciones: ['asignarProyecto'] })] }))
+    vi.mocked(api.opcionesAsignar).mockResolvedValueOnce({ actual: 99, sinContacto: false, proyectos: [{ id: 24, nombre: 'Cantina 48', contacto: 'Omar Rodriguez', estado: 'completado' }] })
+    montar()
+    fireEvent.click(await screen.findByRole('button', { name: 'Asignar proyecto' }))
+    const dialogo = screen.getByRole('dialog')
+    const select = (await within(dialogo).findByRole('combobox', { name: 'Proyecto' })) as HTMLSelectElement
+    expect(select.value).toBe('')
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Asignar' }))
+    await waitFor(() => expect(api.asignarProyecto).toHaveBeenCalledWith(481, null))
+  })
+
+  it('shows main’s refusal in the dialog, and writes nothing when closed', async () => {
+    api.resumen = vi.fn(async () => resumen({ ingresos: [ingreso(481, { acciones: ['asignarProyecto'] })] }))
+    vi.mocked(api.asignarProyecto).mockRejectedValueOnce(new Error('La factura es de otro contacto; se asigna solo a sus proyectos'))
+    montar()
+    fireEvent.click(await screen.findByRole('button', { name: 'Asignar proyecto' }))
+    const dialogo = screen.getByRole('dialog')
+    await within(dialogo).findByRole('combobox', { name: 'Proyecto' })
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Asignar' }))
+    expect(await within(dialogo).findByText('La factura es de otro contacto; se asigna solo a sus proyectos')).toBeTruthy()
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(api.resumen).toHaveBeenCalledTimes(1)
   })
 
   it('searches every table at once', async () => {

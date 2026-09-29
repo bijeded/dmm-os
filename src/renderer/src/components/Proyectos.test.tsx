@@ -59,7 +59,10 @@ const ficha: Ficha = {
 }
 
 const contactos: ListaContactos = {
-  contactos: [{ id: 7, nombre: 'Clínica Sol', empresa: null, email: null, telefono: null, estado: 'lead_frio', valor: 0 }],
+  contactos: [
+    { id: 7, nombre: 'Clínica Sol', empresa: null, email: null, telefono: null, estado: 'lead_frio', valor: 0 },
+    { id: 8, nombre: 'Omar Rodriguez', empresa: 'Zamora Live', email: null, telefono: null, estado: 'cliente_activo', valor: 0 }
+  ],
   conteo: { lead_frio: 1, lead_caliente: 0, cliente_activo: 0, cliente_inactivo: 0 },
   top: []
 }
@@ -76,6 +79,7 @@ const opciones: OpcionesCobro = {
 }
 
 let api: DmmApi['proyectos']
+let previaCambio: DmmApi['contactos']['previaCambio']
 let router: ReturnType<typeof createMemoryRouter>
 
 const montar = (ruta: string) => {
@@ -103,9 +107,11 @@ beforeEach(() => {
     borrar: vi.fn(async () => {}),
     abrirCarpeta: vi.fn(async () => {}),
     opcionesCobro: vi.fn(async () => opciones),
-    completarConCobro: vi.fn(async () => ({ ...ficha, estado: 'completado' as const, falta: null, acciones: ['editar' as const] }))
+    completarConCobro: vi.fn(async () => ({ ...ficha, estado: 'completado' as const, falta: null, acciones: ['editar' as const] })),
+    cambiarContacto: vi.fn(async () => ({ ...ficha, contactoId: 8, contacto: 'Omar Rodriguez' }))
   }
-  window.dmm = { proyectos: api, contactos: { listar: vi.fn(async () => contactos) } } as unknown as DmmApi
+  previaCambio = vi.fn(async () => ({ cotizaciones: 1, proyectos: 1, ingresos: 0, borraContacto: 'Clínica Sol' }))
+  window.dmm = { proyectos: api, contactos: { listar: vi.fn(async () => contactos), previaCambio } } as unknown as DmmApi
 })
 
 afterEach(cleanup)
@@ -296,6 +302,70 @@ describe('Completar con cobro', () => {
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }))
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(api.completar).not.toHaveBeenCalled()
+  })
+})
+
+describe('Cambiar contacto', () => {
+  const conCambio: Ficha = { ...ficha, acciones: [...ficha.acciones, 'cambiarContacto'] }
+
+  it('previews what moves and the Contacto it deletes, then shows the Proyecto under the new one', async () => {
+    api.ficha = vi.fn(async () => conCambio)
+    montar('/proyectos/1')
+    fireEvent.click(await screen.findByRole('button', { name: 'Cambiar contacto' }))
+    const dialogo = screen.getByRole('dialog')
+    await within(dialogo).findByRole('option', { name: 'Omar Rodriguez' })
+    expect(within(dialogo).queryByRole('option', { name: 'Clínica Sol' })).toBeNull()
+    fireEvent.change(within(dialogo).getByRole('combobox', { name: 'Contacto' }), { target: { value: '8' } })
+    expect(await within(dialogo).findByText(/Pasan a Omar Rodriguez: 1 cotización, 1 proyecto y 0 ingresos\. Clínica Sol se queda sin registros y se elimina\./)).toBeTruthy()
+    expect(previaCambio).toHaveBeenCalledWith('proyecto', 1, 8)
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cambiar contacto' }))
+    await waitFor(() => expect(api.cambiarContacto).toHaveBeenCalledWith(1, 8))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByRole('link', { name: 'Omar Rodriguez' })).toBeTruthy()
+  })
+
+  it('shows main’s refusal in place and cannot confirm', async () => {
+    api.ficha = vi.fn(async () => conCambio)
+    vi.mocked(previaCambio).mockRejectedValueOnce(new Error('Tiene la factura c266deaa…: fusiona el contacto, o asigna la factura a otro proyecto en Finanzas'))
+    montar('/proyectos/1')
+    fireEvent.click(await screen.findByRole('button', { name: 'Cambiar contacto' }))
+    const dialogo = screen.getByRole('dialog')
+    await within(dialogo).findByRole('option', { name: 'Omar Rodriguez' })
+    fireEvent.change(within(dialogo).getByRole('combobox', { name: 'Contacto' }), { target: { value: '8' } })
+    expect(await within(dialogo).findByText(/Tiene la factura c266deaa/)).toBeTruthy()
+    expect(within(dialogo).getByRole('button', { name: 'Cambiar contacto' })).toHaveProperty('disabled', true)
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }))
+    expect(api.cambiarContacto).not.toHaveBeenCalled()
+  })
+
+  it('ignores a preview that arrives after another Contacto was chosen', async () => {
+    api.ficha = vi.fn(async () => conCambio)
+    let responder: (p: Awaited<ReturnType<typeof previaCambio>>) => void = () => {}
+    vi.mocked(previaCambio).mockImplementationOnce(() => new Promise((r) => (responder = r)))
+    montar('/proyectos/1')
+    fireEvent.click(await screen.findByRole('button', { name: 'Cambiar contacto' }))
+    const dialogo = screen.getByRole('dialog')
+    await within(dialogo).findByRole('option', { name: 'Omar Rodriguez' })
+    const select = within(dialogo).getByRole('combobox', { name: 'Contacto' })
+    fireEvent.change(select, { target: { value: '8' } })
+    fireEvent.change(select, { target: { value: '' } })
+    responder({ cotizaciones: 1, proyectos: 1, ingresos: 0, borraContacto: null })
+    await waitFor(() => expect(within(dialogo).getByRole('button', { name: 'Cambiar contacto' })).toHaveProperty('disabled', true))
+    expect(within(dialogo).queryByText(/Pasan a/)).toBeNull()
+  })
+
+  it('is not offered when main does not allow it', async () => {
+    montar('/proyectos/1')
+    await screen.findByRole('heading', { name: 'Sitio web' })
+    expect(screen.queryByRole('button', { name: 'Cambiar contacto' })).toBeNull()
+  })
+
+  it('locks the Contacto in Editar once the Proyecto has one', async () => {
+    api.ficha = vi.fn(async () => ({ ...ficha, cotizacionId: null, folio: null }))
+    montar('/proyectos/1/editar')
+    await screen.findByDisplayValue('Sitio web')
+    expect(screen.getByLabelText('Contacto')).toHaveProperty('disabled', true)
+    expect(screen.getByLabelText('Tipo')).toHaveProperty('disabled', true)
   })
 })
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { NOMBRES_CATEGORIA, NOMBRES_CATEGORIA_COSTO, NOMBRES_ESTADO_COTIZACION, NOMBRES_FACTURACION, type FichaCotizacion as Ficha } from '../../../shared/dominio'
 import { dia, folioDmm, pesos } from '../../../shared/formato'
+import { CambiarContacto } from './Atribucion'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { celdaCls, etiquetaCls, tituloCls } from './estilos'
@@ -13,6 +14,7 @@ export function FichaCotizacion() {
   const navigate = useNavigate()
   const [ficha, setFicha] = useState<Ficha | null>(null)
   const [tipoCambio, setTipoCambio] = useState('')
+  const [cambiandoContacto, setCambiandoContacto] = useState(false)
   const { error, ocupado, correr } = useAccion()
 
   useEffect(() => {
@@ -76,6 +78,11 @@ export function FichaCotizacion() {
                 </Button>
               </>
             )}
+            {f.acciones.includes('cambiarContacto') && (
+              <Button variant="secondary" disabled={ocupado} onClick={() => setCambiandoContacto(true)}>
+                Cambiar contacto
+              </Button>
+            )}
             {f.acciones.includes('cancelar') && (
               <Button variant="ghost" disabled={ocupado} onClick={accion(api.cancelar)}>
                 Cancelar cotización
@@ -85,6 +92,18 @@ export function FichaCotizacion() {
         )}
       </div>
       <Aviso error={error} />
+      {cambiandoContacto && f && (
+        <CambiarContacto<Ficha>
+          entidad="cotizacion"
+          id={id}
+          contactoId={f.contactoId}
+          onCerrar={() => setCambiandoContacto(false)}
+          onCambiado={(nueva) => {
+            setFicha(nueva)
+            setCambiandoContacto(false)
+          }}
+        />
+      )}
 
       {f && (
         <div className="g-split grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] items-start gap-[18px]">

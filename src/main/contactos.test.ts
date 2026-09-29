@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { borrarContacto, contactosCsv, fichaContacto, guardarContacto, listarContactos } from './contactos'
+import { cambiarContacto, fusionarContacto } from './atribucion'
 import { contacto, cotizacionAceptada, db, ingresoBase, proyecto, reiniciarDb } from './db/test-db'
 import { contactos, cotizaciones, ingresos, proyectos } from './db/schema'
 
@@ -216,5 +217,35 @@ describe('guardarContacto', () => {
 
   it('refuses an unknown Contacto', () => {
     expect(() => guardarContacto(db, { ...vacio, id: 999, nombre: 'X' })).toThrow(/no existe/)
+  })
+})
+
+describe('after Fusionar Contacto and Cambiar Contacto', () => {
+  it('reads the destino’s history, cobrado and Estado de Contacto from the moved records', () => {
+    const a = contacto('A')
+    const b = contacto('B')
+    const enCurso = proyecto(a.id, cotizacionAceptada(a.id, 1).id)
+    ingreso(a.id, 900_000)
+    const hecho = proyecto(b.id, cotizacionAceptada(b.id, 2).id)
+    db.update(proyectos).set({ estado: 'completado' }).where(eq(proyectos.id, hecho.id)).run()
+    ingreso(b.id, 2_000_000)
+    expect(fichaContacto(db, '/nowhere', b.id).estado).toBe('cliente_inactivo')
+
+    fusionarContacto(db, a.id, b.id)
+    const ficha = fichaContacto(db, '/nowhere', b.id)
+    expect(ficha.valor).toBe(2_900_000)
+    expect(ficha.estado).toBe('cliente_activo')
+    expect(ficha.historial.filter((m) => m.tipo === 'proyecto').map((m) => m.id).sort()).toEqual([hecho.id, enCurso.id].sort())
+    expect(listarContactos(db).contactos.map((c) => c.nombre)).toEqual(['B'])
+  })
+
+  it('makes the new Contacto an active client and the one left behind no longer one', () => {
+    const a = contacto('A')
+    const b = contacto('B')
+    const p = proyecto(a.id, cotizacionAceptada(a.id, 1).id)
+    cotizacion(a.id, 'enviada', 2)
+    cambiarContacto(db, 'proyecto', p.id, b.id)
+    const estados = Object.fromEntries(listarContactos(db).contactos.map((c) => [c.nombre, c.estado]))
+    expect(estados).toEqual({ A: 'lead_caliente', B: 'cliente_activo' })
   })
 })

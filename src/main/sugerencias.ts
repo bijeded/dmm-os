@@ -3,7 +3,7 @@ import type { OpcionSugerencia, Sugerencia, RespuestaSugerencia } from '../share
 import { monto } from '../shared/formato'
 import { partidasDelMonto, partidasGuardadas } from './importacion/pdf-cotizacion'
 import { heredarDeCotizacion } from './ciclo-proyecto'
-import { mejorEscrito } from './nombres'
+import { fusionarEn } from './atribucion'
 import { rutaDeProyecto } from './paths'
 import type { Db } from './db/index'
 import { hoy as hoyLocal } from '../shared/fechas'
@@ -11,7 +11,6 @@ import {
   contactos,
   costos,
   cotizaciones,
-  definicionesIngreso,
   ingresos,
   proyectos,
   sugerenciasImportacion,
@@ -272,7 +271,7 @@ export function responderEn(tx: Tx, s: Fila, respuesta: RespuestaSugerencia, hoy
 
   if (s.accion === 'vincular') vincular(tx, s, decision)
   else if (s.accion === 'fusionar' && decision.estado !== 'rechazada')
-    fusionar(tx, s.entidadId, decision.estado === 'corregida' ? decision.elegido : s.contactoId!)
+    fusionarEn(tx, s.entidadId, decision.estado === 'corregida' ? decision.elegido : s.contactoId!, 'mejorEscrito')
   else if (s.accion === 'ubicacion' && decision.estado !== 'corregida') ubicacion(tx, s.entidadId, decision.estado, hoy)
 
   tx.update(sugerenciasImportacion).set({ estado: decision.estado }).where(eq(sugerenciasImportacion.id, s.id)).run()
@@ -391,55 +390,6 @@ function deshacerCotizacion(tx: Tx, s: Fila): void {
       fechaInicio: restaurar(proyecto.fechaInicio, previo?.fechaInicioEscrita, null)
     })
     .where(eq(proyectos.id, proyectoId))
-    .run()
-}
-
-/**
- * `fusionar` merges the duplicate Contacto into the one it resembles, or the one chosen
- * instead: everything that pointed
- * at the duplicate points at the original, the better-written spelling stays as the Nombre
- * canónico, and the duplicate is gone.
- */
-function fusionar(tx: Tx, duplicadoId: number, originalId: number): void {
-  const duplicado = tx.select().from(contactos).where(eq(contactos.id, duplicadoId)).get()
-  const original = tx.select().from(contactos).where(eq(contactos.id, originalId)).get()
-  if (!duplicado || !original) throw new Error('No se puede fusionar: falta uno de los Contactos')
-  if (duplicadoId === originalId) throw new Error('Un Contacto no se fusiona consigo mismo')
-
-  // Costos reach a Contacto through their Proyecto or Cotización, so moving those moves them.
-  for (const tabla of [cotizaciones, proyectos, ingresos, definicionesIngreso]) {
-    tx.update(tabla).set({ contactoId: originalId }).where(eq(tabla.contactoId, duplicadoId)).run()
-  }
-  // Another pending merge may point at the duplicate; it now points at the Contacto that remains.
-  // One that asked to merge the remaining Contacto into the duplicate is done by this merge.
-  tx.update(sugerenciasImportacion)
-    .set({ contactoId: originalId })
-    .where(eq(sugerenciasImportacion.contactoId, duplicadoId))
-    .run()
-  tx.update(sugerenciasImportacion)
-    .set({ estado: 'aceptada' })
-    .where(
-      and(
-        eq(sugerenciasImportacion.estado, 'pendiente'),
-        eq(sugerenciasImportacion.accion, 'fusionar'),
-        eq(sugerenciasImportacion.entidadId, originalId),
-        eq(sugerenciasImportacion.contactoId, originalId)
-      )
-    )
-    .run()
-  // The duplicate is deleted before the original is updated: it may hold the RFC, which only
-  // one Contacto may claim.
-  tx.delete(contactos).where(eq(contactos.id, duplicadoId)).run()
-  tx.update(contactos)
-    .set({
-      nombre: mejorEscrito(original.nombre, duplicado.nombre),
-      rfc: original.rfc ?? duplicado.rfc,
-      empresa: original.empresa ?? duplicado.empresa,
-      email: original.email ?? duplicado.email,
-      telefono: original.telefono ?? duplicado.telefono,
-      direccion: original.direccion ?? duplicado.direccion
-    })
-    .where(eq(contactos.id, originalId))
     .run()
 }
 

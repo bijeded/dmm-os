@@ -20,14 +20,15 @@ const vacio = (): ProyectoNuevo => ({
 
 /**
  * Nuevo proyecto, or editing one (`/proyectos/:id/editar`). Creating it scaffolds its folder
- * in `Proyectos/`. A personal Proyecto has no Contacto; one from a Cotización keeps its Contacto.
+ * in `Proyectos/`. A personal Proyecto has no Contacto. Editing chooses a Contacto only for a
+ * Proyecto that has none; once it has one it changes through Cambiar contacto on its Ficha.
  */
 export function NuevoProyecto() {
   const params = useParams()
   const editando = params.id ? Number(params.id) : undefined
   const navigate = useNavigate()
   const [p, setP] = useState<ProyectoNuevo>(vacio)
-  const [deCotizacion, setDeCotizacion] = useState(false)
+  const [conContacto, setConContacto] = useState(false)
   const [contactos, setContactos] = useState<FilaContacto[]>([])
   const { error, ocupado, correr } = useAccion()
 
@@ -37,7 +38,7 @@ export function NuevoProyecto() {
       if (editando !== undefined) {
         const f = await window.dmm.proyectos.ficha(editando)
         setP({ ...f, id: f.id })
-        setDeCotizacion(f.cotizacionId !== null)
+        setConContacto(f.contactoId !== null || f.cotizacionId !== null)
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per Proyecto
@@ -78,7 +79,7 @@ export function NuevoProyecto() {
         <Campo label="Tipo">
           <select
             value={p.etiqueta}
-            disabled={deCotizacion}
+            disabled={conContacto}
             onChange={(e) => cambiar({ etiqueta: e.target.value as ProyectoNuevo['etiqueta'] })}
             className={campoCls}
           >
@@ -91,7 +92,7 @@ export function NuevoProyecto() {
             <Campo label="Contacto">
               <select
                 value={p.contactoId ?? ''}
-                disabled={deCotizacion}
+                disabled={conContacto}
                 onChange={(e) => cambiar({ contactoId: e.target.value ? Number(e.target.value) : null })}
                 className={campoCls}
               >

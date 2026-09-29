@@ -30,7 +30,7 @@ let api: DmmApi['contactos']
 let router: ReturnType<typeof createMemoryRouter>
 
 beforeEach(() => {
-  api = { listar: vi.fn(async () => lista), ficha: vi.fn(), guardar: vi.fn(async () => 42), borrar: vi.fn(), csv: vi.fn(async () => 'nombre\r\n') }
+  api = { listar: vi.fn(async () => lista), ficha: vi.fn(), guardar: vi.fn(async () => 42), borrar: vi.fn(), fusionar: vi.fn(), previaCambio: vi.fn(), csv: vi.fn(async () => 'nombre\r\n') }
   window.dmm = { contactos: api } as unknown as DmmApi
   router = createMemoryRouter(
     [

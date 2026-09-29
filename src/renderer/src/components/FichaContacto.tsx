@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { NOMBRES_ESTADO_CONTACTO, type FichaContacto as Ficha, type Movimiento } from '../../../shared/dominio'
 import { dia, pesos } from '../../../shared/formato'
+import { FusionarContacto } from './Atribucion'
+import { Dialogo } from './Dialogo'
 import { FormContacto } from './FormContacto'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
@@ -42,6 +44,7 @@ export function FichaContacto() {
   const [filtro, setFiltro] = useState<(typeof filtros)[number][0]>('todo')
   const [confirmar, setConfirmar] = useState(false)
   const [editando, setEditando] = useState(false)
+  const [fusionando, setFusionando] = useState(false)
   const { error, ocupado, correr } = useAccion()
 
   const cargar = () => correr(async () => setFicha(await window.dmm.contactos.ficha(id)))
@@ -79,6 +82,9 @@ export function FichaContacto() {
             <Button variant="secondary" disabled={ocupado} onClick={() => setConfirmar(true)}>
               Eliminar
             </Button>
+            <Button variant="secondary" disabled={ocupado} onClick={() => setFusionando(true)}>
+              Fusionar en…
+            </Button>
             <Button disabled={ocupado} onClick={() => setEditando(true)}>
               Editar
             </Button>
@@ -87,30 +93,32 @@ export function FichaContacto() {
       </div>
       <Aviso error={error} />
 
+      {fusionando && c && ficha && (
+        <FusionarContacto
+          contacto={c}
+          cuenta={{ cotizaciones: ficha.cotizaciones.total, proyectos: ficha.proyectos }}
+          onCerrar={() => setFusionando(false)}
+          onFusionado={(destino) => {
+            setFusionando(false)
+            navigate(`/contactos/${destino}`)
+          }}
+        />
+      )}
+
       {editando && c && <FormContacto inicial={c} onGuardado={guardado} onCerrar={() => setEditando(false)} />}
 
       {confirmar && c && (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/60 p-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="eliminar-titulo"
-            className="card flex w-full max-w-md flex-col gap-4 rounded-control border border-border-strong bg-surface-raised p-6"
-          >
-            <h2 id="eliminar-titulo" className="m-0 text-[15px] font-semibold text-on-surface">
-              ¿Eliminar a {c.nombre}?
-            </h2>
-            <p className="m-0 text-[13px] text-on-surface-muted">
-              Solo se puede eliminar un contacto sin cotizaciones, proyectos ni pagos. Esto no se puede deshacer; los archivos en disco no se tocan.
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setConfirmar(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={eliminar}>Sí, eliminar</Button>
-            </div>
+        <Dialogo id="eliminar-titulo" titulo={`¿Eliminar a ${c.nombre}?`}>
+          <p className="m-0 text-[13px] text-on-surface-muted">
+            Solo se puede eliminar un contacto sin cotizaciones, proyectos ni pagos. Esto no se puede deshacer; los archivos en disco no se tocan.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setConfirmar(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={eliminar}>Sí, eliminar</Button>
           </div>
-        </div>
+        </Dialogo>
       )}
 
       {ficha && c && (

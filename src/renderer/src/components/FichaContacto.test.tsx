@@ -36,7 +36,15 @@ let api: DmmApi['contactos']
 let router: ReturnType<typeof createMemoryRouter>
 
 beforeEach(() => {
-  api = { listar: vi.fn(), ficha: vi.fn(async () => ficha), guardar: vi.fn(async () => 7), borrar: vi.fn(async () => undefined), csv: vi.fn() }
+  api = {
+    listar: vi.fn(async () => ({ contactos: [{ id: 7, nombre: 'Hotel Aura' }, { id: 9, nombre: 'Grupo Aura' }] }) as never),
+    ficha: vi.fn(async () => ficha),
+    guardar: vi.fn(async () => 7),
+    borrar: vi.fn(async () => undefined),
+    fusionar: vi.fn(async () => 9),
+    previaCambio: vi.fn(),
+    csv: vi.fn()
+  }
   window.dmm = { contactos: api } as unknown as DmmApi
   router = createMemoryRouter(
     [
@@ -113,5 +121,39 @@ describe('Ficha de contacto', () => {
       direccion: '',
       notas: 'Prefiere correo.'
     })
+  })
+})
+
+describe('Fusionar en…', () => {
+  it('offers the other Contactos, says what moves and that this one is deleted, then opens the destino', async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Fusionar en…' }))
+    const dialogo = screen.getByRole('dialog')
+    const select = await within(dialogo).findByRole('combobox', { name: 'Contacto' })
+    await within(dialogo).findByRole('option', { name: 'Grupo Aura' })
+    expect(within(dialogo).queryByRole('option', { name: 'Hotel Aura' })).toBeNull()
+    expect((within(dialogo).getByRole('button', { name: 'Fusionar' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(select, { target: { value: '9' } })
+    expect(within(dialogo).getByText(/3 cotizaciones, 1 proyecto y sus pagos pasan a Grupo Aura.*Hotel Aura se elimina/)).toBeTruthy()
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Fusionar' }))
+    await vi.waitFor(() => expect(router.state.location.pathname).toBe('/contactos/9'))
+    expect(api.fusionar).toHaveBeenCalledWith(7, 9)
+  })
+
+  it('shows main’s refusal in place and stays open', async () => {
+    vi.mocked(api.fusionar).mockRejectedValueOnce(new Error('No se puede fusionar: Hotel Aura tiene el RFC HAU190314XX0 y Grupo Aura el RFC GAU010101AAA'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Fusionar en…' }))
+    const dialogo = screen.getByRole('dialog')
+    await within(dialogo).findByRole('option', { name: 'Grupo Aura' })
+    fireEvent.change(within(dialogo).getByRole('combobox', { name: 'Contacto' }), { target: { value: '9' } })
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Fusionar' }))
+    expect(await within(dialogo).findByText(/tiene el RFC HAU190314XX0/)).toBeTruthy()
+    expect(router.state.location.pathname).toBe('/contactos/7')
+  })
+
+  it('writes nothing when closed', async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Fusionar en…' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(api.fusionar).not.toHaveBeenCalled()
   })
 })

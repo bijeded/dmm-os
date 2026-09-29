@@ -12,12 +12,15 @@ import type {
   ContactoNuevo,
   CostoNuevo,
   CotizacionNueva,
+  EntidadCambioContacto,
   EstadoImportacion,
   EstadoRespaldos,
   FichaContacto,
   FichaCotizacion,
   FichaProyecto,
   IngresoNuevo,
+  OpcionesAsignar,
+  PreviaCambioContacto,
   LecturaUso,
   ListaContactos,
   ListaCotizaciones,
@@ -124,6 +127,13 @@ export const contrato = {
     guardar: canal<[contacto: ContactoNuevo], number>(),
     /** Borrar vs cancelar: refused when the Contacto has anything linked. */
     borrar: canal<[id: number], void>(),
+    /**
+     * Fusionar en…: moves everything of Contacto `id` to `destinoId`, which keeps its name, and
+     * deletes `id`. Refused when both hold different RFCs. Returns the destino.
+     */
+    fusionar: canal<[id: number, destinoId: number], number>(),
+    /** What Cambiar contacto would move and which Contacto it would delete; nothing is written. */
+    previaCambio: canal<[entidad: EntidadCambioContacto, id: number, contactoId: number], PreviaCambioContacto>(),
     /** Every Contacto as CSV, for a newsletter service. */
     csv: canal<[], string>()
   },
@@ -152,6 +162,11 @@ export const contrato = {
     cancelar: canal<[id: number], FichaCotizacion>(),
     /** Only drafts can be deleted; anything else is cancelled. */
     borrar: canal<[id: number], void>(),
+    /**
+     * Cambiar contacto: moves the quote, its Proyecto and their Ingresos to another Contacto, and
+     * deletes the Contacto it leaves with nothing. Refused with an invoice or a pending Sugerencia.
+     */
+    cambiarContacto: canal<[id: number, contactoId: number], FichaCotizacion>(),
     abrirPdf: canal<[id: number], void>()
   },
   proyectos: {
@@ -171,6 +186,8 @@ export const contrato = {
     cancelar: canal<[id: number], FichaProyecto>(),
     /** Borrar vs cancelar: refused when it has anything linked. Its folder stays on disk. */
     borrar: canal<[id: number], void>(),
+    /** Cambiar contacto, as for its Cotización: both move together. */
+    cambiarContacto: canal<[id: number, contactoId: number], FichaProyecto>(),
     abrirCarpeta: canal<[id: number], void>()
   },
   finanzas: {
@@ -193,7 +210,14 @@ export const contrato = {
     /** Borrar vs cancelar: only a hand-entered one-time Costo. */
     borrarCosto: canal<[id: number], void>(),
     /** Stops the monthly or annual series the Costo belongs to after this month. */
-    detenerCosto: canal<[id: number], void>()
+    detenerCosto: canal<[id: number], void>(),
+    /** Where Asignar proyecto can put an imported invoice. */
+    opcionesAsignar: canal<[id: number], OpcionesAsignar>(),
+    /**
+     * Asignar proyecto: puts the invoice's whole CFDI (its Parcialidades and Reembolsos) on another
+     * Proyecto of its Contacto, or on none (`null`). One with no Contacto takes the Proyecto's.
+     */
+    asignarProyecto: canal<[id: number, proyectoId: number | null], void>()
   },
   tareas: {
     /** Pending ones, and those done in the last 30 days. */

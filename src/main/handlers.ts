@@ -52,10 +52,22 @@ import { dbAlDia } from './ledger'
 import { leerRutas } from './rutas'
 import { aceptarVincular, pendientes, responder } from './sugerencias'
 import { cobroValido, opcionesCobro } from './completar-con-cobro'
+import { asignarProyecto, cambiarContacto, fusionarContacto, opcionesAsignar, previaCambioContacto } from './atribucion'
 import { sql } from 'drizzle-orm'
 import { diaLocal } from '../shared/fechas'
-import type { EstadoImportacion } from '../shared/dominio'
+import { ENTIDADES_CAMBIO_CONTACTO, type EntidadCambioContacto, type EstadoImportacion } from '../shared/dominio'
 import type { AppInfo, DmmHandlers } from '../shared/contrato'
+
+/** An id arriving over IPC, checked: a positive integer. */
+function idValido(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isInteger(v) || v <= 0) throw new Error('Identificador no válido')
+  return v
+}
+
+function entidadValida(v: unknown): EntidadCambioContacto {
+  if (!ENTIDADES_CAMBIO_CONTACTO.includes(v as EntidadCambioContacto)) throw new Error('Identificador no válido')
+  return v as EntidadCambioContacto
+}
 
 export interface HandlersOptions {
   conexion: Conexion
@@ -192,6 +204,8 @@ export function crearHandlers({
       ficha: (id) => fichaContacto(alDiaDb(), info.dmmOsRoot, id),
       guardar: (contacto) => guardarContacto(alDiaDb(), contacto),
       borrar: (id) => borrarContacto(alDiaDb(), id),
+      fusionar: (id, destinoId) => fusionarContacto(alDiaDb(), idValido(id), idValido(destinoId)),
+      previaCambio: (entidad, id, contactoId) => previaCambioContacto(alDiaDb(), entidadValida(entidad), idValido(id), idValido(contactoId)),
       csv: () => contactosCsv(alDiaDb())
     },
     catalogo: {
@@ -208,6 +222,11 @@ export function crearHandlers({
       rechazar: (id) => rechazarCotizacion(alDiaDb(), id),
       cancelar: (id) => cancelarCotizacion(alDiaDb(), id),
       borrar: (id) => borrarCotizacion(alDiaDb(), id),
+      cambiarContacto: (id, contactoId) => {
+        const db = alDiaDb()
+        cambiarContacto(db, 'cotizacion', idValido(id), idValido(contactoId))
+        return fichaCotizacion(db, id)
+      },
       abrirPdf: async (id) => {
         const { pdf } = fichaCotizacion(alDiaDb(), id)
         if (!pdf) throw new Error('La cotización no tiene PDF')
@@ -226,6 +245,11 @@ export function crearHandlers({
       completarConCobro: (id, cobro) => completarConCobro(alDiaDb(), info.dmmOsRoot, id, cobroValido(cobro), hoy()),
       cancelar: (id) => cancelarProyecto(alDiaDb(), info.dmmOsRoot, id, hoy()),
       borrar: (id) => borrarProyecto(alDiaDb(), id),
+      cambiarContacto: (id, contactoId) => {
+        const db = alDiaDb()
+        cambiarContacto(db, 'proyecto', idValido(id), idValido(contactoId))
+        return fichaProyecto(db, info.dmmOsRoot, id)
+      },
       abrirCarpeta: async (id) => {
         const error = await abrirCarpeta(carpetaAbrible(alDiaDb(), info.dmmOsRoot, id))
         if (error) throw new Error(error)
@@ -247,7 +271,9 @@ export function crearHandlers({
       pagarCosto: (id) => pagarCosto(alDiaDb(), id, hoy()),
       cancelarCosto: (id) => cancelarCosto(alDiaDb(), id, hoy()),
       borrarCosto: (id) => borrarCosto(alDiaDb(), id, hoy()),
-      detenerCosto: (id) => detenerCosto(alDiaDb(), id, hoy())
+      detenerCosto: (id) => detenerCosto(alDiaDb(), id, hoy()),
+      opcionesAsignar: (id) => opcionesAsignar(alDiaDb(), idValido(id)),
+      asignarProyecto: (id, proyectoId) => asignarProyecto(alDiaDb(), idValido(id), proyectoId === null ? null : idValido(proyectoId), hoy())
     },
     tareas: {
       listar: () => listarTareas(conexion.db, hoy()),

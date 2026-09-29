@@ -1,6 +1,8 @@
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { costos, cotizaciones, definicionesCosto, ingresos, proyectos } from './db/schema'
+import { costos, cotizaciones, definicionesCosto, definicionesIngreso, ingresos, proyectos } from './db/schema'
+import { cambiarContacto } from './atribucion'
+import { generarPeriodos } from './db/periodos'
 import { contacto, db, reiniciarDb } from './db/test-db'
 import { rangos, resumenFinanzas } from './finanzas'
 import { dbAlDia } from './ledger'
@@ -355,7 +357,7 @@ describe('Borrar vs cancelar', () => {
     nuevoIngreso(db, ingreso(), hoy)
     const r = resumenFinanzas(db, 'mes', hoy, 30)
     const porOrigen = Object.fromEntries(r.ingresos.map((i) => [i.origen, i.acciones]))
-    expect(porOrigen.cfdi).toEqual(['reembolsar'])
+    expect(porOrigen.cfdi).toEqual(['reembolsar', 'asignarProyecto'])
     expect(porOrigen.manual).toEqual(['borrar', 'reembolsar'])
   })
 })
@@ -420,5 +422,44 @@ describe('Inicio figures', () => {
     expect(ids(cobros.mes)).toEqual([anterior.id, reciente.id])
     expect(ids(cobros.vencidos)).toEqual([vencida.id])
     expect(ids(cobros.porFacturar)).toEqual([porFacturar.id, sinFecha.id])
+  })
+})
+
+describe('Asignar proyecto in the Ingresos list', () => {
+  it('is offered only on imported invoices that are not cancelled and not Reembolsos', () => {
+    const factura = (uuid: string, estado: 'pagado' | 'cancelado' = 'pagado') =>
+      db
+        .insert(ingresos)
+        .values({ categoria: 'factura', estadoFacturacion: 'facturado', estado, cfdiUuid: uuid, subtotal: 10000, iva: 1600, total: 11600, contactoId, fechaRegistro: '2026-09-01', fechaPago: '2026-09-01' })
+        .returning()
+        .get()
+    const importada = factura('a')
+    factura('b', 'cancelado')
+    nuevoIngreso(db, ingreso(), hoy)
+    reembolsar(db, importada.id, 1160, hoy)
+    const filas = resumenFinanzas(db, 'mes', hoy, 30).ingresos
+    const conAccion = filas.filter((f) => f.acciones.includes('asignarProyecto'))
+    expect(conAccion.map((f) => f.id)).toEqual([importada.id])
+    expect(filas.find((f) => f.reembolsoDeId === importada.id)!.acciones).not.toContain('asignarProyecto')
+  })
+})
+
+describe('Periodos generados after Cambiar Contacto', () => {
+  it('belong to the Contacto the mensual Cotización moved to', () => {
+    const otro = contacto('Otro').id
+    const c = db.insert(cotizaciones).values({ contactoId, folio: 7, categoria: 'website', estado: 'aceptada', fecha: '2026-07-01', facturacion: 'mensual', moneda: 'USD' }).returning().get()
+    const p = db.insert(proyectos).values({ nombre: 'Soporte', contactoId, cotizacionId: c.id, categoria: 'website' }).returning().get()
+    db.insert(definicionesIngreso)
+      .values({ tipo: 'mensual', categoria: 'sin_factura', subtotal: 185000, total: 185000, montoOriginal: 10000, monedaOriginal: 'USD', contactoId, cotizacionId: c.id, proyectoId: p.id, periodoInicio: '2026-07' })
+      .run()
+    generarPeriodos(db, '2026-08')
+    cambiarContacto(db, 'proyecto', p.id, otro)
+    generarPeriodos(db, '2026-09')
+    const periodos = db.select().from(ingresos).where(eq(ingresos.proyectoId, p.id)).all()
+    expect(periodos.map((i) => [i.periodo, i.contactoId, i.montoOriginal])).toEqual([
+      ['2026-07', otro, 10000],
+      ['2026-08', otro, 10000],
+      ['2026-09', otro, 10000]
+    ])
   })
 })

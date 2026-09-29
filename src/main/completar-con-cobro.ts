@@ -1,11 +1,11 @@
 import { and, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm'
 import type { Db } from './db'
-import { cotizaciones, ingresos, proyectos, sugerenciasImportacion } from './db/schema'
+import { cotizaciones, ingresos, proyectos } from './db/schema'
 import { estadoCobro } from './cobranza'
 import { exigirProyecto } from './ciclo-proyecto'
 import { montoEn, montos, type MontosRegistrados } from './dinero'
 import { pagarIngreso } from './movimientos'
-import { responderEn } from './sugerencias'
+import { reembolsosDe, vincularCfdiEn } from './atribucion'
 import { exigirCentavos, TASA_IVA } from '../shared/montos'
 import type { CobroAlCompletar, FacturaPorVincular, Moneda, OpcionesCobro } from '../shared/dominio'
 
@@ -66,9 +66,6 @@ function facturasPorVincular(db: Db, contactoId: number | null, moneda: Moneda, 
   })
   return facturas.sort((a, b) => Number(b.coincide) - Number(a.coincide) || b.fecha.localeCompare(a.fecha) || a.cfdiUuid.localeCompare(b.cfdiUuid))
 }
-
-/** The Reembolsos given back against Ingresos `ids`: they go wherever their Ingreso goes. */
-const reembolsosDe = (db: Db, ids: number[]) => (ids.length ? db.select().from(ingresos).where(inArray(ingresos.reembolsoDeId, ids)).all() : [])
 
 /** What the Completar con cobro dialog shows for Proyecto `id`. Refused when its estado allows no Completar. */
 export function opcionesCobro(db: Db, id: number): OpcionesCobro {
@@ -220,21 +217,6 @@ export function registrarCobro(tx: Tx, id: number, plan: PlanCobro, hoy: string)
     .from(ingresos)
     .where(and(eq(ingresos.cfdiUuid, plan.cfdi), eq(ingresos.contactoId, p.contactoId!), isNull(ingresos.proyectoId), ne(ingresos.estado, 'cancelado')))
     .all()
-  const filaIds = filas.map((i) => i.id)
-  for (const s of tx
-    .select()
-    .from(sugerenciasImportacion)
-    .where(
-      and(
-        eq(sugerenciasImportacion.estado, 'pendiente'),
-        eq(sugerenciasImportacion.accion, 'vincular'),
-        eq(sugerenciasImportacion.entidad, 'ingreso'),
-        inArray(sugerenciasImportacion.entidadId, filaIds)
-      )
-    )
-    .all())
-    responderEn(tx, s, { elegidas: [id] }, hoy)
-  const movidos = [...filaIds, ...reembolsosDe(tx, filaIds).map((r) => r.id)]
-  tx.update(ingresos).set({ proyectoId: id }).where(inArray(ingresos.id, movidos)).run()
+  vincularCfdiEn(tx, filas, id, hoy)
   for (const i of filas) if (i.estado === 'pendiente') pagarIngreso(tx, i.id, plan.fecha)
 }
