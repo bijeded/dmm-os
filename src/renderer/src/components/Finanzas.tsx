@@ -161,6 +161,16 @@ export function Finanzas() {
         </button>
       </div>
       <Aviso error={error} />
+      {asignando !== null && (
+        <AsignarProyecto
+          ingresoId={asignando}
+          onCerrar={() => setAsignando(null)}
+          onAsignado={() => {
+            setAsignando(null)
+            cargar()
+          }}
+        />
+      )}
 
       {resumen && resumen.sinDatos.length > 0 && (
         <p role="note" className="m-0 rounded-control border border-border-strong p-3 text-[13px] text-on-surface">
@@ -303,16 +313,6 @@ export function Finanzas() {
               Cancelar
             </Button>
           </div>
-        )}
-        {asignando !== null && (
-          <AsignarProyecto
-            ingresoId={asignando}
-            onCerrar={() => setAsignando(null)}
-            onAsignado={() => {
-              setAsignando(null)
-              cargar()
-            }}
-          />
         )}
         <TablaIngresos filas={ingresos} acciones={accionesIngreso} vacio="Ningún ingreso coincide." />
       </section>
