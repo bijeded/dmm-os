@@ -107,6 +107,17 @@ describe('guardar', () => {
     expect(db.select().from(ingresos).where(eq(ingresos.id, factura.id)).get()!.contactoId).toBe(versa)
   })
 
+  it('leaves an invoice with no Contacto alone when a Proyecto that has one is edited', () => {
+    const { id } = guardarProyecto(db, root, nuevo(), hoy)
+    const factura = db
+      .insert(ingresos)
+      .values({ ...ingresoBase, categoria: 'factura', estadoFacturacion: 'facturado', estado: 'pagado', cfdiUuid: 'padre', proyectoId: id })
+      .returning()
+      .get()
+    guardarProyecto(db, root, nuevo({ id, notas: 'Solo una nota' }), hoy)
+    expect(db.select().from(ingresos).where(eq(ingresos.id, factura.id)).get()!.contactoId).toBeNull()
+  })
+
   it('a rescan finds the scaffolded folder as the same Proyecto', () => {
     const f = guardarProyecto(db, root, nuevo(), hoy)
     importarCarpetaProyecto(db, { tipo: 'proyectos', nombre: 'Clínica Sol - Sitio web', rutaRelativa: 'Proyectos/Clínica Sol - Sitio web' })

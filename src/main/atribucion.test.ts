@@ -243,6 +243,24 @@ describe('Cambiar Contacto', () => {
     })
   })
 
+  it('keeps the answered Sugerencias that named the Contacto it deletes, now naming where its records went', () => {
+    const { omar, cantina, p } = cantina48()
+    const duplicado = contacto('Cantina 48 SA')
+    const respondida = sugerencia({ entidad: 'contacto', entidadId: duplicado.id, accion: 'fusionar', contactoId: cantina.id, motivo: 'nombre parecido', estado: 'aceptada' })
+    cambiarContacto(db, 'proyecto', p.id, omar.id)
+    expect(db.select().from(sugerenciasImportacion).where(eq(sugerenciasImportacion.id, respondida.id)).get()).toMatchObject({ estado: 'aceptada', contactoId: omar.id })
+  })
+
+  it('moves a pair whose Proyecto lacks the Contacto its Cotización has, from either Ficha', () => {
+    const a = contacto('A')
+    const b = contacto('B')
+    const c = cotizacion(a.id)
+    const p = proyecto(null, c.id)
+    cambiarContacto(db, 'proyecto', p.id, b.id)
+    expect(db.select().from(proyectos).where(eq(proyectos.id, p.id)).get()!.contactoId).toBe(b.id)
+    expect(db.select().from(cotizaciones).where(eq(cotizaciones.id, c.id)).get()!.contactoId).toBe(b.id)
+  })
+
   it('previews exactly what it would do, without writing', () => {
     const { omar, cantina, p } = cantina48()
     expect(previaCambioContacto(db, 'proyecto', p.id, omar.id)).toEqual({ cotizaciones: 1, proyectos: 1, ingresos: 0, borraContacto: 'Cantina 48' })
@@ -267,7 +285,7 @@ describe('Asignar proyecto', () => {
     expect(leerIngreso(i.id)).toMatchObject({ proyectoId: cantina.id, estado: 'pagado', fechaPago: '2018-09-20', contactoId: omar.id })
   })
 
-  it('moves an invoice between Proyectos, and off any with Sin proyecto, keeping its Contacto', () => {
+  it('moves an invoice between Proyectos, and off any with Ningún proyecto, keeping its Contacto', () => {
     const { omar, cantina, rooftop } = zamora()
     const i = factura('1', { contactoId: omar.id, proyectoId: cantina.id })
     asignarProyecto(db, i.id, rooftop.id, hoy)
@@ -324,6 +342,17 @@ describe('Asignar proyecto', () => {
     expect(leerIngreso(i.id).contactoId).toBe(omar.id)
   })
 
+  it('answers a pending vincular on an invoice with no Contacto after giving it the chosen Proyecto’s Contacto', () => {
+    const { omar, cantina } = zamora()
+    const otroContacto = contacto('Otro')
+    const adivinado = proyecto(otroContacto.id, null, { nombre: 'Adivinado' })
+    const i = factura('sin-contacto')
+    const s = sugerencia({ entidad: 'ingreso', entidadId: i.id, accion: 'vincular', proyectoId: adivinado.id, motivo: 'monto' })
+    asignarProyecto(db, i.id, cantina.id, hoy)
+    expect(leerIngreso(i.id)).toMatchObject({ proyectoId: cantina.id, contactoId: omar.id })
+    expect(estadoDe(s.id)).toBe('corregida')
+  })
+
   describe('refusals write nothing', () => {
     it('refuses another Contacto’s Proyecto and a personal one', () => {
       const { omar, cantina } = zamora()
@@ -347,7 +376,7 @@ describe('Asignar proyecto', () => {
     })
   })
 
-  it('answers a pending vincular: aceptada for the Proyecto it proposed, corregida for another, rechazada for Sin proyecto', () => {
+  it('answers a pending vincular: aceptada for the Proyecto it proposed, corregida for another, rechazada for Ningún proyecto', () => {
     const { omar, cantina, rooftop } = zamora()
     const pendienteSobre = (uuid: string) => {
       const i = factura(uuid, { contactoId: omar.id })

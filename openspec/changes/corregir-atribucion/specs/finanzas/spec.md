@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Asignar proyecto moves an invoice to another Proyecto
-In the Finanzas Ingresos list, the row of an Ingreso imported from a CFDI that is not cancelled and is not a Reembolso SHALL offer **Asignar proyecto**. Its dialog SHALL list the client Proyectos of the Ingreso's Contacto, whatever their estado, newest first, plus **Sin proyecto**, and SHALL mark the current one. On confirm, every Ingreso of that CFDI (all its Parcialidades) and the Reembolsos recorded against them SHALL be on the chosen Proyecto, or on none. Their Contacto, amounts, estados, dates and USD originals SHALL be unchanged. Closing the dialog SHALL change nothing.
+In the Finanzas Ingresos list, the row of an Ingreso imported from a CFDI that is not cancelled and is not a Reembolso SHALL offer **Asignar proyecto**. Its dialog SHALL list the client Proyectos of the Ingreso's Contacto, whatever their estado, newest first, plus **Ningún proyecto**, and SHALL mark the current one. On confirm, every Ingreso of that CFDI (all its Parcialidades) and the Reembolsos recorded against them SHALL be on the chosen Proyecto, or on none. Their Contacto, amounts, estados, dates and USD originals SHALL be unchanged. Closing the dialog SHALL change nothing.
 
 #### Scenario: Invoice assigned to Cantina 48
 - **WHEN** CFDI Ingreso 481 ($5,500, pagado 2018-09-20, Contacto "Omar Rodriguez") is on no Proyecto, and the owner chooses Asignar proyecto → "Cantina 48"
@@ -14,7 +14,7 @@ In the Finanzas Ingresos list, the row of an Ingreso imported from a CFDI that i
 - **THEN** it is on "Cantina Rooftop" and no longer on "La Boom"
 
 #### Scenario: Removed from its Proyecto
-- **WHEN** the owner chooses Sin proyecto for a CFDI Ingreso on "Cantina Rooftop"
+- **WHEN** the owner chooses Ningún proyecto for a CFDI Ingreso on "Cantina Rooftop"
 - **THEN** the Ingreso is on no Proyecto and keeps its Contacto
 
 #### Scenario: Parcialidades move together
@@ -34,7 +34,7 @@ In the Finanzas Ingresos list, the row of an Ingreso imported from a CFDI that i
 - **THEN** its row offers no Asignar proyecto
 
 ### Requirement: An invoice with no Contacto takes its Proyecto's Contacto
-When the CFDI Ingreso has no Contacto (its receptor RFC is held by none), Asignar proyecto SHALL list every client Proyecto, each with its Contacto's name. Choosing a Proyecto SHALL also give all Ingresos of that CFDI, and their Reembolsos, that Proyecto's Contacto. The Contacto's RFC SHALL be unchanged, and the Ingresos SHALL keep that Contacto if later set to Sin proyecto. A Facturas run SHALL NOT change the Contacto or Proyecto of an Ingreso it already imported.
+When the CFDI Ingreso has no Contacto (its receptor RFC is held by none), Asignar proyecto SHALL list every client Proyecto, each with its Contacto's name. Choosing a Proyecto SHALL also give all Ingresos of that CFDI, and their Reembolsos, that Proyecto's Contacto. The Contacto's RFC SHALL be unchanged, and the Ingresos SHALL keep that Contacto if later set to Ningún proyecto. A Facturas run SHALL NOT change the Contacto or Proyecto of an Ingreso it already imported.
 
 #### Scenario: Paid by the parent company
 - **WHEN** a CFDI Ingreso for "Diseño y desarrollo de sitios web laboomny.com y zamoralive…" has no Contacto because its receptor RFC is on no Contacto, and the owner assigns it to "La Boom" of "Omar Rodriguez"
@@ -46,7 +46,7 @@ When the CFDI Ingreso has no Contacto (its receptor RFC is held by none), Asigna
 - **THEN** the Ingreso keeps its Proyecto and Contacto, and no second Ingreso is created for its UUID
 
 ### Requirement: Asignar proyecto answers the pending link suggestion
-When a moved Ingreso has a pending *vincular* Sugerencia de importación, Asignar proyecto SHALL answer it in the same step: *aceptada* when the chosen Proyecto is the one it proposed, *corregida* when it is another, and *rechazada* when Sin proyecto is chosen. Logs SHALL no longer show it as pending.
+When a moved Ingreso has a pending *vincular* Sugerencia de importación, Asignar proyecto SHALL answer it in the same step: *aceptada* when the chosen Proyecto is the one it proposed, *corregida* when it is another, and *rechazada* when Ningún proyecto is chosen. Logs SHALL no longer show it as pending.
 
 #### Scenario: Suggested Proyecto chosen
 - **WHEN** a pending *vincular* Sugerencia proposes Proyecto "Cantina 48" for CFDI Ingreso 485, and the owner assigns 485 to "Cantina 48" from Finanzas

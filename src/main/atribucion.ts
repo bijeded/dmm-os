@@ -15,6 +15,9 @@ import type { EntidadCambioContacto, OpcionesAsignar, PreviaCambioContacto } fro
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 
+/** The records that belong to a Contacto. Costos reach one through their Proyecto or Cotización. */
+const CON_CONTACTO = [cotizaciones, proyectos, ingresos, definicionesIngreso] as const
+
 /** The Reembolsos given back against Ingresos `ids`: they go wherever their Ingreso goes. */
 export const reembolsosDe = (db: Db | Tx, ids: number[]) =>
   ids.length ? db.select().from(ingresos).where(inArray(ingresos.reembolsoDeId, ids)).all() : []
@@ -35,8 +38,7 @@ export function fusionarEn(tx: Tx, duplicadoId: number, originalId: number, nomb
   if (manual && duplicado.rfc && original.rfc && duplicado.rfc !== original.rfc)
     throw new Error(`No se puede fusionar: ${duplicado.nombre} tiene el RFC ${duplicado.rfc} y ${original.nombre} el RFC ${original.rfc}`)
 
-  // Costos reach a Contacto through their Proyecto or Cotización, so moving those moves them.
-  for (const tabla of [cotizaciones, proyectos, ingresos, definicionesIngreso]) {
+  for (const tabla of CON_CONTACTO) {
     tx.update(tabla).set({ contactoId: originalId }).where(eq(tabla.contactoId, duplicadoId)).run()
   }
   // Another pending merge may point at the duplicate; it now points at the Contacto that remains.
@@ -86,12 +88,8 @@ export function fusionarContacto(db: Db, id: number, destinoId: number): number 
       eq(sugerenciasImportacion.entidad, 'contacto'),
       eq(sugerenciasImportacion.entidadId, id)
     )
-    for (const s of tx.select().from(sugerenciasImportacion).where(sobreEste).all()) {
-      tx.update(sugerenciasImportacion)
-        .set({ estado: s.contactoId === destinoId ? 'aceptada' : 'corregida' })
-        .where(eq(sugerenciasImportacion.id, s.id))
-        .run()
-    }
+    tx.update(sugerenciasImportacion).set({ estado: 'aceptada' }).where(and(sobreEste, eq(sugerenciasImportacion.contactoId, destinoId))).run()
+    tx.update(sugerenciasImportacion).set({ estado: 'corregida' }).where(sobreEste).run()
     fusionarEn(tx, id, destinoId, 'destino')
   })
   return destinoId
@@ -99,12 +97,14 @@ export function fusionarContacto(db: Db, id: number, destinoId: number): number 
 
 /**
  * Deletes Contacto `id` when nothing is left that names it (Borrar vs cancelar allows it), with any
- * pending suggestion to merge it, and returns its name; `null` when it keeps something.
+ * pending suggestion to merge it, and returns its name; `null` when it keeps something. Sugerencias
+ * that name it as where to merge now name `destinoId`, where its records went, so Logs keeps the
+ * answered ones.
  */
-function borrarSiVacioEn(tx: Tx, id: number): string | null {
+function borrarSiVacioEn(tx: Tx, id: number, destinoId: number): string | null {
   const contacto = tx.select().from(contactos).where(eq(contactos.id, id)).get()
   if (!contacto) return null
-  const conAlgo = [cotizaciones, proyectos, ingresos, definicionesIngreso].some(
+  const conAlgo = CON_CONTACTO.some(
     (tabla) => tx.select({ id: tabla.id }).from(tabla).where(eq(tabla.contactoId, id)).get() !== undefined
   )
   if (conAlgo) return null
@@ -117,6 +117,7 @@ function borrarSiVacioEn(tx: Tx, id: number): string | null {
       )
     )
     .run()
+  tx.update(sugerenciasImportacion).set({ contactoId: destinoId }).where(eq(sugerenciasImportacion.contactoId, id)).run()
   borrar(tx, 'contacto', id)
   return contacto.nombre
 }
@@ -186,7 +187,7 @@ function cambiarEn(tx: Tx, entidad: EntidadCambioContacto, id: number, contactoI
       .set({ contactoId })
       .where(inArray(definicionesIngreso.id, definiciones.map((d) => d.id)))
       .run()
-  return { cotizaciones: cotizacion ? 1 : 0, proyectos: proyecto ? 1 : 0, ingresos: suyos.length, borraContacto: borrarSiVacioEn(tx, desde) }
+  return { cotizaciones: cotizacion ? 1 : 0, proyectos: proyecto ? 1 : 0, ingresos: suyos.length, borraContacto: borrarSiVacioEn(tx, desde, contactoId) }
 }
 
 /**
@@ -281,7 +282,12 @@ export function asignarProyecto(db: Db, ingresoId: number, proyectoId: number | 
       .from(ingresos)
       .where(and(eq(ingresos.cfdiUuid, ingreso.cfdiUuid!), ne(ingresos.estado, 'cancelado')))
       .all()
-    const movidos = vincularCfdiEn(tx, filas, proyectoId, hoy)
-    if (contactoId !== ingreso.contactoId) tx.update(ingresos).set({ contactoId }).where(inArray(ingresos.id, movidos)).run()
+    // The Contacto comes first: a pending Sugerencia's opciones are the Proyectos of the invoice's Contacto.
+    if (contactoId !== ingreso.contactoId) {
+      const ids = filas.map((i) => i.id)
+      const suyos = [...ids, ...reembolsosDe(tx, ids).map((r) => r.id)]
+      tx.update(ingresos).set({ contactoId }).where(inArray(ingresos.id, suyos)).run()
+    }
+    vincularCfdiEn(tx, filas, proyectoId, hoy)
   })
 }

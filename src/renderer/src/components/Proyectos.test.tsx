@@ -338,6 +338,22 @@ describe('Cambiar contacto', () => {
     expect(api.cambiarContacto).not.toHaveBeenCalled()
   })
 
+  it('ignores a preview that arrives after another Contacto was chosen', async () => {
+    api.ficha = vi.fn(async () => conCambio)
+    let responder: (p: Awaited<ReturnType<typeof previaCambio>>) => void = () => {}
+    vi.mocked(previaCambio).mockImplementationOnce(() => new Promise((r) => (responder = r)))
+    montar('/proyectos/1')
+    fireEvent.click(await screen.findByRole('button', { name: 'Cambiar contacto' }))
+    const dialogo = screen.getByRole('dialog')
+    await within(dialogo).findByRole('option', { name: 'Omar Rodriguez' })
+    const select = within(dialogo).getByRole('combobox', { name: 'Contacto' })
+    fireEvent.change(select, { target: { value: '8' } })
+    fireEvent.change(select, { target: { value: '' } })
+    responder({ cotizaciones: 1, proyectos: 1, ingresos: 0, borraContacto: null })
+    await waitFor(() => expect(within(dialogo).getByRole('button', { name: 'Cambiar contacto' })).toHaveProperty('disabled', true))
+    expect(within(dialogo).queryByText(/Pasan a/)).toBeNull()
+  })
+
   it('is not offered when main does not allow it', async () => {
     montar('/proyectos/1')
     await screen.findByRole('heading', { name: 'Sitio web' })

@@ -49,7 +49,7 @@ When a Contacto is merged by hand, a pending *fusionar* Sugerencia de importaci�
 - **THEN** that Sugerencia is *corregida*, and everything of A belongs to C
 
 ### Requirement: Cambiar Contacto moves a Cotización and its Proyecto together
-The Ficha of a Cotización that is not a draft, and the Ficha of a client Proyecto that has a Contacto, SHALL offer **Cambiar contacto**, which asks for another Contacto and says what will move. On confirm, in one step, the Cotización, the Proyecto it led to (if any), the Ingresos on either of them and their recurring Ingreso definitions SHALL belong to the chosen Contacto. For a Proyecto with no Cotización, only the Proyecto and its Ingresos and definitions move. Estados, amounts, USD originals, dates, Folio and Cliente final SHALL be unchanged, including for cancelled and imported records. The Contacto of a draft Cotización SHALL still be changed from its Editar form, as today.
+The Ficha of a Cotización that is not a draft, and the Ficha of a client Proyecto that has a Contacto or a Cotización, SHALL offer **Cambiar contacto**, which asks for another Contacto and says what will move. On confirm, in one step, the Cotización, the Proyecto it led to (if any), the Ingresos on either of them and their recurring Ingreso definitions SHALL belong to the chosen Contacto. For a Proyecto with no Cotización, only the Proyecto and its Ingresos and definitions move. Estados, amounts, USD originals, dates, Folio and Cliente final SHALL be unchanged, including for cancelled and imported records. The Contacto of a draft Cotización SHALL still be changed from its Editar form, as today.
 
 #### Scenario: Cantina 48 moved to Omar Rodriguez
 - **WHEN** the owner opens the Proyecto "Cantina 48" (Contacto "Cantina 48", from Cotización 190, completado, imported, no Ingresos), chooses Cambiar contacto → "Omar Rodriguez" and confirms
@@ -83,7 +83,7 @@ Cambiar contacto SHALL be refused, changing nothing, when any Ingreso on the Cot
 - **THEN** it is refused until that Sugerencia is answered
 
 ### Requirement: The Editar form sets a Contacto only on a Proyecto that has none
-The Editar form of a client Proyecto SHALL let the owner choose its Contacto only while it has none (a Proyecto sin Contacto); once it has one, the Contacto SHALL be shown but changed only through Cambiar contacto. Giving a Proyecto sin Contacto a Contacto SHALL also give that Contacto to its Ingresos that have none.
+The Editar form of a client Proyecto SHALL let the owner choose its Contacto only while it has none (a Proyecto sin Contacto); once it has one, the Contacto SHALL be shown but changed only through Cambiar contacto, and the Proyecto SHALL NOT be made personal. Giving a Proyecto sin Contacto a Contacto SHALL also give that Contacto to its Ingresos that have none; any other edit SHALL leave its Ingresos' Contacto as it is.
 
 #### Scenario: Proyecto sin Contacto assigned
 - **WHEN** the imported Proyecto "Bosque" has no Contacto and a CFDI Ingreso with no Contacto, and the owner chooses Contacto "Versa" in Editar and saves
@@ -94,7 +94,7 @@ The Editar form of a client Proyecto SHALL let the owner choose its Contacto onl
 - **THEN** the Contacto field is not editable, and the Ficha offers Cambiar contacto
 
 ### Requirement: A Contacto left with nothing is deleted
-After Cambiar contacto, the Contacto it moved the records from SHALL be deleted in the same step when it no longer has any Cotización, Proyecto, Ingreso or recurring Ingreso definition. The dialog SHALL say, before confirming, that this Contacto will be deleted. A Contacto that still has any of those SHALL stay. Its `Clientes/` folder on disk SHALL be left untouched.
+After Cambiar contacto, the Contacto it moved the records from SHALL be deleted in the same step when it no longer has any Cotización, Proyecto, Ingreso or recurring Ingreso definition. The dialog SHALL say, before confirming, that this Contacto will be deleted. A Contacto that still has any of those SHALL stay. Its `Clientes/` folder on disk SHALL be left untouched. Answered Sugerencias de importación that named it as where to merge SHALL stay in Logs, naming the Contacto the records moved to.
 
 #### Scenario: Cantina 48 emptied
 - **WHEN** the Proyecto "Cantina 48" and Cotización 190 were the only records of the Contacto "Cantina 48", and the owner moves them to "Omar Rodriguez"

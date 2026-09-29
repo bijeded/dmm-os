@@ -195,7 +195,7 @@ export function guardarProyecto(db: Db, root: string, p: ProyectoNuevo, hoy: str
   db.transaction((tx) => {
     tx.update(proyectos).set(valores).where(eq(proyectos.id, id)).run()
     // A Proyecto sin Contacto that gets one gives it to its Ingresos that have none.
-    if (valores.contactoId !== null)
+    if (actual.contactoId === null && valores.contactoId !== null)
       tx.update(ingresos)
         .set({ contactoId: valores.contactoId })
         .where(and(eq(ingresos.proyectoId, id), isNull(ingresos.contactoId)))

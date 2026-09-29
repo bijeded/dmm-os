@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { accionesProyecto, exigirProyecto, MENSAJE_SIN_PAGAR, rechazoCambiarContacto } from './ciclo-proyecto'
 import { ESTADOS_PROYECTO } from '../shared/dominio'
 
-const deCliente = { etiqueta: 'cliente', contactoId: 1 } as const
-const personal = { etiqueta: 'personal', contactoId: null } as const
-const sinContacto = { etiqueta: 'cliente', contactoId: null } as const
+const deCliente = { etiqueta: 'cliente', contactoId: 1, cotizacionId: null } as const
+const personal = { etiqueta: 'personal', contactoId: null, cotizacionId: null } as const
+const sinContacto = { etiqueta: 'cliente', contactoId: null, cotizacionId: null } as const
+// Inconsistent data the schema allows: it takes its Cotización's Contacto when moved.
+const deCotizacionSinContacto = { etiqueta: 'cliente', contactoId: null, cotizacionId: 4 } as const
 
 describe('el ciclo de un Proyecto', () => {
   it('offers Completar only once fully paid', () => {
@@ -28,6 +30,7 @@ describe('el ciclo de un Proyecto', () => {
       expect(accionesProyecto(estado, { pagadoCompleto: true }, deCliente)).toContain('cambiarContacto')
       expect(accionesProyecto(estado, { pagadoCompleto: true }, personal)).not.toContain('cambiarContacto')
       expect(accionesProyecto(estado, { pagadoCompleto: true }, sinContacto)).not.toContain('cambiarContacto')
+      expect(accionesProyecto(estado, { pagadoCompleto: true }, deCotizacionSinContacto)).toContain('cambiarContacto')
     }
     expect(rechazoCambiarContacto(personal)).toBe('Un proyecto personal no tiene contacto')
     expect(rechazoCambiarContacto(sinContacto)).toBe('Asígnale un contacto desde Editar')

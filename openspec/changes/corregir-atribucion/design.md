@@ -49,11 +49,11 @@ The pending-Sugerencia refusal avoids re-deciding what a *vincular* guess means 
 *Alternative*: move CFDI Ingresos too. Rejected in exploration: it breaks "a CFDI Ingreso's Contacto is its receptor", and Fusionar covers the same-company case.
 
 ### 4. The empty-Contacto rule
-`borrarSiVacio(tx, contactoId)` runs at the end of Cambiar Contacto: when no Cotización, Proyecto, Ingreso or definición de ingreso names the Contacto, delete pending *fusionar* Sugerencias whose `entidad = 'contacto'` and `entidadId` is it (they propose merging something that no longer exists), then `borrar(tx, 'contacto', id)`. The FK cascade removes Sugerencias that name it as `contactoId`. The dialog learns in advance from the read function, which runs the same check without writing. Fusionar en… always deletes the merged Contacto (Decision 2), so it does not need this.
+`borrarSiVacio(tx, contactoId)` runs at the end of Cambiar Contacto: when no Cotización, Proyecto, Ingreso or definición de ingreso names the Contacto, delete pending *fusionar* Sugerencias whose `entidad = 'contacto'` and `entidadId` is it (they propose merging something that no longer exists), then repoint every Sugerencia that names it as `contactoId` to the Contacto the records moved to (as the merge does), so the FK cascade does not erase answered ones from Logs, then `borrar(tx, 'contacto', id)`. The dialog learns in advance from the read function, which runs the same check without writing. Fusionar en… always deletes the merged Contacto (Decision 2), so it does not need this.
 Not applied to the Editar forms: a Contacto created by hand as a cold lead must not disappear because a draft was pointed elsewhere.
 
 ### 5. Editar locks the Contacto once set
-`guardarProyecto` keeps the stored `contactoId` whenever the Proyecto already has one (today it does so only for Proyectos with a Cotización). When the Proyecto had none and gets one, the same transaction sets that Contacto on its Ingresos with `contactoId IS NULL`. `NuevoProyecto.tsx` shows the Contacto read-only in that case. The Ficha offers Cambiar contacto instead, through a new `AccionProyecto` `'cambiarContacto'`, offered for client Proyectos with a Contacto in any estado. `AccionCotizacion` gains `'cambiarContacto'` for every estado but `borrador`.
+`guardarProyecto` keeps the stored `contactoId` whenever the Proyecto already has one (today it does so only for Proyectos with a Cotización), and refuses turning such a Proyecto personal. Only when the Proyecto had none and gets one does the same transaction set that Contacto on its Ingresos with `contactoId IS NULL`; any other edit leaves Ingresos alone, so an invoice with no Contacto is never attributed silently. `NuevoProyecto.tsx` shows the Contacto read-only in that case. The Ficha offers Cambiar contacto instead, through a new `AccionProyecto` `'cambiarContacto'`, offered for client Proyectos with a Contacto, or with a Cotización whose Contacto they take when moved, in any estado. `AccionCotizacion` gains `'cambiarContacto'` for every estado but `borrador`.
 
 ### 6. Asignar proyecto reuses the CFDI link
 Extract from `registrarCobro` a `vincularCfdiEn(tx, uuid, proyectoId | null, hoy)` that gathers the UUID's non-cancelled Ingresos and their Reembolsos, answers their pending *vincular* Sugerencias, and sets `proyectoId`. Completar con cobro calls it with its own filters unchanged (same Contacto, no Proyecto yet). Asignar proyecto adds:
@@ -69,12 +69,12 @@ New channels in `src/shared/contrato.ts`, wired in `handlers.ts` through `alDiaD
 - `finanzas.opcionesAsignar(ingresoId) → { actual: number | null, proyectos: { id, nombre, contacto, estado }[] }` and `finanzas.asignarProyecto(ingresoId, proyectoId | null) → void`
 
 ### 8. Dialogs
-Hand-rolled `role="dialog"` elements following `FormContacto.tsx` and the Completar con cobro dialog: a Contacto `<select>` (Fusionar en…, Cambiar contacto) and a Proyecto `<select>` with Sin proyecto (Asignar proyecto). Main's refusals show in place; closing writes nothing.
+Hand-rolled `role="dialog"` elements following `FormContacto.tsx` and the Completar con cobro dialog: a Contacto `<select>` (Fusionar en…, Cambiar contacto) and a Proyecto `<select>` with Ningún proyecto (Asignar proyecto). Main's refusals show in place; closing writes nothing.
 
 ## Risks / Trade-offs
 
 - [Reimportar desde cero discards every correction] → Already true of every edit to imported records; the owner chose to fix in place. The confirmation Reimportar already shows covers it.
-- [A Contacto-less CFDI assigned to a Proyecto gets a Contacto whose RFC differs from its receptor] → Intended (a parent company paying). Later Cambiar Contacto on that Proyecto is refused because it has a CFDI; the owner can set the invoice to Sin proyecto first.
+- [A Contacto-less CFDI assigned to a Proyecto gets a Contacto whose RFC differs from its receptor] → Intended (a parent company paying). Later Cambiar Contacto on that Proyecto is refused because it has a CFDI; the owner can set the invoice to Ningún proyecto first.
 - [Moving `fusionar` could change the Sugerencia path] → The `nombre`/`notas` options keep it byte-for-byte; its existing tests in `sugerencias.test.ts` must pass unchanged.
 - [Deleting the emptied Contacto loses its email, teléfono and notas] → The dialog names the Contacto that will be deleted before confirming. Fusionar en… is the alternative that keeps them.
 - [A sent Cotización's printed PDF still names the old Contacto] → Out of scope; the PDF is history.

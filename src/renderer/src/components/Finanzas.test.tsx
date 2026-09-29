@@ -207,7 +207,7 @@ describe('Finanzas', () => {
     const dialogo = screen.getByRole('dialog')
     const select = await within(dialogo).findByRole('combobox', { name: 'Proyecto' })
     expect(api.opcionesAsignar).toHaveBeenCalledWith(481)
-    expect(within(dialogo).getAllByRole('option').map((o) => o.textContent)).toEqual(['Sin proyecto', 'Cantina Rooftop · Completado', 'Cantina 48 · Completado'])
+    expect(within(dialogo).getAllByRole('option').map((o) => o.textContent)).toEqual(['Ningún proyecto', 'Cantina Rooftop · Completado', 'Cantina 48 · Completado'])
     fireEvent.change(select, { target: { value: '24' } })
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Asignar' }))
     await waitFor(() => expect(api.asignarProyecto).toHaveBeenCalledWith(481, 24))
@@ -226,6 +226,18 @@ describe('Finanzas', () => {
     fireEvent.change(within(dialogo).getByRole('combobox', { name: 'Proyecto' }), { target: { value: '' } })
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Asignar' }))
     await waitFor(() => expect(api.asignarProyecto).toHaveBeenCalledWith(90, null))
+  })
+
+  it('selects Ningún proyecto when the invoice sits on a Proyecto it cannot be put on again', async () => {
+    api.resumen = vi.fn(async () => resumen({ ingresos: [ingreso(481, { acciones: ['asignarProyecto'] })] }))
+    vi.mocked(api.opcionesAsignar).mockResolvedValueOnce({ actual: 99, sinContacto: false, proyectos: [{ id: 24, nombre: 'Cantina 48', contacto: 'Omar Rodriguez', estado: 'completado' }] })
+    montar()
+    fireEvent.click(await screen.findByRole('button', { name: 'Asignar proyecto' }))
+    const dialogo = screen.getByRole('dialog')
+    const select = (await within(dialogo).findByRole('combobox', { name: 'Proyecto' })) as HTMLSelectElement
+    expect(select.value).toBe('')
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Asignar' }))
+    await waitFor(() => expect(api.asignarProyecto).toHaveBeenCalledWith(481, null))
   })
 
   it('shows main’s refusal in the dialog, and writes nothing when closed', async () => {

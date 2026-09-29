@@ -49,13 +49,20 @@ export function rechazoProyecto(accion: AccionPorEstado, estado: EstadoProyecto,
   return null
 }
 
+/** What Cambiar contacto needs to know about a Proyecto. */
+export interface ContactoDelProyecto {
+  etiqueta: EtiquetaProyecto
+  contactoId: number | null
+  cotizacionId: number | null
+}
+
 /**
- * Cambiar contacto, in any estado, for a client Proyecto that has a Contacto. One with none gets it
- * from Editar; a personal one has none to change.
+ * Cambiar contacto, in any estado, for a client Proyecto that has a Contacto or a Cotización (whose
+ * Contacto it takes). One with neither gets its Contacto from Editar; a personal one has none.
  */
-export function rechazoCambiarContacto(p: { etiqueta: EtiquetaProyecto; contactoId: number | null }): string | null {
+export function rechazoCambiarContacto(p: ContactoDelProyecto): string | null {
   if (p.etiqueta === 'personal') return 'Un proyecto personal no tiene contacto'
-  if (p.contactoId === null) return 'Asígnale un contacto desde Editar'
+  if (p.contactoId === null && p.cotizacionId === null) return 'Asígnale un contacto desde Editar'
   return null
 }
 
@@ -63,7 +70,7 @@ export function rechazoCambiarContacto(p: { etiqueta: EtiquetaProyecto; contacto
 export const accionesProyecto = (
   estado: EstadoProyecto,
   ctx: ContextoProyecto,
-  p: { etiqueta: EtiquetaProyecto; contactoId: number | null }
+  p: ContactoDelProyecto
 ): AccionProyecto[] => [
   ...(Object.keys(REGLAS) as AccionPorEstado[]).filter((a) => rechazoProyecto(a, estado, ctx) === null),
   ...(rechazoCambiarContacto(p) === null ? (['cambiarContacto'] as const) : [])

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NOMBRES_ESTADO_PROYECTO, type EntidadCambioContacto, type FilaContacto, type OpcionesAsignar, type PreviaCambioContacto } from '../../../shared/dominio'
 import { Campo } from './NuevaCotizacion'
+import { Dialogo } from './Dialogo'
 import { campoCls } from './estilos'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
@@ -8,19 +9,6 @@ import { Button } from './ui/button'
 // The corrections of attribution, as dialogs: Fusionar en…, Cambiar contacto and Asignar proyecto.
 // Main decides what is allowed and refuses the rest; each dialog shows why in place, and closing
 // one writes nothing.
-
-function Dialogo({ id, titulo, children }: { id: string; titulo: string; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/60 p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby={id} className="card flex w-full max-w-md flex-col gap-4 rounded-control border border-border-strong bg-surface-raised p-6">
-        <h2 id={id} className="m-0 text-[15px] font-semibold text-on-surface">
-          {titulo}
-        </h2>
-        {children}
-      </div>
-    </div>
-  )
-}
 
 const textoCls = 'm-0 text-[13px] text-on-surface-muted'
 
@@ -116,11 +104,18 @@ export function CambiarContacto<F>({
   const [destino, setDestino] = useState<number | null>(null)
   const [previa, setPrevia] = useState<PreviaCambioContacto | null>(null)
   const nombreDestino = contactos.find((c) => c.id === destino)?.nombre
+  // Only the answer for the Contacto chosen last counts: an earlier one may arrive after it.
+  const ultimo = useRef<number | null>(null)
 
   const elegir = (nuevo: number | null) => {
+    ultimo.current = nuevo
     setDestino(nuevo)
     setPrevia(null)
-    if (nuevo !== null) correr(async () => setPrevia(await window.dmm.contactos.previaCambio(entidad, id, nuevo)))
+    if (nuevo !== null)
+      correr(async () => {
+        const p = await window.dmm.contactos.previaCambio(entidad, id, nuevo)
+        if (ultimo.current === nuevo) setPrevia(p)
+      })
   }
   const cambiar = () =>
     correr(async () => {
@@ -151,7 +146,7 @@ export function CambiarContacto<F>({
   )
 }
 
-const SIN_PROYECTO = ''
+const NINGUNO = ''
 
 /**
  * Asignar proyecto: puts an imported invoice (its Parcialidades and Reembolsos together) on another
@@ -160,21 +155,22 @@ const SIN_PROYECTO = ''
  */
 export function AsignarProyecto({ ingresoId, onAsignado, onCerrar }: { ingresoId: number; onAsignado: () => void; onCerrar: () => void }) {
   const [opciones, setOpciones] = useState<OpcionesAsignar | null>(null)
-  const [elegido, setElegido] = useState(SIN_PROYECTO)
+  const [elegido, setElegido] = useState(NINGUNO)
   const { error, ocupado, correr } = useAccion()
 
   useEffect(() => {
     correr(async () => {
       const o = await window.dmm.finanzas.opcionesAsignar(ingresoId)
       setOpciones(o)
-      setElegido(o.actual === null ? SIN_PROYECTO : String(o.actual))
+      // A current Proyecto not offered (another Contacto's) cannot be chosen again.
+      setElegido(o.proyectos.some((p) => p.id === o.actual) ? String(o.actual) : NINGUNO)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per invoice
   }, [ingresoId])
 
   const asignar = () =>
     correr(async () => {
-      await window.dmm.finanzas.asignarProyecto(ingresoId, elegido === SIN_PROYECTO ? null : Number(elegido))
+      await window.dmm.finanzas.asignarProyecto(ingresoId, elegido === NINGUNO ? null : Number(elegido))
       onAsignado()
     })
 
@@ -183,7 +179,7 @@ export function AsignarProyecto({ ingresoId, onAsignado, onCerrar }: { ingresoId
       {opciones && (
         <Campo label="Proyecto">
           <select value={elegido} onChange={(e) => setElegido(e.target.value)} className={campoCls}>
-            <option value={SIN_PROYECTO}>Sin proyecto</option>
+            <option value={NINGUNO}>Ningún proyecto</option>
             {opciones.proyectos.map((p) => (
               <option key={p.id} value={p.id}>
                 {[p.nombre, opciones.sinContacto && p.contacto, NOMBRES_ESTADO_PROYECTO[p.estado]].filter(Boolean).join(' · ')}
