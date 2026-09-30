@@ -20,7 +20,7 @@ export interface Pie {
  * was kept with, the table shows page 1. The reset is derived, not triggered, so a screen that
  * opens again with its restored filters keeps its page.
  */
-export function usePaginacion<T>(filas: T[], clave: string, filtros: unknown[]): { visibles: T[]; pie: Pie } {
+export function usePaginacion<T>(filas: T[], clave: string, filtros: unknown[]): { visibles: T[]; pie: Pie; mostrar: (indice: number) => void } {
   const [guardada, fijar] = useRecordado(clave, SIN_PAGINA)
   const firma = JSON.stringify(filtros)
   const pedida = guardada.firma === firma ? guardada.pagina : 0
@@ -36,6 +36,8 @@ export function usePaginacion<T>(filas: T[], clave: string, filtros: unknown[]):
   const ir = (pagina: number) => fijar({ pagina, firma })
   return {
     visibles,
+    /** Moves to the page that holds row `indice`. */
+    mostrar: (indice: number) => ir(Math.floor(indice / POR_PAGINA)),
     pie: {
       desde: actual * POR_PAGINA,
       mostradas: visibles.length,

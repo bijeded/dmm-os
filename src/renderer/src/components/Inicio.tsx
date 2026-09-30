@@ -31,6 +31,8 @@ export function Inicio() {
   const [cobros, setCobros] = useRecordado<Cobros>('inicio.vistaCobros', 'mes')
   const [hechas, setHechas] = useRecordado('inicio.hechas', false)
   const [nueva, setNueva] = useState('')
+  // The Tarea just added, so its page is shown even when it lands past the one in view.
+  const [agregada, setAgregada] = useState<number | null>(null)
   const { error, ocupado, correr } = useAccion()
 
   useEffect(() => {
@@ -54,6 +56,7 @@ export function Inicio() {
     tarea(async () => {
       const lista = await window.dmm.tareas.agregar(nueva)
       setNueva('')
+      setAgregada(lista.pendientes.find((t) => !tareas?.pendientes.some((p) => p.id === t.id))?.id ?? null)
       return lista
     })
   }
@@ -201,37 +204,32 @@ export function Inicio() {
               </Button>
             </form>
           )}
-          {hechas ? (
-            <Tabla
-              clave="inicio.tareas"
-              filtros={[hechas]}
-              vacio={`Nada hecho en los últimos ${tareas?.diasHechas ?? 0} días.`}
-              columnas={['Tarea', 'Registrada', 'Hecha']}
-              filas={(tareas?.hechas ?? []).map((t) => ({ key: t.id, celdas: [t.texto, dia(t.fechaRegistro), dia(t.fechaHecha!)] }))}
-            />
-          ) : (
-            <Tabla
-              clave="inicio.tareas"
-              filtros={[hechas]}
-              vacio="Nada pendiente."
-              columnas={['Tarea', 'Registrada', '']}
-              filas={(tareas?.pendientes ?? []).map((t) => ({
-                key: t.id,
-                celdas: [
-                  t.texto,
-                  dia(t.fechaRegistro),
-                  <span className="flex gap-3">
-                    <button type="button" disabled={ocupado} className={accionCls} onClick={() => tarea(() => window.dmm.tareas.completar(t.id))}>
-                      Hecha
-                    </button>
-                    <button type="button" disabled={ocupado} className={accionCls} onClick={() => tarea(() => window.dmm.tareas.borrar(t.id))}>
-                      Borrar
-                    </button>
-                  </span>
-                ]
-              }))}
-            />
-          )}
+          <Tabla
+            clave="inicio.tareas"
+            filtros={[hechas]}
+            enfocar={hechas ? null : agregada}
+            vacio={hechas ? `Nada hecho en los últimos ${tareas?.diasHechas ?? 0} días.` : 'Nada pendiente.'}
+            columnas={hechas ? ['Tarea', 'Registrada', 'Hecha'] : ['Tarea', 'Registrada', '']}
+            filas={
+              hechas
+                ? (tareas?.hechas ?? []).map((t) => ({ key: t.id, celdas: [t.texto, dia(t.fechaRegistro), dia(t.fechaHecha!)] }))
+                : (tareas?.pendientes ?? []).map((t) => ({
+                    key: t.id,
+                    celdas: [
+                      t.texto,
+                      dia(t.fechaRegistro),
+                      <span className="flex gap-3">
+                        <button type="button" disabled={ocupado} className={accionCls} onClick={() => tarea(() => window.dmm.tareas.completar(t.id))}>
+                          Hecha
+                        </button>
+                        <button type="button" disabled={ocupado} className={accionCls} onClick={() => tarea(() => window.dmm.tareas.borrar(t.id))}>
+                          Borrar
+                        </button>
+                      </span>
+                    ]
+                  }))
+            }
+          />
         </Tarjeta>
       </div>
     </>
@@ -255,21 +253,28 @@ const MONTO: Columna = { titulo: 'Monto', monto: true }
 const titulo = (c: Columna) => (typeof c === 'string' ? c : c.titulo)
 const esMonto = (c: Columna | undefined) => typeof c === 'object'
 
-/** Pages itself under `clave`; changing `filtros` (a tab) shows page 1. */
+/** Pages itself under `clave`; changing `filtros` (a tab) shows page 1, and a new `enfocar` row key shows that row's page. */
 function Tabla({
   clave,
   filtros = [],
+  enfocar = null,
   columnas,
   filas,
   vacio
 }: {
   clave: string
   filtros?: unknown[]
+  enfocar?: number | null
   columnas: Columna[]
   filas: { key: number; celdas: ReactNode[]; ir?: () => void }[]
   vacio: string
 }) {
-  const { visibles, pie } = usePaginacion(filas, clave, filtros)
+  const { visibles, pie, mostrar } = usePaginacion(filas, clave, filtros)
+  const indice = enfocar === null ? -1 : filas.findIndex((f) => f.key === enfocar)
+  useEffect(() => {
+    if (indice >= 0) mostrar(indice)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when a new row is to be shown, not on every reorder
+  }, [enfocar])
   return (
     <>
       {filas.length === 0 ? (

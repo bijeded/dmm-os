@@ -66,6 +66,7 @@
   - Each card pages at 20 and shows its footer, even with a few rows
   - Switching the Cobros tab or the Tareas tab shows page 1
   - Marking a Tarea Hecha keeps the page
+  - Adding a Tarea shows the page that holds it
   - Tabs and pages survive a remount
 
 ## 6. Review and final checks
@@ -73,5 +74,5 @@
 - [x] 6.1 Run `/code-review` on the branch diff, and fix what it confirms
 - [x] 6.2 Run `/security-review`, since the change touches the Lab screen (folder and search reads through `window.dmm.lab`), and fix what it confirms
 - [x] 6.3 Run `npm run typecheck`, `npm run lint` and `npm test`. All three must pass
-- [ ] 6.4 Run `/code-review` on the Inicio diff, and fix what it confirms (no `/security-review`: Inicio touches no sensitive area)
-- [ ] 6.5 Run `npm run typecheck`, `npm run lint` and `npm test` again. All three must pass
+- [x] 6.4 Run `/code-review` on the Inicio diff, and fix what it confirms (no `/security-review`: Inicio touches no sensitive area)
+- [x] 6.5 Run `npm run typecheck`, `npm run lint` and `npm test` again. All three must pass

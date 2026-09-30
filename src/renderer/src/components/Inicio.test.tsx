@@ -194,13 +194,13 @@ describe('Inicio', () => {
 
 describe('Inicio, 20 a page', () => {
   const serie = <T,>(n: number, f: (i: number) => T) => Array.from({ length: n }, (_, i) => f(i + 1))
-  const pendiente = (id: number) => ({ id, texto: `Tarea ${id}`, fechaRegistro: '2026-09-10', fechaHecha: null })
-  // Cobros: 25 this month, 3 overdue; 1 Costo; 30 Proyectos; 5 Cotizaciones; 22 pending Tareas, 3 done.
+  const abierta = (id: number) => ({ id, texto: `Tarea ${id}`, fechaRegistro: '2026-09-10', fechaHecha: null })
+  // Cobros: 25 this month, 3 overdue; 1 Costo; 30 Proyectos; 5 Cotizaciones; 22 open Tareas, 3 done.
   const muchas = {
     finanzas: { ...resumen, cobros: { ...resumen.cobros, mes: serie(25, (i) => ingreso(100 + i)), vencidos: serie(3, (i) => ingreso(200 + i, { vencida: true })) } },
     proyectos: serie(30, (i) => proyecto(i, `Proyecto ${i}`, 'en_curso')),
     cotizaciones: serie(5, (i) => cotizacion(i, String(500 + i), 'enviada')),
-    tareas: { ...tareas, pendientes: serie(22, pendiente), hechas: serie(3, (i) => ({ id: 100 + i, texto: `Hecha ${i}`, fechaRegistro: '2026-09-01', fechaHecha: '2026-09-12' })) }
+    tareas: { ...tareas, pendientes: serie(22, abierta), hechas: serie(3, (i) => ({ id: 100 + i, texto: `Hecha ${i}`, fechaRegistro: '2026-09-01', fechaHecha: '2026-09-12' })) }
   }
   const tarjeta = (name: string) => screen.getByRole('region', { name })
   const rango = (name: string, texto: string) => expect(within(tarjeta(name)).getByText(texto)).toBeTruthy()
@@ -238,10 +238,18 @@ describe('Inicio, 20 a page', () => {
 
   it('keeps the page when a Tarea is marked Hecha', async () => {
     siguiente('Tareas')
-    vi.mocked(api.tareas.completar).mockResolvedValue({ ...muchas.tareas, pendientes: serie(22, pendiente).filter((t) => t.id !== 21) })
+    vi.mocked(api.tareas.completar).mockResolvedValue({ ...muchas.tareas, pendientes: serie(22, abierta).filter((t) => t.id !== 21) })
     fireEvent.click(within(tarjeta('Tareas')).getAllByRole('button', { name: 'Hecha' })[0])
     await waitFor(() => expect(api.tareas.completar).toHaveBeenCalledWith(21))
     expect(await within(tarjeta('Tareas')).findByText('21–21 de 21')).toBeTruthy()
+  })
+
+  it('shows the page of a Tarea just added', async () => {
+    vi.mocked(api.tareas.agregar).mockResolvedValue({ ...muchas.tareas, pendientes: [...serie(22, abierta), abierta(23)] })
+    fireEvent.change(within(tarjeta('Tareas')).getByPlaceholderText('Nueva tarea…'), { target: { value: 'Tarea 23' } })
+    fireEvent.click(within(tarjeta('Tareas')).getByRole('button', { name: 'Agregar' }))
+    expect(await within(tarjeta('Tareas')).findByText('21–23 de 23')).toBeTruthy()
+    expect(within(tarjeta('Tareas')).getByText('Tarea 23')).toBeTruthy()
   })
 
   it('opens as it was left: tabs and pages', async () => {
