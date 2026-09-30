@@ -12,6 +12,7 @@ import type {
   ContactoNuevo,
   CostoNuevo,
   CotizacionNueva,
+  EleccionAceptacionTardia,
   EntidadCambioContacto,
   EstadoImportacion,
   EstadoRespaldos,
@@ -19,6 +20,7 @@ import type {
   FichaCotizacion,
   FichaProyecto,
   IngresoNuevo,
+  OpcionesAceptacionTardia,
   OpcionesAsignar,
   PreviaCambioContacto,
   LecturaUso,
@@ -158,6 +160,13 @@ export const contrato = {
      */
     aceptar: canal<[id: number, tipoCambio?: number], FichaCotizacion>(),
     rechazar: canal<[id: number], FichaCotizacion>(),
+    /** What the Aceptación tardía dialog asks: whether the quote is imported, and the Proyectos it may have led to. */
+    opcionesAceptarTarde: canal<[id: number], OpcionesAceptacionTardia>(),
+    /**
+     * Aceptación tardía: marks an expirada or rechazada quote aceptada. One made in the app records
+     * its Plan de cobro as Aceptada does; an imported one only links or creates its Proyecto.
+     */
+    aceptarTarde: canal<[id: number, eleccion: EleccionAceptacionTardia], FichaCotizacion>(),
     /** Cancels the quote and its Proyecto (Cancelación con pagos). */
     cancelar: canal<[id: number], FichaCotizacion>(),
     /** Only drafts can be deleted; anything else is cancelled. */

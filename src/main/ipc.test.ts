@@ -86,6 +86,10 @@ function handlers() {
       enviar: vi.fn(async () => {
         throw new Error('sin ficha')
       }),
+      opcionesAceptarTarde: vi.fn(() => ({ importado: false, moneda: 'MXN' as const, proyectos: [] })),
+      aceptarTarde: vi.fn(() => {
+        throw new Error('sin ficha')
+      }),
       aceptar: vi.fn(() => {
         throw new Error('sin ficha')
       }),

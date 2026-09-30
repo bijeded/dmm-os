@@ -22,6 +22,8 @@ import {
   usoTokens
 } from '../db/schema'
 import { ajustes, db, reiniciarDb } from '../db/test-db'
+import { aceptarTarde } from '../aceptacion-tardia'
+import { dbAlDia } from '../ledger'
 import { pendientes, responder } from '../sugerencias'
 import { cfdiXml, RFC_DMM } from '../test-cfdi'
 import { pdfDeTexto } from './pdf-prueba'
@@ -210,6 +212,21 @@ describe('reimportar', () => {
     const r = await reimportar(db, entorno({ respaldar: () => alRespaldar.push(cuantos()) }))
     expect(alRespaldar).toEqual([expect.objectContaining({ contactos: 3, ingresos: 3 })])
     expect(r).toMatchObject({ reimportado: true, carpetas: { cotizaciones: { importadas: 2 } }, facturas: { importados: 3 } })
+  })
+
+  it('undoes the Aceptación tardía of an imported Cotización, whose Proyecto nuevo does not block it', async () => {
+    importado()
+    const folio201 = () => db.select().from(cotizaciones).where(eq(cotizaciones.folio, 201)).get()!
+    dbAlDia(db, '2026-09-24')
+    expect(folio201().estado).toBe('expirada')
+    const { proyectoId } = aceptarTarde(db, root, folio201().id, '2026-09-24', { proyectoId: 'nuevo' })
+    expect(bloqueos(db, entorno())).toEqual([])
+
+    expect(await reimportar(db, entorno())).toMatchObject({ reimportado: true })
+    expect(db.select().from(proyectos).where(eq(proyectos.id, proyectoId!)).all()).toEqual([])
+    expect(db.select().from(proyectos).where(eq(proyectos.cotizacionId, folio201().id)).all()).toEqual([])
+    dbAlDia(db, '2026-09-24')
+    expect(folio201().estado).toBe('expirada')
   })
 
   it('lets a map fix reach an imported quote', async () => {

@@ -52,10 +52,11 @@ import { dbAlDia } from './ledger'
 import { leerRutas } from './rutas'
 import { aceptarVincular, pendientes, responder } from './sugerencias'
 import { cobroValido, opcionesCobro } from './completar-con-cobro'
+import { aceptarTarde, opcionesAceptacionTardia } from './aceptacion-tardia'
 import { asignarProyecto, cambiarContacto, fusionarContacto, opcionesAsignar, previaCambioContacto } from './atribucion'
 import { sql } from 'drizzle-orm'
 import { diaLocal } from '../shared/fechas'
-import { ENTIDADES_CAMBIO_CONTACTO, type EntidadCambioContacto, type EstadoImportacion } from '../shared/dominio'
+import { ENTIDADES_CAMBIO_CONTACTO, type EleccionAceptacionTardia, type EntidadCambioContacto, type EstadoImportacion } from '../shared/dominio'
 import type { AppInfo, DmmHandlers } from '../shared/contrato'
 
 /** An id arriving over IPC, checked: a positive integer. */
@@ -67,6 +68,16 @@ function idValido(v: unknown): number {
 function entidadValida(v: unknown): EntidadCambioContacto {
   if (!ENTIDADES_CAMBIO_CONTACTO.includes(v as EntidadCambioContacto)) throw new Error('Identificador no válido')
   return v as EntidadCambioContacto
+}
+
+/** The Aceptación tardía dialog's answer, checked: a Proyecto (an id or `nuevo`), or an optional positive tipo de cambio. */
+function eleccionValida(v: unknown): EleccionAceptacionTardia {
+  if (typeof v !== 'object' || v === null) throw new Error('Elección no válida')
+  const e = v as Record<string, unknown>
+  if ('proyectoId' in e) return { proyectoId: e.proyectoId === 'nuevo' ? 'nuevo' : idValido(e.proyectoId) }
+  if (e.tipoCambio === undefined) return {}
+  if (typeof e.tipoCambio !== 'number' || !Number.isFinite(e.tipoCambio) || e.tipoCambio <= 0) throw new Error('Tipo de cambio no válido')
+  return { tipoCambio: e.tipoCambio }
 }
 
 export interface HandlersOptions {
@@ -220,6 +231,8 @@ export function crearHandlers({
       enviar: (id) => enviarCotizacion(alDiaDb(), info.dmmOsRoot, id, imprimirPdf),
       aceptar: (id, tipoCambio) => aceptarCotizacion(alDiaDb(), info.dmmOsRoot, id, hoy(), tipoCambio),
       rechazar: (id) => rechazarCotizacion(alDiaDb(), id),
+      opcionesAceptarTarde: (id) => opcionesAceptacionTardia(alDiaDb(), idValido(id)),
+      aceptarTarde: (id, eleccion) => aceptarTarde(alDiaDb(), info.dmmOsRoot, idValido(id), hoy(), eleccionValida(eleccion)),
       cancelar: (id) => cancelarCotizacion(alDiaDb(), id),
       borrar: (id) => borrarCotizacion(alDiaDb(), id),
       cambiarContacto: (id, contactoId) => {

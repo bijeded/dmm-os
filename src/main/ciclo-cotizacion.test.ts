@@ -11,7 +11,21 @@ describe('el ciclo de una Cotización', () => {
   it('closes out a sent quote, and only cancels an accepted one', () => {
     expect(accionesCotizacion('enviada', sinProyecto)).toEqual(['aceptar', 'rechazar', 'cancelar', 'cambiarContacto'])
     expect(accionesCotizacion('aceptada', sinProyecto)).toEqual(['cancelar', 'cambiarContacto'])
-    for (const estado of ['rechazada', 'cancelada', 'expirada'] as const) expect(accionesCotizacion(estado, sinProyecto)).toEqual(['cambiarContacto'])
+    expect(accionesCotizacion('cancelada', sinProyecto)).toEqual(['cambiarContacto'])
+  })
+
+  it('offers the Aceptación tardía on an expirada or rechazada quote, and nowhere else', () => {
+    for (const estado of ['expirada', 'rechazada'] as const) expect(accionesCotizacion(estado, sinProyecto)).toEqual(['aceptarTarde', 'cambiarContacto'])
+    for (const estado of ['borrador', 'enviada', 'aceptada', 'cancelada'] as const) {
+      expect(accionesCotizacion(estado, sinProyecto)).not.toContain('aceptarTarde')
+      expect(() => exigirCotizacion('aceptarTarde', estado, sinProyecto)).toThrow('Solo una cotización expirada o rechazada se marca como aceptada')
+    }
+  })
+
+  it('refuses the Aceptación tardía of a quote that already has a Proyecto', () => {
+    const conProyecto = { proyecto: { estado: 'completado' as const, cobro: { pagadoCompleto: true } } }
+    expect(accionesCotizacion('expirada', conProyecto)).toEqual(['cambiarContacto'])
+    expect(() => exigirCotizacion('aceptarTarde', 'expirada', conProyecto)).toThrow('La cotización ya tiene proyecto')
   })
 
   it('changes a draft’s Contacto by editing it, never with Cambiar contacto', () => {

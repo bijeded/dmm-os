@@ -24,14 +24,14 @@ export const cotizacionAbierta = (estado: EstadoCotizacion) => estado === 'borra
 
 export const folioDe = (c: { folio: number | null; folioSufijo: string }) => (c.folio === null ? null : `${c.folio}${c.folioSufijo}`)
 
-function leer(db: Db, id: number) {
+export function leer(db: Db, id: number) {
   const c = db.select().from(cotizaciones).where(eq(cotizaciones.id, id)).get()
   if (!c) throw new Error(`La cotización ${id} no existe`)
   return c
 }
 
 /** What the Cotización's lifecycle needs: its Proyecto, if it has one. */
-function contexto(db: Db, id: number): ContextoCotizacion {
+export function contexto(db: Db, id: number): ContextoCotizacion {
   const p = db.select({ id: proyectos.id, estado: proyectos.estado }).from(proyectos).where(eq(proyectos.cotizacionId, id)).get()
   return { proyecto: p ? { estado: p.estado, cobro: estadoCobro(db, p.id) } : null }
 }
@@ -162,6 +162,15 @@ export function expirarCotizaciones(db: Db, hoy: string): void {
 export function aceptarCotizacion(db: Db, root: string, id: number, hoy: string, tipoCambio?: number): FichaCotizacion {
   const c = leer(db, id)
   exigirCotizacion('aceptar', c.estado, contexto(db, id))
+  return registrarAceptacion(db, root, c, hoy, tipoCambio)
+}
+
+/**
+ * What accepting records, once the lifecycle allowed it: the estado, the Proyecto, the Plan de
+ * cobro and the Proyecto folder. Shared by Aceptada and the Aceptación tardía of a quote made in the app.
+ */
+export function registrarAceptacion(db: Db, root: string, c: typeof cotizaciones.$inferSelect, hoy: string, tipoCambio?: number): FichaCotizacion {
+  const id = c.id
   const plan = planCobro(c, hoy, tipoCambio)
 
   transaccionConPeriodos(db, hoy, (tx) => {
