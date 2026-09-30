@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import type { FichaContacto as Ficha } from '../../../shared/dominio'
 import type { DmmApi } from '../../../shared/contrato'
@@ -189,6 +189,16 @@ describe('Historial, 20 a page', () => {
     siguiente()
     fireEvent.click(within(historial()).getByRole('tab', { name: 'Pagos' }))
     expect(within(historial()).getByText('1–20 de 22')).toBeTruthy()
+  })
+
+  it('does not page the previous Contacto’s Historial while the next one loads', async () => {
+    siguiente()
+    let cargar: (f: Ficha) => void = () => {}
+    vi.mocked(api.ficha).mockImplementationOnce(() => new Promise<Ficha>((r) => (cargar = r)))
+    await router.navigate('/contactos/9')
+    await waitFor(() => expect(within(screen.getByRole('table', { name: 'Historial' })).getAllByRole('row')).toHaveLength(1))
+    cargar({ ...largo, contacto: { ...largo.contacto, id: 9 } })
+    expect(await within(historial()).findByText('1–20 de 25')).toBeTruthy()
   })
 
   it('keeps the filter and page per Contacto', async () => {

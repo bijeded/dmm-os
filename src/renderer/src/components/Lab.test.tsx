@@ -243,6 +243,16 @@ describe('Lab, 20 a page', () => {
     expect((screen.getByRole('searchbox') as HTMLInputElement).value).toBe('nota')
   })
 
+  it('shows no folder or search it was left on once Lab/ has no folders', async () => {
+    buscar('nota')
+    await screen.findByText('1–20 de 21')
+    cleanup()
+    montar({ archivos, buscar: busca, carpetas: vi.fn(async () => []) })
+    expect(await screen.findByText('Lab/ no tiene carpetas todavía.')).toBeTruthy()
+    expect(screen.queryByText('Resultados en Lab')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Siguiente' })).toBeNull()
+  })
+
   it('picks the first folder when the one it was left on is gone', async () => {
     fireEvent.click(screen.getByRole('button', { name: /Design Systems/ }))
     await screen.findByText('1–20 de 22')

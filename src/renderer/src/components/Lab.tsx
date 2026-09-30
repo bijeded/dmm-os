@@ -44,7 +44,12 @@ export function Lab() {
     const c = await api.carpetas()
     setCarpetas(c)
     const elegida = nombre ?? (c.some((x) => x.nombre === carpeta) ? carpeta : c[0]?.nombre)
-    if (!elegida) return
+    if (!elegida) {
+      // No folders left: nothing remembered can show, and the search box is hidden.
+      setCarpeta(null)
+      buscar('')
+      return
+    }
     setCarpeta(elegida)
     setArchivos(null)
     setArchivos(await api.archivos(elegida))

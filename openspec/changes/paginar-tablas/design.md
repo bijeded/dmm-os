@@ -38,13 +38,13 @@ Alternatives:
 ```
 actual  = kept.firma === firma(filtros) ? kept.pagina : 0
 paginas = max(1, ceil(filas.length / POR_PAGINA))
-mostrar = min(actual, paginas - 1)        // derived, never written back
+mostrar = min(actual, paginas - 1)
 visibles = filas.slice(mostrar * 20, mostrar * 20 + 20)
 ```
 
 Paging writes `{ pagina, firma: firma(filtros) }`. A changed filter makes the signature differ, so the table shows page 1 with no handler calling `setPagina(0)`. A screen that mounts with restored filters has a matching signature and keeps its page.
 
-The clamp is never stored. While a list is still loading, `filas` is empty and page 1 shows with an empty footer. When the rows arrive, the kept page comes back. Writing the clamp back would lose the page on every return.
+An effect then saves what is shown. It saves page 1 once the signature differs, so filters that change and change back don't bring an old page back. It also saves the clamped page once a list with rows shrinks, so a list that grows again doesn't jump forward on its own. An empty list is left alone: it may still be loading, and saving the clamp then would lose the page on every return. The signature uses the search text as the rows are filtered by it (trimmed, `normalizar`), so a change in case or spacing alone keeps the page.
 
 Alternatives:
 - **`useEffect(() => setPagina(0), [filtros])`**: runs on mount, so it would reset the restored page, which is the bug this change exists to avoid.
@@ -71,11 +71,15 @@ Alternatives:
 ### D5. Lab re-reads its kept folder and search on mount
 `leer()` currently picks `c[0]` on arrival. It will pick the kept `lab.carpeta` when that folder is still in `api.carpetas()`, and otherwise the first. On mount, a kept non-empty `lab.busqueda` re-runs `api.buscar` through the existing `buscar` path, so its latest-answer-wins guard still applies. The preview (`elegido`) is not kept.
 
-### D6. A kept filter whose option is gone falls back to Todos
-A `select` filter whose options come from the rows (Contacto in Cotizaciones, Proyectos and Proyectos AI; Año) can hold a kept value that no longer exists, for example after Fusionar en… removes a Contacto. A controlled `<select>` would then show its first option, `Todos`, while filtering to nothing. Each such filter reads its kept value through the options: a value not among them counts as `''`. This follows the spec's "stays on a real page" intent without adding a requirement.
+### D6. A kept filter whose option is gone is forgotten
+A `select` filter whose options come from the rows (Contacto in Cotizaciones, Proyectos and Proyectos AI; Año) can hold a kept value that no longer exists, for example after Fusionar en… removes a Contacto. A controlled `<select>` would then show its first option, `Todos`, while filtering to nothing. `useFiltroRecordado(clave, opciones)` reads such a filter. Once the options have loaded (`null` while loading), a kept value not among them reads as `''` and is cleared, so it never turns itself back on when the option returns.
+
+### D7. The Historial pages only the Ficha of the Contacto in the route
+While `/contactos/:id` changes inside the mounted Ficha, the previous Contacto's Ficha stays loaded until the next one arrives. The Historial is empty until `ficha.contacto.id` matches the route, so the previous Contacto's rows are never paged under the next one's kept state.
 
 ## Risks / Trade-offs
 
+- [Lab is left on a folder that is gone and no folders remain] → `leer` clears the kept folder and search, since the search box is hidden with no folders.
 - [Kept state leaks between tests in one file] → `olvidarRecordado()` in `beforeEach` in every covered screen's test file. Vitest's per-file module isolation already covers leaks across files.
 - [The signature compares `JSON.stringify` output, so it is order-sensitive] → each call site passes a fixed array literal, never an object built at runtime.
 - [Historial keys grow with each Contacto opened] → a few bytes per Contacto per session, and cleared on restart. Accepted.

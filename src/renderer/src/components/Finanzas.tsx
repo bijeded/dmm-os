@@ -58,6 +58,8 @@ export function Finanzas() {
   const cobrado = (resumen?.cobrado ?? []).filter((i) => coincide(i.contacto, i.proyecto, i.notas))
   const cobranza = (resumen?.cobranza ?? []).filter((i) => i.vencida === vencidas && coincide(i.contacto, i.proyecto, i.notas))
   const costosPendientes = (resumen?.costosPendientes ?? []).filter((c) => coincide(c.nombre, c.proveedor, c.proyecto))
+  // What narrows every table: changing either shows them all from page 1.
+  const filtros = [periodo, consulta]
 
   const accionesIngreso = (i: FilaIngreso) => (
     <span className="flex flex-wrap gap-3">
@@ -225,7 +227,7 @@ export function Finanzas() {
             <h2 id="cobrado" className={`m-0 ${etiquetaCls}`}>
               Cobrado
             </h2>
-            <TablaIngresos filas={cobrado} clave="finanzas.cobrado" filtros={[periodo, busqueda]} acciones={accionesIngreso} vacio="Nada cobrado en el periodo." />
+            <TablaIngresos filas={cobrado} clave="finanzas.cobrado" filtros={filtros} acciones={accionesIngreso} vacio="Nada cobrado en el periodo." />
           </section>
 
           <section className={cardCls} aria-labelledby="por-cobrar">
@@ -247,7 +249,7 @@ export function Finanzas() {
                 ))}
               </div>
             </div>
-            <TablaIngresos filas={cobranza} clave="finanzas.porCobrar" filtros={[periodo, busqueda, vencidas]} acciones={accionesIngreso} vacio={vencidas ? 'Nada vencido.' : 'Nada por cobrar.'} />
+            <TablaIngresos filas={cobranza} clave="finanzas.porCobrar" filtros={[...filtros, vencidas]} acciones={accionesIngreso} vacio={vencidas ? 'Nada vencido.' : 'Nada por cobrar.'} />
             {resumen && (
               <label className="flex items-center gap-2 text-[12px] text-on-surface-muted">
                 Vencida después de
@@ -269,7 +271,7 @@ export function Finanzas() {
             <h2 id="costos-pendientes" className={`m-0 ${etiquetaCls}`}>
               Costos pendientes
             </h2>
-            <TablaCostos filas={costosPendientes} clave="finanzas.costosPendientes" filtros={[periodo, busqueda]} acciones={accionesCosto} vacio="Nada pendiente de pago." />
+            <TablaCostos filas={costosPendientes} clave="finanzas.costosPendientes" filtros={filtros} acciones={accionesCosto} vacio="Nada pendiente de pago." />
           </section>
         </div>
 
@@ -316,14 +318,14 @@ export function Finanzas() {
             </Button>
           </div>
         )}
-        <TablaIngresos filas={ingresos} clave="finanzas.ingresos" filtros={[periodo, busqueda]} acciones={accionesIngreso} vacio="Ningún ingreso coincide." />
+        <TablaIngresos filas={ingresos} clave="finanzas.ingresos" filtros={filtros} acciones={accionesIngreso} vacio="Ningún ingreso coincide." />
       </section>
 
       <section className={cardCls} aria-labelledby="costos-periodo">
         <h2 id="costos-periodo" className={`m-0 ${etiquetaCls}`}>
           Costos del periodo
         </h2>
-        <TablaCostos filas={costos} clave="finanzas.costos" filtros={[periodo, busqueda]} acciones={accionesCosto} vacio="Ningún costo coincide." />
+        <TablaCostos filas={costos} clave="finanzas.costos" filtros={filtros} acciones={accionesCosto} vacio="Ningún costo coincide." />
       </section>
     </>
   )

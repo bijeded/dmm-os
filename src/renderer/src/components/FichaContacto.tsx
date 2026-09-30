@@ -71,7 +71,8 @@ export function FichaContacto() {
   }
 
   const c = ficha?.contacto
-  const historial = ficha?.historial.filter((m) => filtro === 'todo' || m.tipo === filtro) ?? []
+  // Until the new Contacto loads, the previous one's Historial is not paged under the new one's state.
+  const historial = ficha?.contacto.id === id ? ficha.historial.filter((m) => filtro === 'todo' || m.tipo === filtro) : []
   const { visibles, pie } = usePaginacion(historial, `historial.${id}`, [filtro])
   const conversion = ficha && ficha.cotizaciones.total > 0 ? Math.round((ficha.cotizaciones.aceptadas / ficha.cotizaciones.total) * 100) : 0
 

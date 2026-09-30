@@ -4,7 +4,7 @@ import { CATEGORIAS, ESTADOS_PROYECTO, NOMBRES_CATEGORIA, NOMBRES_ESTADO_PROYECT
 import { dia, normalizar } from '../../../shared/formato'
 import { PorCategoria } from './Cotizaciones'
 import { PiePaginacion, usePaginacion } from './Paginacion'
-import { siHayOpcion, useRecordado } from './recordado'
+import { useFiltroRecordado, useRecordado } from './recordado'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { campoCls, celdaCls, etiquetaCls, tituloCls } from './estilos'
@@ -22,8 +22,6 @@ export function Proyectos() {
   const navigate = useNavigate()
   const [lista, setLista] = useState<ListaProyectos | null>(null)
   const [busqueda, setBusqueda] = useRecordado('proyectos.busqueda', '')
-  const [contactoGuardado, setContacto] = useRecordado('proyectos.contacto', '')
-  const [anioGuardado, setAnio] = useRecordado('proyectos.anio', '')
   const [categoria, setCategoria] = useRecordado<Categoria | ''>('proyectos.categoria', '')
   const [estado, setEstado] = useRecordado<EstadoProyecto | ''>('proyectos.estado', '')
   const [soloSinIngresos, setSoloSinIngresos] = useRecordado('proyectos.soloSinIngresos', false)
@@ -43,10 +41,10 @@ export function Proyectos() {
     [todos]
   )
   const anios = useMemo(() => [...new Set(todos.flatMap((p) => (p.fechaInicio ? [p.fechaInicio.slice(0, 4)] : [])))].sort().reverse(), [todos])
-  const contacto = siHayOpcion(contactoGuardado, ['personal', 'sin_contacto', ...contactos.map(([id]) => String(id))])
-  const anio = siHayOpcion(anioGuardado, anios)
+  const [contacto, setContacto] = useFiltroRecordado('proyectos.contacto', lista && ['personal', 'sin_contacto', ...contactos.map(([id]) => String(id))])
+  const [anio, setAnio] = useFiltroRecordado('proyectos.anio', lista && anios)
+  const q = normalizar(busqueda.trim())
   const filtrados = useMemo(() => {
-    const q = normalizar(busqueda.trim())
     return todos.filter(
       (p) =>
         (!contacto ||
@@ -61,8 +59,8 @@ export function Proyectos() {
         (!soloSinIngresos || p.sinIngresosRegistrados) &&
         (!q || [p.referencia, p.nombre, p.contacto, p.clienteFinal].some((v) => v && normalizar(v).includes(q)))
     )
-  }, [todos, busqueda, contacto, anio, categoria, estado, soloSinIngresos])
-  const { visibles, pie } = usePaginacion(filtrados, 'proyectos', [busqueda, contacto, anio, categoria, estado, soloSinIngresos])
+  }, [todos, q, contacto, anio, categoria, estado, soloSinIngresos])
+  const { visibles, pie } = usePaginacion(filtrados, 'proyectos', [q, contacto, anio, categoria, estado, soloSinIngresos])
 
   const c = lista?.conteo
   const abrir = (id: number) => correr(() => window.dmm.proyectos.abrirCarpeta(id))

@@ -190,6 +190,12 @@ describe('Cotizaciones, 20 a page', () => {
     montar('/cotizaciones')
     await rango('1–20 de 44')
     expect(valor('Contacto')).toBe('')
+    // Forgotten, so it does not turn itself back on when that Contacto returns.
+    cleanup()
+    vi.mocked(api.listar).mockResolvedValue(muchas())
+    montar('/cotizaciones')
+    await rango('1–20 de 45')
+    expect(valor('Contacto')).toBe('')
   })
 })
 

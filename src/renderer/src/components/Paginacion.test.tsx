@@ -72,14 +72,30 @@ describe('usePaginacion', () => {
     expect(screen.getByText('41–45 de 45')).toBeTruthy()
   })
 
-  it('shows the last page with rows when the list shrinks, and the kept page when it grows back', () => {
+  it('goes back to page 1 when the filters change and then change back', () => {
+    const { rerender } = render(<Tabla total={45} />)
+    siguiente()
+    siguiente()
+    rerender(<Tabla total={45} filtro="a" />)
+    rerender(<Tabla total={45} />)
+    expect(screen.getByText('1–20 de 45')).toBeTruthy()
+  })
+
+  it('moves to the last page with rows when the list shrinks, and stays there when it grows back', () => {
     const { rerender } = render(<Tabla total={21} />)
     siguiente()
     expect(screen.getByText('21–21 de 21')).toBeTruthy()
     rerender(<Tabla total={20} />)
     expect(screen.getByText('1–20 de 20')).toBeTruthy()
-    rerender(<Tabla total={0} />)
     rerender(<Tabla total={21} />)
-    expect(screen.getByText('21–21 de 21')).toBeTruthy()
+    expect(screen.getByText('1–20 de 21')).toBeTruthy()
+  })
+
+  it('keeps the page while the list is still loading', () => {
+    const { rerender } = render(<Tabla total={45} />)
+    siguiente()
+    rerender(<Tabla total={0} />)
+    rerender(<Tabla total={45} />)
+    expect(screen.getByText('21–40 de 45')).toBeTruthy()
   })
 })

@@ -22,7 +22,7 @@ import {
 import { dia, monto, normalizar, pesos } from '../../../shared/formato'
 import { PiePaginacion, usePaginacion } from './Paginacion'
 import { NOMBRES_CARPETA } from './Proyectos'
-import { siHayOpcion, useRecordado } from './recordado'
+import { useFiltroRecordado, useRecordado } from './recordado'
 import { Aviso, Cifra, fecha, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { campoCls, celdaCls, etiquetaCls, tituloCls } from './estilos'
@@ -280,8 +280,6 @@ const costoApi = (u: UsoTokens) => (u.costoApiMxn === null ? monto(u.costoUsd, '
 function ProyectosAi({ filas, sinProyecto, periodo }: Pick<ResumenAi, 'sinProyecto'> & { filas: FilaProyectoAi[]; periodo: PeriodoAi }) {
   const navigate = useNavigate()
   const [busqueda, setBusqueda] = useRecordado('ai.busqueda', '')
-  const [clienteGuardado, setCliente] = useRecordado('ai.cliente', '')
-  const [anioGuardado, setAnio] = useRecordado('ai.anio', '')
   const [etiqueta, setEtiqueta] = useRecordado<EtiquetaProyecto | ''>('ai.etiqueta', '')
   const [uso, setUso] = useRecordado<keyof typeof USOS_TOKENS | ''>('ai.uso', '')
   const [estado, setEstado] = useRecordado<EstadoProyecto | ''>('ai.estado', '')
@@ -292,8 +290,8 @@ function ProyectosAi({ filas, sinProyecto, periodo }: Pick<ResumenAi, 'sinProyec
     [filas]
   )
   const anios = useMemo(() => [...new Set(filas.flatMap((p) => (p.fechaInicio ? [p.fechaInicio.slice(0, 4)] : [])))].sort().reverse(), [filas])
-  const cliente = siHayOpcion(clienteGuardado, ['personal', ...clientes.map(([id]) => String(id))])
-  const anio = siHayOpcion(anioGuardado, anios)
+  const [cliente, setCliente] = useFiltroRecordado('ai.cliente', ['personal', ...clientes.map(([id]) => String(id))])
+  const [anio, setAnio] = useFiltroRecordado('ai.anio', anios)
   const q = normalizar(busqueda.trim())
   const filtrando = Boolean(q || cliente || anio || etiqueta || uso || estado)
   const filtrados = filas.filter(

@@ -33,14 +33,14 @@ export function Contactos() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   }, [])
 
+  const q = normalizar(busqueda.trim())
   const filtrados = useMemo(() => {
-    const q = normalizar(busqueda.trim())
     return (lista?.contactos ?? []).filter(
       (c) => (!estado || c.estado === estado) && (!q || [c.nombre, c.empresa, c.email].some((v) => v && normalizar(v).includes(q)))
     )
-  }, [lista, busqueda, estado])
+  }, [lista, q, estado])
 
-  const { visibles, pie } = usePaginacion(filtrados, 'contactos', [busqueda, estado])
+  const { visibles, pie } = usePaginacion(filtrados, 'contactos', [q, estado])
 
   const exportar = () =>
     correr(async () => {

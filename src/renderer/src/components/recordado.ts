@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useSyncExternalStore } from 'react'
 
 // What the screens remember while the app is open: searches, filters, Periodos and pages.
 // It lives in memory only, so a restart opens every table fresh.
@@ -30,5 +30,16 @@ export function olvidarRecordado() {
   avisar()
 }
 
-/** A remembered filter value whose option is gone (a Contacto merged away, a year with no rows left) counts as Todos. */
-export const siHayOpcion = (valor: string, opciones: string[]) => (opciones.includes(valor) ? valor : '')
+/**
+ * A remembered select filter. Once its `opciones` are loaded (null while loading), a value whose
+ * option is gone (a Contacto merged away, a year with no rows left) is forgotten and reads as Todos,
+ * so it never turns itself back on if the option returns.
+ */
+export function useFiltroRecordado(clave: string, opciones: string[] | null): [string, (valor: string) => void] {
+  const [guardado, fijar] = useRecordado(clave, '')
+  const perdido = opciones !== null && guardado !== '' && !opciones.includes(guardado)
+  useEffect(() => {
+    if (perdido) fijar('')
+  }, [perdido, fijar])
+  return [perdido ? '' : guardado, fijar]
+}

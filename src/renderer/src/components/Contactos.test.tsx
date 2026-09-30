@@ -87,6 +87,14 @@ describe('Contactos', () => {
     expect((screen.getByRole('combobox', { name: 'Estado' }) as HTMLSelectElement).value).toBe('lead_frio')
   })
 
+  it('keeps the page when the search only changes in case or spacing', async () => {
+    await screen.findByText('Clínica Sol')
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zeta' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Zeta ' } })
+    expect(screen.getByText('21–21 de 21')).toBeTruthy()
+  })
+
   it('goes back to page 1 when a filter changes', async () => {
     await screen.findByText('Clínica Sol')
     fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
