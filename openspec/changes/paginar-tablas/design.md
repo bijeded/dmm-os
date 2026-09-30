@@ -65,8 +65,11 @@ Alternatives:
 | Lab | `lab` | carpeta, consulta |
 | Historial | `historial.<contactoId>` | filtro |
 | Proyectos AI | `ai.proyectos` | periodo, busqueda, cliente, anio, etiqueta, uso, estado |
+| Inicio: Cobros | `inicio.cobros` | the Cobros tab (Este mes, Vencidos, Por facturar) |
+| Inicio: Costos pendientes, Proyectos en curso, Cotizaciones abiertas | `inicio.<tabla>` | none |
+| Inicio: Tareas | `inicio.tareas` | the Tareas tab (Pendientes, Hechas); one page for both, so switching tabs shows page 1 |
 
-`TablaIngresos` and `TablaCostos` in Finanzas take `clave` and `filtros` props and page themselves, so the five Finanzas call sites each pass their own key.
+`TablaIngresos` and `TablaCostos` in Finanzas, and Inicio's `Tabla`, take `clave` and `filtros` props and page themselves, so each call site passes its own key.
 
 ### D5. Lab re-reads its kept folder and search on mount
 `leer()` currently picks `c[0]` on arrival. It will pick the kept `lab.carpeta` when that folder is still in `api.carpetas()`, and otherwise the first. On mount, a kept non-empty `lab.busqueda` re-runs `api.buscar` through the existing `buscar` path, so its latest-answer-wins guard still applies. The preview (`elegido`) is not kept.

@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router'
 import type { FilaCotizacion, FilaIngreso, FilaProyecto, ListaTareas, ResumenFinanzas } from '../../../shared/dominio'
 import type { DmmApi } from '../../../shared/contrato'
 import { Inicio } from './Inicio'
+import { olvidarRecordado } from './recordado'
 
 const ingreso = (id: number, cambios: Partial<FilaIngreso> = {}): FilaIngreso => ({
   id,
@@ -60,6 +61,7 @@ const tareas: ListaTareas = {
 let api: DmmApi
 
 beforeEach(() => {
+  olvidarRecordado()
   api = {
     inicio: {
       resumen: vi.fn(async () => ({
@@ -187,5 +189,70 @@ describe('Inicio', () => {
     const router = renderInicio()
     fireEvent.click(await screen.findByRole('button', { name: boton }))
     await waitFor(() => expect(router.state.location.pathname + router.state.location.search).toBe(destino))
+  })
+})
+
+describe('Inicio, 20 a page', () => {
+  const serie = <T,>(n: number, f: (i: number) => T) => Array.from({ length: n }, (_, i) => f(i + 1))
+  const pendiente = (id: number) => ({ id, texto: `Tarea ${id}`, fechaRegistro: '2026-09-10', fechaHecha: null })
+  // Cobros: 25 this month, 3 overdue; 1 Costo; 30 Proyectos; 5 Cotizaciones; 22 pending Tareas, 3 done.
+  const muchas = {
+    finanzas: { ...resumen, cobros: { ...resumen.cobros, mes: serie(25, (i) => ingreso(100 + i)), vencidos: serie(3, (i) => ingreso(200 + i, { vencida: true })) } },
+    proyectos: serie(30, (i) => proyecto(i, `Proyecto ${i}`, 'en_curso')),
+    cotizaciones: serie(5, (i) => cotizacion(i, String(500 + i), 'enviada')),
+    tareas: { ...tareas, pendientes: serie(22, pendiente), hechas: serie(3, (i) => ({ id: 100 + i, texto: `Hecha ${i}`, fechaRegistro: '2026-09-01', fechaHecha: '2026-09-12' })) }
+  }
+  const tarjeta = (name: string) => screen.getByRole('region', { name })
+  const rango = (name: string, texto: string) => expect(within(tarjeta(name)).getByText(texto)).toBeTruthy()
+  const siguiente = (name: string) => fireEvent.click(within(tarjeta(name)).getByRole('button', { name: 'Siguiente' }))
+
+  beforeEach(async () => {
+    vi.mocked(api.inicio.resumen).mockResolvedValue(muchas as never)
+    renderInicio()
+    await screen.findByText('1–20 de 30')
+  })
+
+  it('pages each card at 20, with a footer even when it fits', () => {
+    rango('Cobros', '1–20 de 25')
+    rango('Costos pendientes', '1–1 de 1')
+    rango('Proyectos en curso', '1–20 de 30')
+    rango('Cotizaciones abiertas', '1–5 de 5')
+    rango('Tareas', '1–20 de 22')
+    siguiente('Proyectos en curso')
+    rango('Proyectos en curso', '21–30 de 30')
+    rango('Cobros', '1–20 de 25')
+  })
+
+  it('goes back to page 1 when the Cobros or Tareas tab changes', () => {
+    siguiente('Cobros')
+    rango('Cobros', '21–25 de 25')
+    fireEvent.click(within(tarjeta('Cobros')).getByRole('button', { name: 'Vencidos · 3' }))
+    rango('Cobros', '1–3 de 3')
+    siguiente('Tareas')
+    rango('Tareas', '21–22 de 22')
+    fireEvent.click(within(tarjeta('Tareas')).getByRole('button', { name: 'Hechas · 14 días' }))
+    rango('Tareas', '1–3 de 3')
+    fireEvent.click(within(tarjeta('Tareas')).getByRole('button', { name: 'Pendientes · 22' }))
+    rango('Tareas', '1–20 de 22')
+  })
+
+  it('keeps the page when a Tarea is marked Hecha', async () => {
+    siguiente('Tareas')
+    vi.mocked(api.tareas.completar).mockResolvedValue({ ...muchas.tareas, pendientes: serie(22, pendiente).filter((t) => t.id !== 21) })
+    fireEvent.click(within(tarjeta('Tareas')).getAllByRole('button', { name: 'Hecha' })[0])
+    await waitFor(() => expect(api.tareas.completar).toHaveBeenCalledWith(21))
+    expect(await within(tarjeta('Tareas')).findByText('21–21 de 21')).toBeTruthy()
+  })
+
+  it('opens as it was left: tabs and pages', async () => {
+    siguiente('Proyectos en curso')
+    fireEvent.click(within(tarjeta('Cobros')).getByRole('button', { name: 'Vencidos · 3' }))
+    fireEvent.click(within(tarjeta('Tareas')).getByRole('button', { name: 'Hechas · 14 días' }))
+    cleanup()
+    renderInicio()
+    await screen.findByText('21–30 de 30')
+    rango('Cobros', '1–3 de 3')
+    expect(within(tarjeta('Tareas')).getByRole('button', { name: 'Hechas · 14 días' }).getAttribute('aria-pressed')).toBe('true')
+    rango('Tareas', '1–3 de 3')
   })
 })
