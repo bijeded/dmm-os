@@ -418,7 +418,7 @@ export const ESTADOS_COTIZACION = ['borrador', 'enviada', 'aceptada', 'rechazada
 export type EstadoCotizacion = (typeof ESTADOS_COTIZACION)[number]
 
 /** What can be done to a quote; which ones apply depends on its estado and is decided in main. */
-export type AccionCotizacion = 'editar' | 'borrar' | 'enviar' | 'aceptar' | 'rechazar' | 'cancelar' | 'cambiarContacto'
+export type AccionCotizacion = 'editar' | 'borrar' | 'enviar' | 'aceptar' | 'rechazar' | 'cancelar' | 'aceptarTarde' | 'cambiarContacto'
 
 export const NOMBRES_ESTADO_COTIZACION: Record<EstadoCotizacion, string> = {
   borrador: 'Borrador',
@@ -493,6 +493,23 @@ export interface ListaCotizaciones {
   }
   porCategoria: Record<Categoria, number>
 }
+
+/**
+ * What the Aceptación tardía dialog needs: whether the Cotización was imported (then it asks for
+ * its Proyecto, and records no money) and, if so, the Proyectos it may have led to: its
+ * Contacto's, with no Cotización and not cancelled.
+ */
+export interface OpcionesAceptacionTardia {
+  importado: boolean
+  moneda: Moneda
+  proyectos: { id: number; nombre: string; estado: EstadoProyecto }[]
+}
+
+/**
+ * The owner's answer in the Aceptación tardía dialog: the tipo de cambio for a USD Cotización made
+ * in the app, or the Proyecto an imported one led to (`nuevo` creates a completado one).
+ */
+export type EleccionAceptacionTardia = { tipoCambio?: number } | { proyectoId: number | 'nuevo' }
 
 export interface FichaCotizacion extends Required<Omit<CotizacionNueva, 'id'>> {
   id: number

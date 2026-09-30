@@ -14,6 +14,8 @@ const REGLAS: Record<AccionCotizacion, { en: readonly EstadoCotizacion[]; mensaj
   aceptar: { en: ['enviada'], mensaje: 'Solo una cotización enviada se puede aceptar' },
   rechazar: { en: ['enviada'], mensaje: 'Solo una cotización enviada se puede rechazar' },
   cancelar: { en: ['enviada', 'aceptada'], mensaje: 'Solo una cotización enviada o aceptada se puede cancelar' },
+  // Aceptación tardía: the Contacto took it after it expired or was rejected.
+  aceptarTarde: { en: ['expirada', 'rechazada'], mensaje: 'Solo una cotización expirada o rechazada se marca como aceptada' },
   // A draft's Contacto is changed by editing it.
   cambiarContacto: {
     en: ['enviada', 'aceptada', 'rechazada', 'cancelada', 'expirada'],
@@ -23,11 +25,13 @@ const REGLAS: Record<AccionCotizacion, { en: readonly EstadoCotizacion[]; mensaj
 
 /**
  * Why the action is refused, or `null` when it is allowed. Cancelling also cancels the Proyecto
- * (Cancelación con pagos), so it needs the Proyecto's lifecycle to allow that too.
+ * (Cancelación con pagos), so it needs the Proyecto's lifecycle to allow that too. An Aceptación
+ * tardía gives the Cotización its one Proyecto, so it needs it to have none.
  */
 function rechazo(accion: AccionCotizacion, estado: EstadoCotizacion, ctx: ContextoCotizacion): string | null {
   if (!REGLAS[accion].en.includes(estado)) return REGLAS[accion].mensaje
   if (accion === 'cancelar' && ctx.proyecto) return rechazoProyecto('cancelar', ctx.proyecto.estado, ctx.proyecto.cobro)
+  if (accion === 'aceptarTarde' && ctx.proyecto) return 'La cotización ya tiene proyecto'
   return null
 }
 

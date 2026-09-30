@@ -58,6 +58,10 @@ Taxes the payer withholds from an invoice (TotalImpuestosRetenidos), kept apart 
 **Montos**:
 The recorded amounts of an Ingreso or Costo: subtotal, IVA, retenciones, total (subtotal + IVA − retenciones), and the USD original when there is one. Built only by the money module (`dinero`), which also splits an amount into parts that add up. The 16% IVA rule sits beside it in the shared money rules (`shared/montos`) so the Cotización preview uses the same one.
 
+**Aceptación tardía**:
+Marking an expirada or rechazada Cotización aceptada, from its Ficha (*Marcar como aceptada…*), when the Contacto took it after all. One made in the app is accepted as a sent one is, with its Plan de cobro dated that day, a Proyecto en curso and its folder. An imported one records no Ingresos or Costos (ADR-0002, ADR-0004): it links one of its Contacto's Proyectos that has no Cotización, or creates a completado Proyecto, as the folder scan does for an accepted Cotización with no folder but without a Cliente final from the Mapa de nombres, with its Sugerencias *ubicación* and *partidas*. Once aceptada, Al día never expires it again.
+_Avoid_: reabrir (it never goes back to enviada)
+
 **Folio** assignment:
 A Cotización receives its Folio when marked sent. Drafts have none.
 
@@ -124,7 +128,7 @@ A `Proyectos/` folder (in `Proyectos/`, `Archivo/Proyectos/` or on the external 
 The folder scan follows the Mapa de nombres only when a file or folder is first imported: editing the map later moves, renames or removes nothing already imported. The one exception is an RFC, which a later scan still gives to a Contacto that has none. A map edit reaches records already imported only through Reimportar desde cero.
 
 **Reimportar desde cero**:
-Removing every record the Importación made (its Contactos, Cotizaciones, Proyectos and their locations, the Ingresos and Costos that carry a CFDI UUID, and every Sugerencia de importación) and running the folder scan and the Facturas run again, from Configuración → Logs, after a confirmation and a Respaldo *antes de reimportar*. Answers to Sugerencias and edits to imported records are lost. Refused, removing nothing, while anything made by hand exists (a Contacto, Cotización or Proyecto created in the app, an Ingreso or Costo with no CFDI UUID, a recurring definition), while the Mapa de nombres cannot be read, or while a set-up external HDD is not connected. AI token usage, Tareas, the Catálogo and settings are untouched. Corrections made with Fusionar Contacto, Cambiar Contacto or Asignar proyecto are edits to imported records, and are lost the same way.
+Removing every record the Importación made (its Contactos, Cotizaciones, Proyectos and their locations, the Ingresos and Costos that carry a CFDI UUID, and every Sugerencia de importación) and running the folder scan and the Facturas run again, from Configuración → Logs, after a confirmation and a Respaldo *antes de reimportar*. Answers to Sugerencias and edits to imported records are lost. Refused, removing nothing, while anything made by hand exists (a Contacto, Cotización or Proyecto created in the app, an Ingreso or Costo with no CFDI UUID, a recurring definition), while the Mapa de nombres cannot be read, or while a set-up external HDD is not connected. AI token usage, Tareas, the Catálogo and settings are untouched. Corrections made with Fusionar Contacto, Cambiar Contacto or Asignar proyecto, and the Aceptación tardía of an imported Cotización, are edits to imported records, and are lost the same way.
 _Avoid_: reset, borrar todo
 
 **Factura cancelada**:

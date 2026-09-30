@@ -281,6 +281,6 @@ describe('acciones', () => {
     expect(aceptarCotizacion(db, root, f.id, '2026-09-20').acciones).toEqual(['cancelar', 'cambiarContacto'])
     expect(cancelarCotizacion(db, f.id).acciones).toEqual(['cambiarContacto'])
     const r = await enviada()
-    expect(rechazarCotizacion(db, r.id).acciones).toEqual(['cambiarContacto'])
+    expect(rechazarCotizacion(db, r.id).acciones).toEqual(['aceptarTarde', 'cambiarContacto'])
   })
 })

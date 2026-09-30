@@ -513,10 +513,16 @@ describe('cotizaciones', () => {
   }
   const llevarA = { borrador: [], enviada: ['enviar'], aceptada: ['enviar', 'aceptar'], rechazada: ['enviar', 'rechazar'], cancelada: ['enviar', 'cancelar'] } as const
   const hacer = (a: Exclude<AccionCotizacion, 'cambiarContacto'>, f: FichaCotizacion) =>
-    a === 'editar' ? h.cotizaciones.guardar({ ...f, notas: 'x' }) : a === 'borrar' ? h.cotizaciones.borrar(f.id) : h.cotizaciones[a](f.id)
+    a === 'editar'
+      ? h.cotizaciones.guardar({ ...f, notas: 'x' })
+      : a === 'borrar'
+        ? h.cotizaciones.borrar(f.id)
+        : a === 'aceptarTarde'
+          ? h.cotizaciones.aceptarTarde(f.id, {})
+          : h.cotizaciones[a](f.id)
 
   it.each(Object.keys(llevarA) as (keyof typeof llevarA)[])('offers in the Ficha exactly the actions a %s Cotización accepts', async (estado) => {
-    for (const accion of ['editar', 'borrar', 'enviar', 'aceptar', 'rechazar', 'cancelar'] as const) {
+    for (const accion of ['editar', 'borrar', 'enviar', 'aceptar', 'rechazar', 'cancelar', 'aceptarTarde'] as const) {
       let f = await borrador()
       for (const paso of llevarA[estado]) f = await h.cotizaciones[paso](f.id)
       const ofrecida = (await h.cotizaciones.ficha(f.id)).acciones.includes(accion)
@@ -991,6 +997,26 @@ describe('Every ledger command works Al día', () => {
     expect(conexion.db.select().from(ingresos).all().map((i) => i.periodo)).toEqual(['2026-09'])
   })
 
+  it('accepts an expirada quote late, with no read before it, generating its first Periodo', async () => {
+    const id = await mensualEnviada('2026-07-16')
+    h = crearHandlers(opciones)
+    expect(await h.cotizaciones.opcionesAceptarTarde(id)).toEqual({ importado: false, moneda: 'MXN', proyectos: [] })
+    expect((await h.cotizaciones.aceptarTarde(id, {})).estado).toBe('aceptada')
+    expect(conexion.db.select().from(ingresos).all().map((i) => i.periodo)).toEqual(['2026-09'])
+  })
+
+  it('refuses an Aceptación tardía answer of the wrong shape, writing nothing', async () => {
+    const id = await mensualEnviada('2026-07-16')
+    h = crearHandlers(opciones)
+    const mal = [null, 'nuevo', { tipoCambio: -1 }, { tipoCambio: '18.5' }, { proyectoId: 'x' }, { proyectoId: 1.5 }]
+    for (const eleccion of mal) {
+      await expect(async () => h.cotizaciones.aceptarTarde(id, eleccion as never)).rejects.toThrow(/no válid/)
+    }
+    await expect(async () => h.cotizaciones.aceptarTarde(0, {})).rejects.toThrow('Identificador no válido')
+    expect((await h.cotizaciones.ficha(id)).estado).toBe('expirada')
+    expect(conexion.db.select().from(proyectos).all()).toEqual([])
+  })
+
   it('pays an Ingreso after this month’s Periodos exist, with no read before it', async () => {
     const id = await mensualEnviada('2026-08-16')
     await h.cotizaciones.aceptar(id)
@@ -1050,6 +1076,8 @@ describe('Every ledger command works Al día', () => {
       enviar: 'orden',
       aceptar: 'orden',
       rechazar: 'orden',
+      opcionesAceptarTarde: (a) => h.cotizaciones.opcionesAceptarTarde(a.enviada),
+      aceptarTarde: 'orden',
       cancelar: 'orden',
       borrar: 'orden',
       cambiarContacto: 'orden',

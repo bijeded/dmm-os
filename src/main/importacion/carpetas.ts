@@ -533,17 +533,26 @@ function vincularCotizacion(db: Tx, mapa: Mapa, proyectoId: number, contactoId: 
       }
     }
   })
-  // Only an imported quote's prices are its PDF's, before IVA; one made in the app has its own Monto.
-  const precios = candidata.importado ? partidasDelMonto(partidasGuardadas(candidata.items)).length : 0
-  const preguntada =
+  const preguntada = preguntarPartidas(db, candidata)
+  return (vinculada ? 1 : 0) + (preguntada ? 1 : 0)
+}
+
+/**
+ * An accepted quote with several prices asks "¿Qué aceptó?": which of them the Contacto took.
+ * Only an imported quote's prices are its PDF's, before IVA; one made in the app has its own Monto.
+ * Whether it was proposed (a Sugerencia is asked only once).
+ */
+export function preguntarPartidas(db: Tx, c: typeof cotizaciones.$inferSelect): boolean {
+  const precios = c.importado ? partidasDelMonto(partidasGuardadas(c.items)).length : 0
+  return (
     precios >= 2 &&
     proponer(db, {
       entidad: 'cotizacion',
-      entidadId: candidata.id,
+      entidadId: c.id,
       accion: 'partidas',
-      motivo: `cotización ${candidata.folio}${candidata.folioSufijo} aceptada con ${precios} precios: ¿qué aceptó?`
+      motivo: `cotización ${c.folio}${c.folioSufijo} aceptada con ${precios} precios: ¿qué aceptó?`
     })
-  return (vinculada ? 1 : 0) + (preguntada ? 1 : 0)
+  )
 }
 
 /**
@@ -568,33 +577,46 @@ export function proyectosDeCotizacionesAceptadas(
   const creados: number[] = []
   for (const c of huerfanas) {
     db.transaction((tx) => {
-    const { nombre, notas } = repartirNombres(c)
-    const proyecto = tx
-      .insert(proyectos)
-      .values({
-        nombre: nombre ?? `Cotización ${c.folio}`,
-        contactoId: c.contactoId,
-        cotizacionId: c.id,
-        clienteFinal: clienteFinalDeCotizacion(mapa, c),
-        categoria: c.categoria,
-        fechaInicio: c.fecha,
-        estado: 'completado',
-        notas,
-        importado: true
-      })
-      .returning()
-      .get()
-    creados.push(proyecto.id)
-    const sugerido = proponer(tx, {
-      entidad: 'proyecto',
-      entidadId: proyecto.id,
-      accion: 'ubicacion',
-      motivo: `cotización ${c.folio} aceptada sin carpeta: ¿archivado o no disponible?`
-    })
-    if (sugerido) sugerencias++
+      const { proyectoId, sugerido } = proyectoDeCotizacionAceptada(tx, c, mapa)
+      creados.push(proyectoId)
+      if (sugerido) sugerencias++
     })
   }
   return { proyectos: creados, sugerencias }
+}
+
+/**
+ * The completed Proyecto an accepted Cotización with no folder delivered, and the Sugerencia
+ * *ubicación* asking where its files are. Marked imported: it exists only because of imported history.
+ */
+export function proyectoDeCotizacionAceptada(
+  tx: Tx,
+  c: typeof cotizaciones.$inferSelect,
+  mapa: Mapa = mapaVacio()
+): { proyectoId: number; sugerido: boolean } {
+  const { nombre, notas } = repartirNombres(c)
+  const proyecto = tx
+    .insert(proyectos)
+    .values({
+      nombre: nombre ?? `Cotización ${c.folio}`,
+      contactoId: c.contactoId,
+      cotizacionId: c.id,
+      clienteFinal: clienteFinalDeCotizacion(mapa, c),
+      categoria: c.categoria,
+      fechaInicio: c.fecha,
+      estado: 'completado',
+      notas,
+      importado: true
+    })
+    .returning()
+    .get()
+  const sugerido = proponer(tx, {
+    entidad: 'proyecto',
+    entidadId: proyecto.id,
+    accion: 'ubicacion',
+    motivo: `cotización ${c.folio} aceptada sin carpeta: ¿archivado o no disponible?`
+  })
+  return { proyectoId: proyecto.id, sugerido }
 }
 
 /**
