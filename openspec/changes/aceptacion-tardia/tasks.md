@@ -48,5 +48,5 @@
 ## 7. Review and final checks
 
 - [x] 7.1 Run `/code-review` on the branch diff, and fix what it confirms
-- [ ] 7.2 Run `/security-review`, since the change touches the IPC surface (`src/shared/contrato.ts`, `src/main/handlers.ts`), and fix what it confirms
-- [ ] 7.3 Run `npm run typecheck`, `npm run lint` and `npm test`. All three must pass
+- [x] 7.2 Run `/security-review`, since the change touches the IPC surface (`src/shared/contrato.ts`, `src/main/handlers.ts`), and fix what it confirms
+- [x] 7.3 Run `npm run typecheck`, `npm run lint` and `npm test`. All three must pass
