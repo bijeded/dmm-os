@@ -540,7 +540,7 @@ export const ETIQUETAS_PROYECTO = ['cliente', 'personal'] as const
 export type EtiquetaProyecto = (typeof ETIQUETAS_PROYECTO)[number]
 
 /** What can be done to a Proyecto; which ones apply depends on its estado and is decided in main. */
-export type AccionProyecto = 'editar' | 'borrar' | 'pausar' | 'reanudar' | 'completar' | 'cancelar' | 'cambiarContacto'
+export type AccionProyecto = 'editar' | 'borrar' | 'pausar' | 'reanudar' | 'completar' | 'cancelar' | 'cambiarFechaFin' | 'cambiarContacto'
 
 /** Where Cambiar contacto starts: the Cotización or the Proyecto; either moves both. */
 export const ENTIDADES_CAMBIO_CONTACTO = ['cotizacion', 'proyecto'] as const
@@ -643,6 +643,8 @@ export interface ProyectoNuevo {
   /** `YYYY-MM-DD` */
   fechaInicio: string | null
   fechaEntrega: string | null
+  /** Only a completed Proyecto's is saved; Completar and Cancelar date it today. */
+  fechaFin?: string | null
   notas: string | null
 }
 
@@ -882,7 +884,7 @@ export interface PuntoFinanzas {
   costosAnterior: number | null
 }
 
-export type AccionIngreso = 'pagar' | 'cancelar' | 'borrar' | 'reembolsar' | 'asignarProyecto'
+export type AccionIngreso = 'pagar' | 'cancelar' | 'borrar' | 'reembolsar' | 'asignarProyecto' | 'editar'
 
 /** A Proyecto Asignar proyecto can move an invoice to. */
 export interface ProyectoAsignable {
@@ -1019,6 +1021,47 @@ export interface IngresoNuevo {
   /** Paid on `fecha`; otherwise it waits in Cobranza. */
   pagado: boolean
   notas: string | null
+}
+
+/**
+ * What Editar ingreso saves. Money in the Ingreso's own currency: centavos, or USD cents for a USD
+ * one. Its estado never changes.
+ */
+export interface IngresoEditado {
+  /** `YYYY-MM-DD`; a paid Ingreso's fecha de pago too. */
+  fecha: string
+  /** The subtotal, before IVA; for a Reembolso, the total it gives back. */
+  monto: number
+  /**
+   * Pesos per USD of a USD Ingreso: a new rate to record it at, or `null` to keep the one it was
+   * recorded at. Ignored for one in pesos and for a Reembolso, which keeps its original's.
+   */
+  tipoCambio: number | null
+  categoria: CategoriaIngreso
+  /** 16% IVA on top; ignored for `sin_factura`. */
+  conIva: boolean
+  /** Only for `factura`: whether the invoice is already issued. */
+  facturado: boolean
+  /** The Contacto is taken from the Proyecto when one is given. */
+  proyectoId: number | null
+  contactoId: number | null
+  notas: string | null
+}
+
+/**
+ * What an Ingreso cannot change in Editar ingreso: its categoría and IVA, its Estado de
+ * facturación, its Proyecto and Contacto, its tipo de cambio.
+ */
+export type CampoBloqueado = 'categoria' | 'facturacion' | 'proyecto' | 'tipoCambio'
+
+/** An Ingreso as Editar ingreso opens it: its current values and what it cannot change. */
+export interface IngresoEditable extends IngresoEditado {
+  id: number
+  moneda: Moneda
+  estado: EstadoIngreso
+  /** Set on a Reembolso: the Ingreso it gives money back from. */
+  reembolsoDeId: number | null
+  bloqueados: CampoBloqueado[]
 }
 
 /**

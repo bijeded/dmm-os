@@ -1,3 +1,4 @@
+import { esFecha } from '../shared/fechas'
 import { MENSAJE_SIN_PAGAR, type AccionProyecto, type Categoria, type EstadoProyecto, type EtiquetaProyecto } from '../shared/dominio'
 
 export { MENSAJE_SIN_PAGAR }
@@ -35,7 +36,23 @@ const REGLAS: Record<AccionPorEstado, { en: readonly EstadoProyecto[]; mensaje: 
   pausar: { en: ['en_curso'], mensaje: 'Solo un proyecto en curso se puede pausar' },
   reanudar: { en: ['pausado'], mensaje: 'Solo un proyecto pausado se puede reanudar' },
   completar: { en: ['en_curso', 'pausado'], mensaje: 'Solo un proyecto en curso o pausado se puede completar' },
-  cancelar: { en: ['en_curso', 'pausado'], mensaje: 'Solo un proyecto en curso o pausado se puede cancelar' }
+  cancelar: { en: ['en_curso', 'pausado'], mensaje: 'Solo un proyecto en curso o pausado se puede cancelar' },
+  // A completed Proyecto changes its fecha de fin from Editar; a cancelled one, which Editar refuses, from here.
+  cambiarFechaFin: { en: ['cancelado'], mensaje: 'La fecha de fin de un proyecto completado se cambia desde Editar' }
+}
+
+/**
+ * `fecha` as the fecha de fin of a completed or cancelled Proyecto: never empty once set, never
+ * later than today, never before its fecha de inicio. Completar and Cancelar date it today; this is
+ * how it is corrected afterwards.
+ */
+export function exigirFechaFin(p: { estado: EstadoProyecto; fechaInicio: string | null }, fecha: string | null, hoy: string): string {
+  if (p.estado !== 'completado' && p.estado !== 'cancelado') throw new Error('Solo un proyecto completado o cancelado tiene fecha de fin')
+  if (!fecha) throw new Error('La fecha de fin no puede quedar vacía')
+  if (!esFecha(fecha)) throw new Error('Fecha inválida')
+  if (fecha > hoy) throw new Error('La fecha de fin no puede ser posterior a hoy')
+  if (p.fechaInicio !== null && fecha < p.fechaInicio) throw new Error('La fecha de fin no puede ser anterior a la fecha de inicio')
+  return fecha
 }
 
 /** Whether only being unpaid stands between the Proyecto and Completar, so the Ficha shows what is unpaid. */

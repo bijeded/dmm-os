@@ -11,6 +11,7 @@ import { resumenInicio } from './inicio'
 import { pdfDeTexto } from './importacion/pdf-prueba'
 import {
   borrarProyecto,
+  cambiarFechaFin,
   cancelarProyecto,
   carpetaAbrible,
   completarConCobro,
@@ -22,7 +23,7 @@ import {
   pausarProyecto,
   reanudarProyecto
 } from './proyectos'
-import { borrarIngreso, reembolsar } from './movimientos'
+import { borrarIngreso, editarIngreso, ingresoParaEditar, reembolsar } from './movimientos'
 import { asignarProyecto } from './atribucion'
 import { MENSAJE_SIN_PAGAR, type ProyectoNuevo } from '../shared/dominio'
 
@@ -181,7 +182,7 @@ describe('estado', () => {
     ]).run()
     db.insert(costos).values({ nombre: 'Hosting', categoria: 'unico', estimado: true, subtotal: 500, total: 500, fecha: hoy, proyectoId: p.id }).run()
 
-    expect(cancelarProyecto(db, root, p.id, hoy)).toMatchObject({ estado: 'cancelado', fechaFin: hoy, acciones: ['cambiarContacto'] })
+    expect(cancelarProyecto(db, root, p.id, hoy)).toMatchObject({ estado: 'cancelado', fechaFin: hoy, acciones: ['cambiarFechaFin', 'cambiarContacto'] })
     expect(db.select().from(cotizaciones).get()!.estado).toBe('cancelada')
     expect(db.select().from(ingresos).all().map((i) => i.estado)).toEqual(['pagado', 'cancelado'])
     expect(db.select().from(costos).get()!.estado).toBe('cancelado')
@@ -369,6 +370,33 @@ describe('sin ingresos registrados', () => {
     archivar(mensual.id)
     expect([enCurso, sinCotizacion, sinCarpeta, mensual].map((p) => marcado(p.id))).toEqual([false, false, false, false])
   })
+
+  it('follows an edited Ingreso: shows when it falls short and clears when it reaches the total again', () => {
+    const p = completado(cotizacion(11).id)
+    archivar(p.id)
+    const i = db.insert(ingresos).values({ fechaRegistro: hoy, fechaPago: hoy, subtotal: 2320, total: 2320, categoria: 'sin_factura', proyectoId: p.id, estado: 'pagado' }).returning().get()
+    const editar = (monto: number) => editarIngreso(db, i.id, { ...ingresoParaEditar(db, i.id), monto }, hoy)
+    expect(marcado(p.id)).toBe(false)
+    editar(2000)
+    expect(marcado(p.id)).toBe(true)
+    expect(fichaProyecto(db, root, p.id).estado).toBe('completado')
+    editar(2320)
+    expect(marcado(p.id)).toBe(false)
+  })
+
+  it('compares an edited USD Ingreso with a USD Cotización in USD', () => {
+    const c = db.insert(cotizaciones).values({ contactoId, folio: 12, categoria: 'website', estado: 'aceptada', fecha: hoy, moneda: 'USD', subtotal: 26_000, iva: 0, total: 26_000, tipoCambio: 19.2308 }).returning().get()
+    const p = completado(c.id)
+    archivar(p.id)
+    const i = db
+      .insert(ingresos)
+      .values({ fechaRegistro: hoy, fechaPago: hoy, subtotal: 500_001, total: 500_001, montoOriginal: 26_000, monedaOriginal: 'USD', categoria: 'sin_factura', proyectoId: p.id, estado: 'pagado' })
+      .returning()
+      .get()
+    expect(marcado(p.id)).toBe(false)
+    editarIngreso(db, i.id, { ...ingresoParaEditar(db, i.id), monto: 25_000 }, hoy)
+    expect(marcado(p.id)).toBe(true)
+  })
 })
 
 describe('sin ingresos registrados con el Monto del PDF', () => {
@@ -545,5 +573,47 @@ describe('an invoice assigned to a Proyecto en curso', () => {
     expect(f).toMatchObject({ estado: 'en_curso', porCobrar: 1000 })
     expect(f.acciones).not.toContain('completar')
     expect(() => completarProyecto(db, root, id, hoy)).toThrow(MENSAJE_SIN_PAGAR)
+  })
+})
+
+describe('fecha de fin', () => {
+  it('corrects a completed Proyecto’s from Editar, leaving its estado and Ingresos alone', () => {
+    const { id } = guardarProyecto(db, root, nuevo({ nombre: 'La Hora Zero', fechaInicio: '2019-01-07' }), hoy)
+    const pagado = db.insert(ingresos).values({ ...ingresoBase, categoria: 'sin_factura', estado: 'pagado', fechaPago: '2026-02-01', proyectoId: id }).returning().get()
+    expect(completarProyecto(db, root, id, hoy).fechaFin).toBe(hoy)
+    const f = guardarProyecto(db, root, nuevo({ id, nombre: 'La Hora Zero', fechaInicio: '2019-01-07', fechaFin: '2019-03-15' }), hoy)
+    expect(f).toMatchObject({ estado: 'completado', fechaFin: '2019-03-15' })
+    expect(db.select().from(ingresos).all()).toEqual([pagado])
+  })
+
+  it('refuses one before the fecha de inicio, and a fecha de inicio after it', () => {
+    const { id } = guardarProyecto(db, root, nuevo({ fechaInicio: '2019-01-07' }), hoy)
+    completarProyecto(db, root, id, hoy)
+    expect(() => guardarProyecto(db, root, nuevo({ id, fechaInicio: '2019-01-07', fechaFin: '2018-12-31' }), hoy)).toThrow('anterior a la fecha de inicio')
+    guardarProyecto(db, root, nuevo({ id, fechaInicio: '2019-01-07', fechaFin: '2019-03-15' }), hoy)
+    expect(() => guardarProyecto(db, root, nuevo({ id, fechaInicio: '2019-04-01', fechaFin: '2019-03-15' }), hoy)).toThrow('posterior a la fecha de fin')
+    expect(fichaProyecto(db, root, id)).toMatchObject({ fechaInicio: '2019-01-07', fechaFin: '2019-03-15' })
+  })
+
+  it('corrects a cancelled Proyecto’s from its Ficha only', () => {
+    const { id } = guardarProyecto(db, root, nuevo({ fechaInicio: '2021-01-04' }), hoy)
+    cancelarProyecto(db, root, id, hoy)
+    expect(cambiarFechaFin(db, root, id, '2021-06-30', hoy)).toMatchObject({ estado: 'cancelado', fechaFin: '2021-06-30', acciones: ['cambiarFechaFin', 'cambiarContacto'] })
+    expect(() => guardarProyecto(db, root, nuevo({ id, fechaInicio: '2021-01-04', fechaFin: '2021-07-01' }), hoy)).toThrow('cancelado no se edita')
+  })
+
+  it('gives an imported completed Proyecto one it never had', () => {
+    const p = db.insert(proyectos).values({ nombre: 'Cantina 48', contactoId, categoria: 'website', estado: 'completado', importado: true }).returning().get()
+    guardarProyecto(db, root, nuevo({ id: p.id, nombre: 'Cantina 48', fechaInicio: null, fechaFin: null }), hoy)
+    expect(fichaProyecto(db, root, p.id).fechaFin).toBeNull()
+    guardarProyecto(db, root, nuevo({ id: p.id, nombre: 'Cantina 48', fechaInicio: null, fechaFin: '2018-09-20' }), hoy)
+    expect(fichaProyecto(db, root, p.id).fechaFin).toBe('2018-09-20')
+  })
+
+  it('has none to change while en curso, nor from the cancelled Proyecto’s path once completed', () => {
+    const { id } = guardarProyecto(db, root, nuevo(), hoy)
+    expect(() => guardarProyecto(db, root, nuevo({ id, fechaFin: '2026-09-10' }), hoy)).toThrow('Solo un proyecto completado o cancelado tiene fecha de fin')
+    completarProyecto(db, root, id, hoy)
+    expect(() => cambiarFechaFin(db, root, id, '2026-09-10', hoy)).toThrow('desde Editar')
   })
 })

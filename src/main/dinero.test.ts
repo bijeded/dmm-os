@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { monto } from '../shared/formato'
-import { convertir, enParcialidades, MENSAJE_REEMBOLSO_EXCEDIDO, monedaDe, montoEn, montos, reembolso, repartir, tasaDe } from './dinero'
+import { convertir, enParcialidades, MENSAJE_REEMBOLSO_EXCEDIDO, monedaDe, montoEn, montos, reembolso, repartir, subtotalEn, tasaDe } from './dinero'
 
 const enPesos = { total: 1800, montoOriginal: null, monedaOriginal: null }
 const enUsd = { total: 1800, montoOriginal: 100, monedaOriginal: 'USD' as const }
@@ -14,6 +14,15 @@ describe('dinero', () => {
   it('reads an Ingreso in pesos or in USD, converting one paid in pesos at the tipo de cambio', () => {
     expect([montoEn(enUsd, 'MXN'), montoEn(enUsd, 'USD')]).toEqual([1800, 100])
     expect([montoEn(enPesos, 'USD', 18), montoEn(enPesos, 'USD'), montoEn(enPesos, 'USD', null)]).toEqual([100, 0, 0])
+  })
+
+  it('reads an Ingreso’s subtotal in its own currency, a USD one’s in the proportion of its pesos', () => {
+    expect(subtotalEn(montos(10_000, { iva: true }))).toBe(10_000)
+    expect(subtotalEn(montos(26_000, { iva: false, tasaUsd: 19.2308 }))).toBe(26_000)
+    for (const usd of [333, 1003, 1004, 25_000]) expect(subtotalEn(montos(usd, { iva: true, tasaUsd: 18.5 }))).toBe(usd)
+    // A Parcialidad of a USD quote with IVA, split apart from the 16% rule: its subtotal, never its total.
+    const [primera] = enParcialidades(montos(100_000, { iva: true, tasaUsd: 18.5 }), [{ pagado: 38_668, saldo: 77_332 }])
+    expect(Math.abs(subtotalEn(primera.montos) - 33_334)).toBeLessThanOrEqual(1)
   })
 
   it('converts between pesos and USD by one rule, rounding to the centavo', () => {

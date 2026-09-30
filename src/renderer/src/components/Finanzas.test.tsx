@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
-import type { FilaCosto, FilaIngreso, ListaContactos, ListaProyectos, ResumenFinanzas } from '../../../shared/dominio'
+import type { FilaCosto, FilaIngreso, IngresoEditable, ListaContactos, ListaProyectos, ResumenFinanzas } from '../../../shared/dominio'
 import type { DmmApi } from '../../../shared/contrato'
 import { Finanzas } from './Finanzas'
 import { NuevoCosto, NuevoIngreso } from './NuevoMovimiento'
@@ -73,6 +73,25 @@ const resumen = (cambios: Partial<ResumenFinanzas> = {}): ResumenFinanzas => ({
   ...cambios
 })
 
+/** Ingreso 884 of La Hora Zero, as Editar ingreso opens it: USD, recorded at 500,001 ÷ 26,000 pesos per USD. */
+const horaZero = (cambios: Partial<IngresoEditable> = {}): IngresoEditable => ({
+  id: 884,
+  moneda: 'USD',
+  estado: 'pagado',
+  reembolsoDeId: null,
+  bloqueados: [],
+  fecha: '2026-09-29',
+  monto: 26_000,
+  tipoCambio: 500_001 / 26_000,
+  categoria: 'sin_factura',
+  conIva: false,
+  facturado: false,
+  proyectoId: null,
+  contactoId: 7,
+  notas: null,
+  ...cambios
+})
+
 let api: DmmApi['finanzas']
 let router: ReturnType<typeof createMemoryRouter>
 
@@ -81,6 +100,7 @@ const montar = (ruta = '/finanzas') => {
     [
       { path: '/finanzas', element: <Finanzas /> },
       { path: '/finanzas/ingresos/nuevo', element: <NuevoIngreso /> },
+      { path: '/finanzas/ingresos/:id/editar', element: <NuevoIngreso /> },
       { path: '/finanzas/costos/nuevo', element: <NuevoCosto /> }
     ],
     { initialEntries: [ruta] }
@@ -115,7 +135,9 @@ beforeEach(() => {
         { id: 24, nombre: 'Cantina 48', contacto: 'Omar Rodriguez', estado: 'completado' as const }
       ]
     })),
-    asignarProyecto: vi.fn(async () => {})
+    asignarProyecto: vi.fn(async () => {}),
+    ingresoParaEditar: vi.fn(async () => horaZero()),
+    editarIngreso: vi.fn(async () => {})
   }
   window.dmm = {
     finanzas: api,
@@ -394,5 +416,81 @@ describe('Nuevo ingreso / costo', () => {
     await waitFor(() =>
       expect(api.nuevoCosto).toHaveBeenCalledWith(expect.objectContaining({ nombre: 'MacBook Pro', categoria: 'msi', parcialidades: 12, subtotal: 250_000, pagado: false }))
     )
+  })
+})
+
+describe('Editar ingreso', () => {
+  it('is on the rows that offer it, and opens the Ingreso', async () => {
+    api.resumen = vi.fn(async () => resumen({ ingresos: [ingreso(3, { contacto: 'Netdeckr', origen: 'manual', acciones: ['borrar', 'editar'] }), ingreso(5, { contacto: 'Cantina 48' })] }))
+    montar()
+    const fila = (texto: string) => screen.getByText(texto).closest('tr')!
+    await screen.findByText('Netdeckr')
+    expect(within(fila('Cantina 48')).queryByRole('button', { name: 'Editar' })).toBeNull()
+    fireEvent.click(within(fila('Netdeckr')).getByRole('button', { name: 'Editar' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/finanzas/ingresos/3/editar'))
+    await waitFor(() => expect(api.ingresoParaEditar).toHaveBeenCalledWith(3))
+  })
+
+  it('opens a USD Ingreso in USD and saves its new fecha, keeping the untouched rate', async () => {
+    montar('/finanzas/ingresos/884/editar')
+    const monto = await screen.findByLabelText('Monto en USD (antes de IVA)')
+    await waitFor(() => expect((monto as HTMLInputElement).value).toBe('260.00'))
+    expect((screen.getByLabelText('Tipo de cambio') as HTMLInputElement).value).toBe('19.2308')
+    expect(screen.queryByLabelText('Pagado en esa fecha')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Fecha'), { target: { value: '2019-03-15' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+    await waitFor(() =>
+      expect(api.editarIngreso).toHaveBeenCalledWith(884, {
+        fecha: '2019-03-15',
+        monto: 26_000,
+        tipoCambio: null,
+        categoria: 'sin_factura',
+        conIva: false,
+        facturado: false,
+        proyectoId: null,
+        contactoId: 7,
+        notas: null
+      })
+    )
+    await waitFor(() => expect(router.state.location.pathname).toBe('/finanzas'))
+  })
+
+  it('sends a typed rate', async () => {
+    montar('/finanzas/ingresos/884/editar')
+    const tasa = await screen.findByLabelText('Tipo de cambio')
+    await waitFor(() => expect((tasa as HTMLInputElement).value).toBe('19.2308'))
+    fireEvent.change(tasa, { target: { value: '17.50' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+    await waitFor(() => expect(api.editarIngreso).toHaveBeenCalledWith(884, expect.objectContaining({ tipoCambio: 17.5 })))
+  })
+
+  it('leaves disabled what the Ingreso cannot change', async () => {
+    api.ingresoParaEditar = vi.fn(async () => horaZero({ moneda: 'MXN', tipoCambio: null, monto: 100_000, bloqueados: ['proyecto', 'categoria'] }))
+    montar('/finanzas/ingresos/884/editar')
+    await waitFor(() => expect((screen.getByLabelText('Monto (antes de IVA)') as HTMLInputElement).value).toBe('1000.00'))
+    expect(screen.getByRole('combobox', { name: 'Proyecto' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('combobox', { name: 'Tipo' })).toHaveProperty('disabled', true)
+    expect(screen.queryByLabelText('Tipo de cambio')).toBeNull()
+  })
+
+  it('saves nothing when the Ingreso could not be opened', async () => {
+    api.ingresoParaEditar = vi.fn(async () => {
+      throw new Error('Un ingreso cancelado no se edita')
+    })
+    montar('/finanzas/ingresos/884/editar')
+    expect((await screen.findByRole('alert')).textContent).toContain('Un ingreso cancelado no se edita')
+    fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '100' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('El ingreso no se ha abierto')
+    expect(api.editarIngreso).not.toHaveBeenCalled()
+    expect(api.nuevoIngreso).not.toHaveBeenCalled()
+  })
+
+  it('changes nothing when cancelled', async () => {
+    montar('/finanzas/ingresos/884/editar')
+    fireEvent.change(await screen.findByLabelText('Fecha'), { target: { value: '2019-03-15' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/finanzas'))
+    expect(api.editarIngreso).not.toHaveBeenCalled()
   })
 })

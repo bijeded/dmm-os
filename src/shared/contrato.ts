@@ -19,6 +19,8 @@ import type {
   FichaContacto,
   FichaCotizacion,
   FichaProyecto,
+  IngresoEditable,
+  IngresoEditado,
   IngresoNuevo,
   OpcionesAceptacionTardia,
   OpcionesAsignar,
@@ -197,6 +199,8 @@ export const contrato = {
     borrar: canal<[id: number], void>(),
     /** Cambiar contacto, as for its Cotización: both move together. */
     cambiarContacto: canal<[id: number, contactoId: number], FichaProyecto>(),
+    /** Corrects a cancelled Proyecto's fecha de fin; a completed one's is saved by `guardar`. */
+    cambiarFechaFin: canal<[id: number, fecha: string], FichaProyecto>(),
     abrirCarpeta: canal<[id: number], void>()
   },
   finanzas: {
@@ -226,7 +230,11 @@ export const contrato = {
      * Asignar proyecto: puts the invoice's whole CFDI (its Parcialidades and Reembolsos) on another
      * Proyecto of its Contacto, or on none (`null`). One with no Contacto takes the Proyecto's.
      */
-    asignarProyecto: canal<[id: number, proyectoId: number | null], void>()
+    asignarProyecto: canal<[id: number, proyectoId: number | null], void>(),
+    /** What Editar ingreso opens with: the Ingreso in its own currency and what it cannot change. */
+    ingresoParaEditar: canal<[id: number], IngresoEditable>(),
+    /** Editar ingreso: saves it in place; never its estado. Refused for an imported invoice. */
+    editarIngreso: canal<[id: number, ingreso: IngresoEditado], void>()
   },
   tareas: {
     /** Pending ones, and those done in the last 30 days. */

@@ -12,6 +12,9 @@ import {
   cancelarCosto,
   cancelarIngreso,
   detenerCosto,
+  editarIngreso,
+  ingresoEditadoValido,
+  ingresoParaEditar,
   nuevoCosto,
   nuevoIngreso,
   pagarCosto,
@@ -31,6 +34,7 @@ import {
 } from './cotizar'
 import {
   borrarProyecto,
+  cambiarFechaFin,
   cancelarProyecto,
   carpetaAbrible,
   completarConCobro,
@@ -258,6 +262,8 @@ export function crearHandlers({
       completarConCobro: (id, cobro) => completarConCobro(alDiaDb(), info.dmmOsRoot, id, cobroValido(cobro), hoy()),
       cancelar: (id) => cancelarProyecto(alDiaDb(), info.dmmOsRoot, id, hoy()),
       borrar: (id) => borrarProyecto(alDiaDb(), id),
+      // exigirFechaFin refuses anything but a `YYYY-MM-DD` string.
+      cambiarFechaFin: (id, fecha) => cambiarFechaFin(alDiaDb(), info.dmmOsRoot, idValido(id), fecha, hoy()),
       cambiarContacto: (id, contactoId) => {
         const db = alDiaDb()
         cambiarContacto(db, 'proyecto', idValido(id), idValido(contactoId))
@@ -286,7 +292,9 @@ export function crearHandlers({
       borrarCosto: (id) => borrarCosto(alDiaDb(), id, hoy()),
       detenerCosto: (id) => detenerCosto(alDiaDb(), id, hoy()),
       opcionesAsignar: (id) => opcionesAsignar(alDiaDb(), idValido(id)),
-      asignarProyecto: (id, proyectoId) => asignarProyecto(alDiaDb(), idValido(id), proyectoId === null ? null : idValido(proyectoId), hoy())
+      asignarProyecto: (id, proyectoId) => asignarProyecto(alDiaDb(), idValido(id), proyectoId === null ? null : idValido(proyectoId), hoy()),
+      ingresoParaEditar: (id) => ingresoParaEditar(alDiaDb(), idValido(id)),
+      editarIngreso: (id, ingreso) => editarIngreso(alDiaDb(), idValido(id), ingresoEditadoValido(ingreso), hoy())
     },
     tareas: {
       listar: () => listarTareas(conexion.db, hoy()),

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { estadoCobro, estadosCobro } from './cobranza'
 import { cotizaciones, ingresos } from './db/schema'
-import { reembolsar } from './movimientos'
+import { editarIngreso, ingresoParaEditar, pagarIngreso, reembolsar } from './movimientos'
 import { planCobro } from './plan-cobro'
 import { contacto, db, ingresoBase, proyecto, reiniciarDb } from './db/test-db'
 
@@ -113,6 +113,16 @@ describe('estadoCobro', () => {
     const p = proyecto(contactoId, null)
     ingreso(p.id, { estado: 'incobrable' })
     expect(estadoCobro(db, p.id)).toEqual({ porCobrar: 0, cobrado: 0, pagadoCompleto: true, falta: null })
+  })
+
+  it('follows an edited pending Parcialidad: its Por cobrar, then the gap once it is paid', () => {
+    const p = proyecto(contactoId, cotizacion().id)
+    ingreso(p.id)
+    const pendiente = db.insert(ingresos).values({ ...ingresoBase, categoria: 'sin_factura', proyectoId: p.id, estado: 'pendiente' }).returning().get()
+    editarIngreso(db, pendiente.id, { ...ingresoParaEditar(db, pendiente.id), monto: 800 }, hoy)
+    expect(estadoCobro(db, p.id)).toMatchObject({ porCobrar: 800, pagadoCompleto: false })
+    pagarIngreso(db, pendiente.id, hoy)
+    expect(estadoCobro(db, p.id).falta).toEqual({ pendientes: 0, faltante: 360, moneda: 'MXN' })
   })
 
   it('a monthly Cotización has no total to reach', () => {

@@ -97,7 +97,7 @@ An Ingreso that will never be paid: what a client did not pay of a Cotización (
 _Avoid_: condonado
 
 **Completar con cobro**:
-What Completar does on a Proyecto that is not fully paid: a dialog asks for the Fecha de pago and records the payment the guard asks for, then completes the Proyecto, all or nothing. Pending Ingresos are marked paid on that date or Incobrable. What is still missing after them was paid without an invoice (a `sin_factura` Ingreso), by a CFDI already in `Facturas/Emitidas` (linked to the Proyecto, answering its *vincular* Sugerencia de importación), or by an invoice not on disk (a `factura` Ingreso, only then). A smaller amount leaves the rest Incobrable. A USD Cotización is settled in USD at the tipo de cambio the dialog asks for. Deleting what it recorded does not reopen the Proyecto.
+What Completar does on a Proyecto that is not fully paid: a dialog asks for the Fecha de pago and records the payment the guard asks for, then completes the Proyecto, all or nothing. Pending Ingresos are marked paid on that date or Incobrable. What is still missing after them was paid without an invoice (a `sin_factura` Ingreso), by a CFDI already in `Facturas/Emitidas` (linked to the Proyecto, answering its *vincular* Sugerencia de importación), or by an invoice not on disk (a `factura` Ingreso, only then). A smaller amount leaves the rest Incobrable. A USD Cotización is settled in USD at the tipo de cambio the dialog asks for. Deleting what it recorded does not reopen the Proyecto. What it recorded is corrected with Editar ingreso, and the fecha de fin it dated today from Editar on the Proyecto.
 
 **Sin datos**:
 What a period shows for margin or profit when it has no Costos recorded. Never estimated.
@@ -112,7 +112,7 @@ A completed Proyecto whose files have left `Proyectos/` for long-term storage (`
 A file location the app knows but cannot currently reach (e.g. external HDD disconnected, or folder never found). Distinct from **Archivado**.
 
 **Reembolso**:
-A negative Ingreso linked to the original Ingreso, dated the day it is recorded and counted in that period. Its amount is entered in the original Ingreso's own currency; a USD one converts to pesos at that Ingreso's own rate. Its IVA and retenciones are in the original's proportion; the one that gives back all that is left takes the exact remainders. Several may be recorded against one Ingreso, never more in total than was paid.
+A negative Ingreso linked to the original Ingreso, dated the day it is recorded (Editar ingreso can move it to the day the money went back) and counted in that period. Its amount is entered in the original Ingreso's own currency; a USD one converts to pesos at that Ingreso's own rate. Its IVA and retenciones are in the original's proportion; the one that gives back all that is left takes the exact remainders. Several may be recorded against one Ingreso, never more in total than was paid. It follows its Ingreso's Proyecto, Contacto, categoría and Estado de facturación; only its amount and fecha are edited.
 
 **Estado de Contacto**:
 Always derived from Cotizaciones and Proyectos, never set by hand. A Contacto with no Cotización is a cold lead.
@@ -128,14 +128,14 @@ A `Proyectos/` folder (in `Proyectos/`, `Archivo/Proyectos/` or on the external 
 The folder scan follows the Mapa de nombres only when a file or folder is first imported: editing the map later moves, renames or removes nothing already imported. The one exception is an RFC, which a later scan still gives to a Contacto that has none. A map edit reaches records already imported only through Reimportar desde cero.
 
 **Reimportar desde cero**:
-Removing every record the Importación made (its Contactos, Cotizaciones, Proyectos and their locations, the Ingresos and Costos that carry a CFDI UUID, and every Sugerencia de importación) and running the folder scan and the Facturas run again, from Configuración → Logs, after a confirmation and a Respaldo *antes de reimportar*. Answers to Sugerencias and edits to imported records are lost. Refused, removing nothing, while anything made by hand exists (a Contacto, Cotización or Proyecto created in the app, an Ingreso or Costo with no CFDI UUID, a recurring definition), while the Mapa de nombres cannot be read, or while a set-up external HDD is not connected. AI token usage, Tareas, the Catálogo and settings are untouched. Corrections made with Fusionar Contacto, Cambiar Contacto or Asignar proyecto, and the Aceptación tardía of an imported Cotización, are edits to imported records, and are lost the same way.
+Removing every record the Importación made (its Contactos, Cotizaciones, Proyectos and their locations, the Ingresos and Costos that carry a CFDI UUID, and every Sugerencia de importación) and running the folder scan and the Facturas run again, from Configuración → Logs, after a confirmation and a Respaldo *antes de reimportar*. Answers to Sugerencias and edits to imported records are lost. Refused, removing nothing, while anything made by hand exists (a Contacto, Cotización or Proyecto created in the app, an Ingreso or Costo with no CFDI UUID, a recurring definition), while the Mapa de nombres cannot be read, or while a set-up external HDD is not connected. AI token usage, Tareas, the Catálogo and settings are untouched. Corrections made with Fusionar Contacto, Cambiar Contacto or Asignar proyecto, a fecha de fin set on an imported Proyecto, and the Aceptación tardía of an imported Cotización, are edits to imported records, and are lost the same way.
 _Avoid_: reset, borrar todo
 
 **Factura cancelada**:
 A CFDI filed in a folder whose name starts with "cancel" (e.g. `Canceladas`), or one that another CFDI replaces through relación `04` (sustitución). The app never asks the SAT; the folder and the relación are its only signals. Its money never counts.
 
 **Parcialidad**:
-One payment of an invoice, recorded as its own Ingreso dated on that payment's day. An invoice paid in several payments (as its complementos de pago record) is split into Parcialidades that add up exactly to it; an open balance is one more, still pending. The same word names each of the pending Ingresos a Plan de cobro splits a Cotización into.
+One payment of an invoice, recorded as its own Ingreso dated on that payment's day. An invoice paid in several payments (as its complementos de pago record) is split into Parcialidades that add up exactly to it; an open balance is one more, still pending. The same word names each of the pending Ingresos a Plan de cobro splits a Cotización into; once one is edited, they may no longer add up exactly to the total.
 
 **Proyecto sin Contacto**:
 A client Proyecto the Importación could not attribute: its folder matched no map row, no Contacto of its name, and no Cotización of a single Contacto. Logs and Vista previa list it, with the Contactos whose Cotizaciones name it when several do, so a map row can settle it before the real run. It is assigned a Contacto from Editar, which also gives it to its Ingresos that have none; once a Proyecto has a Contacto, Editar no longer changes it (Cambiar Contacto does). Not a personal Proyecto, which never has one.
@@ -148,6 +148,10 @@ Moving a Cotización and the Proyecto it led to (or a Proyecto with no Cotizaci�
 
 **Asignar proyecto**:
 Putting an imported invoice on another Proyecto of its Contacto, or on none, from its row in Finanzas: all its Parcialidades and their Reembolsos move together, and a pending *vincular* Sugerencia de importación for them is answered. An invoice with no Contacto (its RFC is on none) can go to any client Proyecto and takes that Proyecto's Contacto, without giving it the RFC. The Proyectos' estados do not change.
+
+**Editar ingreso**:
+Correcting an Ingreso in place, from its row in Finanzas, when it was recorded wrongly: its fecha (a paid one's fecha de pago moves with it), its amount in the currency it was recorded in (a USD one's USD amount and tipo de cambio), its categoría, IVA and Estado de facturación, its notas, and, for one entered by hand, its Proyecto and Contacto. Never its estado, its currency or a generated one's periodo. Not an Ingreso imported from a CFDI (the invoice is its record; Asignar proyecto moves it), nor a cancelled one. An Ingreso with Reembolsos keeps its categoría and IVA and never goes below what they gave back.
+_Avoid_: modificar, corregir (as the action's name)
 
 **Mapa de nombres**:
 `Clientes/_nombres.csv`, edited by the user, telling the folder scan what each name on disk means: its Contacto and, optionally, its Proyecto, Cliente final and the Contacto's RFC. A row keyed `<folder>/<subfolder>` makes that subfolder a Proyecto of its own. A map that exists but cannot be read stops the scan, and rows that matched nothing are reported in Logs.

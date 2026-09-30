@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
-import { CATEGORIAS, NOMBRES_CATEGORIA, type Categoria, type FilaContacto, type ProyectoNuevo } from '../../../shared/dominio'
+import { CATEGORIAS, NOMBRES_CATEGORIA, type Categoria, type EstadoProyecto, type FilaContacto, type ProyectoNuevo } from '../../../shared/dominio'
 import { Campo } from './NuevaCotizacion'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
@@ -29,6 +29,7 @@ export function NuevoProyecto() {
   const navigate = useNavigate()
   const [p, setP] = useState<ProyectoNuevo>(vacio)
   const [conContacto, setConContacto] = useState(false)
+  const [estado, setEstado] = useState<EstadoProyecto>('en_curso')
   const [contactos, setContactos] = useState<FilaContacto[]>([])
   const { error, ocupado, correr } = useAccion()
 
@@ -38,6 +39,7 @@ export function NuevoProyecto() {
       if (editando !== undefined) {
         const f = await window.dmm.proyectos.ficha(editando)
         setP({ ...f, id: f.id })
+        setEstado(f.estado)
         setConContacto(f.contactoId !== null || f.cotizacionId !== null)
       }
     })
@@ -124,6 +126,12 @@ export function NuevoProyecto() {
         <Campo label="Entrega">
           <input type="date" value={p.fechaEntrega ?? ''} onChange={(e) => cambiar({ fechaEntrega: texto(e.target.value) })} className={campoCls} />
         </Campo>
+        {/* Completar dates it today; this is where a completed Proyecto's is corrected. */}
+        {estado === 'completado' && (
+          <Campo label="Fin">
+            <input type="date" value={p.fechaFin ?? ''} onChange={(e) => cambiar({ fechaFin: texto(e.target.value) })} className={campoCls} />
+          </Campo>
+        )}
         <Campo label="Notas">
           <textarea value={p.notas ?? ''} onChange={(e) => cambiar({ notas: texto(e.target.value) })} className={`${campoCls} h-20 py-2`} />
         </Campo>

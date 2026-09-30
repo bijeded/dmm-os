@@ -83,6 +83,11 @@ export function Finanzas() {
           Asignar proyecto
         </button>
       )}
+      {i.acciones.includes('editar') && (
+        <button type="button" disabled={ocupado} className={accionCls} onClick={() => navigate(`/finanzas/ingresos/${i.id}/editar`)}>
+          Editar
+        </button>
+      )}
       {i.acciones.includes('borrar') && (
         <button type="button" disabled={ocupado} className={accionCls} onClick={() => hacer(() => window.dmm.finanzas.borrarIngreso(i.id))}>
           Borrar

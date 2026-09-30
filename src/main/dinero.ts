@@ -29,6 +29,18 @@ export function montoEn(i: Montos, moneda: Moneda, tipoCambio?: number | null) {
   return tipoCambio ? convertir(i.total, 'MXN', 'USD', tipoCambio) : 0
 }
 
+/**
+ * An Ingreso's subtotal in its own currency: centavos, or USD cents for a USD one. Only the USD
+ * total is kept, so a USD one's subtotal is that total in the proportion its pesos were recorded
+ * in, subtotal to subtotal + IVA: exact for an amount without IVA, within a cent with it.
+ */
+export function subtotalEn(i: Montos & Pick<typeof ingresos.$inferSelect, 'subtotal' | 'iva'>) {
+  if (monedaDe(i) === 'MXN') return i.subtotal
+  const original = i.montoOriginal ?? 0
+  if (i.iva === 0) return original
+  return Math.round((original * i.subtotal) / (i.subtotal + i.iva))
+}
+
 /** An amount as recorded: subtotal, IVA, retenciones and total in MXN, and the USD total it came from, if any. */
 export interface MontosRegistrados {
   subtotal: number

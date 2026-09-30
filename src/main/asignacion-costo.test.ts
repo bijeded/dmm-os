@@ -36,6 +36,15 @@ describe('Asignación de costo', () => {
     expect(montos(46_001)).toEqual([15_334, 15_334, 15_333])
   })
 
+  it('reads Abierto en el mes from the fecha de fin as corrected, not as Completar dated it', () => {
+    const completadoHoy = proyecto(4, 'La Hora Zero', { fechaInicio: '2019-01-07', fechaFin: '2026-09-29', estado: 'completado' })
+    const corregido = { ...completadoHoy, fechaFin: '2019-03-15' }
+    const partes = (p: ProyectoAsignable, mes: string) => asignacionDeCosto(mes, 36_000, new Map(), [p])
+    expect(partes(completadoHoy, '2024-05').sinAsignar).toBe(0)
+    expect(partes(corregido, '2019-03').sinAsignar).toBe(0)
+    for (const mes of ['2019-04', '2024-05', '2026-09']) expect(partes(corregido, mes)).toMatchObject({ filas: [], sinAsignar: 36_000 })
+  })
+
   it('splits evenly across the Proyectos AI Abiertos en el mes when none has usage in it', () => {
     const a = asignacionDeCosto('2026-09', 36_000, new Map(), [aura, netdeckr, voz])
     expect(a.criterio).toBe('partes_iguales')

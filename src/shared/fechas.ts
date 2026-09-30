@@ -7,6 +7,10 @@ export const diaLocal = (d: Date) =>
 /** Today on this machine's calendar. Main passes its own injectable `hoy` into the domain instead. */
 export const hoy = () => diaLocal(new Date())
 
+/** Whether `f` is a real calendar day written `YYYY-MM-DD`: not `2026-02-31`, not `2026-13-01`. */
+export const esFecha = (f: unknown): f is string =>
+  typeof f === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(f) && diaLocal(new Date(`${f}T12:00:00`)) === f
+
 /** The period a day falls in. */
 export const periodoDe = (fecha: string) => fecha.slice(0, 7)
 
