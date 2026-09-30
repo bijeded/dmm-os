@@ -79,6 +79,9 @@ const opciones: OpcionesCobro = {
   facturas: []
 }
 
+const completado: Ficha = { ...ficha, estado: 'completado', fechaInicio: '2019-01-07', fechaFin: '2026-09-29', falta: null, acciones: ['editar'] }
+const cancelado: Ficha = { ...ficha, estado: 'cancelado', fechaInicio: '2021-01-04', fechaFin: '2026-09-29', falta: null, acciones: ['cambiarFechaFin', 'cambiarContacto'] }
+
 let api: DmmApi['proyectos']
 let previaCambio: DmmApi['contactos']['previaCambio']
 let router: ReturnType<typeof createMemoryRouter>
@@ -110,7 +113,8 @@ beforeEach(() => {
     abrirCarpeta: vi.fn(async () => {}),
     opcionesCobro: vi.fn(async () => opciones),
     completarConCobro: vi.fn(async () => ({ ...ficha, estado: 'completado' as const, falta: null, acciones: ['editar' as const] })),
-    cambiarContacto: vi.fn(async () => ({ ...ficha, contactoId: 8, contacto: 'Omar Rodriguez' }))
+    cambiarContacto: vi.fn(async () => ({ ...ficha, contactoId: 8, contacto: 'Omar Rodriguez' })),
+    cambiarFechaFin: vi.fn(async (_id: number, fecha: string) => ({ ...cancelado, fechaFin: fecha }))
   }
   previaCambio = vi.fn(async () => ({ cotizaciones: 1, proyectos: 1, ingresos: 0, borraContacto: 'Clínica Sol' }))
   window.dmm = { proyectos: api, contactos: { listar: vi.fn(async () => contactos), previaCambio } } as unknown as DmmApi
@@ -428,5 +432,43 @@ describe('NuevoProyecto', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Crear proyecto' }))
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Elige un contacto')
     expect(api.guardar).not.toHaveBeenCalled()
+  })
+})
+
+describe('fecha de fin', () => {
+  it('is in Editar for a completed Proyecto, saved with the rest', async () => {
+    api.ficha = vi.fn(async () => completado)
+    montar('/proyectos/1/editar')
+    const fin = await screen.findByLabelText('Fin')
+    await waitFor(() => expect((fin as HTMLInputElement).value).toBe('2026-09-29'))
+    fireEvent.change(fin, { target: { value: '2019-03-15' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+    await waitFor(() => expect(api.guardar).toHaveBeenCalledWith(expect.objectContaining({ id: 1, fechaFin: '2019-03-15' })))
+  })
+
+  it('is not in Editar while en curso', async () => {
+    montar('/proyectos/1/editar')
+    await screen.findByLabelText('Inicio')
+    await waitFor(() => expect(api.ficha).toHaveBeenCalled())
+    expect(screen.queryByLabelText('Fin')).toBeNull()
+  })
+
+  it('changes from the Ficha of a cancelled Proyecto, and closing the dialog changes nothing', async () => {
+    api.ficha = vi.fn(async () => cancelado)
+    montar('/proyectos/1')
+    fireEvent.click(await screen.findByRole('button', { name: 'Cambiar fecha de fin' }))
+    const dialogo = screen.getByRole('dialog', { name: 'Cambiar fecha de fin' })
+    fireEvent.change(within(dialogo).getByLabelText('Fecha de fin'), { target: { value: '2021-06-30' } })
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(api.cambiarFechaFin).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cambiar fecha de fin' }))
+    const otra = screen.getByRole('dialog', { name: 'Cambiar fecha de fin' })
+    fireEvent.change(within(otra).getByLabelText('Fecha de fin'), { target: { value: '2021-06-30' } })
+    fireEvent.click(within(otra).getByRole('button', { name: 'Guardar' }))
+    await waitFor(() => expect(api.cambiarFechaFin).toHaveBeenCalledWith(1, '2021-06-30'))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByText('30 jun 2021')).toBeTruthy()
   })
 })

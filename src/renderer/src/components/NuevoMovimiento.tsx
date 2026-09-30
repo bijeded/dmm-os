@@ -1,6 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router'
-import { CATEGORIAS_COSTO, NOMBRES_CATEGORIA_COSTO, type CategoriaCosto, type FilaContacto, type FilaProyecto } from '../../../shared/dominio'
+import { useNavigate, useParams } from 'react-router'
+import {
+  CATEGORIAS_COSTO,
+  NOMBRES_CATEGORIA_COSTO,
+  type CampoBloqueado,
+  type CategoriaCosto,
+  type FilaContacto,
+  type FilaProyecto,
+  type IngresoEditable
+} from '../../../shared/dominio'
 import { hoy } from '../../../shared/fechas'
 import { centavosDe } from '../../../shared/montos'
 import { Campo } from './NuevaCotizacion'
@@ -49,10 +57,20 @@ function useProyectos() {
   return { proyectos, contactos, error, ocupado, correr }
 }
 
-function ElegirProyecto({ valor, proyectos, cambiar }: { valor: number | null; proyectos: FilaProyecto[]; cambiar: (id: number | null) => void }) {
+function ElegirProyecto({
+  valor,
+  proyectos,
+  cambiar,
+  deshabilitado = false
+}: {
+  valor: number | null
+  proyectos: FilaProyecto[]
+  cambiar: (id: number | null) => void
+  deshabilitado?: boolean
+}) {
   return (
     <Campo label="Proyecto">
-      <select value={valor ?? ''} onChange={(e) => cambiar(e.target.value ? Number(e.target.value) : null)} className={campoCls}>
+      <select value={valor ?? ''} disabled={deshabilitado} onChange={(e) => cambiar(e.target.value ? Number(e.target.value) : null)} className={campoCls}>
         <option value="">Sin proyecto</option>
         {proyectos.map((p) => (
           <option key={p.id} value={p.id}>
@@ -64,23 +82,77 @@ function ElegirProyecto({ valor, proyectos, cambiar }: { valor: number | null; p
   )
 }
 
-/** Nuevo ingreso: typically uninvoiced history, which the Facturas run never brings in. */
+/** A typed tipo de cambio, e.g. `19.2308`, as pesos per USD above zero. */
+function tasaDe(texto: string) {
+  const tasa = Number(texto.replace(/[,\s]/g, ''))
+  if (!texto.trim() || !Number.isFinite(tasa) || tasa <= 0) throw new Error('Escribe un tipo de cambio mayor a cero')
+  return tasa
+}
+
+/**
+ * Nuevo ingreso, typically uninvoiced history, which the Facturas run never brings in; or Editar
+ * ingreso (`/finanzas/ingresos/:id/editar`), which corrects one in place, in its own currency.
+ * Editing never changes its estado, and leaves disabled what the Ingreso cannot change.
+ */
 export function NuevoIngreso() {
+  const params = useParams()
+  const editando = params.id ? Number(params.id) : undefined
   const navigate = useNavigate()
   const { proyectos, contactos, error, ocupado, correr } = useProyectos()
+  const [original, setOriginal] = useState<IngresoEditable | null>(null)
   const [categoria, setCategoria] = useState<'factura' | 'sin_factura'>('sin_factura')
   const [facturado, setFacturado] = useState(false)
   const [proyectoId, setProyectoId] = useState<number | null>(null)
   const [contactoId, setContactoId] = useState<number | null>(null)
   const [fecha, setFecha] = useState(hoy)
   const [monto, setMonto] = useState('')
+  const [tipoCambio, setTipoCambio] = useState('')
   const [conIva, setConIva] = useState(false)
   const [pagado, setPagado] = useState(true)
   const [notas, setNotas] = useState('')
 
+  useEffect(() => {
+    if (editando === undefined) return
+    correr(async () => {
+      const i = await window.dmm.finanzas.ingresoParaEditar(editando)
+      setOriginal(i)
+      setCategoria(i.categoria)
+      setFacturado(i.facturado)
+      setProyectoId(i.proyectoId)
+      setContactoId(i.contactoId)
+      setFecha(i.fecha)
+      setMonto((i.monto / 100).toFixed(2))
+      setTipoCambio(i.tipoCambio === null ? '' : String(Math.round(i.tipoCambio * 10_000) / 10_000))
+      setConIva(i.conIva)
+      setNotas(i.notas ?? '')
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per Ingreso
+  }, [editando])
+
+  const bloqueado = (campo: CampoBloqueado) => original?.bloqueados.includes(campo) ?? false
+  const enUsd = original?.moneda === 'USD'
+  const esReembolso = original?.reembolsoDeId != null
+  const factura = categoria === 'factura'
+
   const guardar = () =>
     correr(async () => {
-      const factura = categoria === 'factura'
+      if (original) {
+        // An untouched rate goes back exactly as stored, so nothing is recomputed from its rounding.
+        const tasaSinCambio = original.tipoCambio === null ? '' : String(Math.round(original.tipoCambio * 10_000) / 10_000)
+        await window.dmm.finanzas.editarIngreso(original.id, {
+          fecha,
+          monto: centavosDe(monto),
+          tipoCambio: original.tipoCambio === null ? null : tipoCambio === tasaSinCambio ? original.tipoCambio : tasaDe(tipoCambio),
+          categoria,
+          conIva: factura && conIva,
+          facturado: factura && facturado,
+          proyectoId,
+          contactoId: proyectoId === null ? contactoId : original.contactoId,
+          notas: notas || null
+        })
+        navigate('/finanzas')
+        return
+      }
       await window.dmm.finanzas.nuevoIngreso({
         categoria,
         facturado: factura && facturado,
@@ -95,18 +167,31 @@ export function NuevoIngreso() {
       navigate('/finanzas')
     })
 
+  const etiquetaMonto = esReembolso ? `Monto del reembolso${enUsd ? ' (USD)' : ''}` : `Monto${enUsd ? ' en USD' : ''} (antes de IVA)`
+
   return (
-    <Formulario titulo="Nuevo ingreso" accion="Registrar ingreso" ocupado={ocupado} guardar={guardar} error={error}>
+    <Formulario
+      titulo={editando === undefined ? 'Nuevo ingreso' : 'Editar ingreso'}
+      accion={editando === undefined ? 'Registrar ingreso' : 'Guardar'}
+      ocupado={ocupado}
+      guardar={guardar}
+      error={error}
+    >
       <Campo label="Tipo">
-        <select value={categoria} onChange={(e) => setCategoria(e.target.value as typeof categoria)} className={campoCls}>
+        <select value={categoria} disabled={bloqueado('categoria')} onChange={(e) => setCategoria(e.target.value as typeof categoria)} className={campoCls}>
           <option value="sin_factura">Sin factura</option>
           <option value="factura">Factura</option>
         </select>
       </Campo>
-      <ElegirProyecto valor={proyectoId} proyectos={proyectos} cambiar={setProyectoId} />
+      <ElegirProyecto valor={proyectoId} proyectos={proyectos} cambiar={setProyectoId} deshabilitado={bloqueado('proyecto')} />
       {proyectoId === null && (
         <Campo label="Contacto">
-          <select value={contactoId ?? ''} onChange={(e) => setContactoId(e.target.value ? Number(e.target.value) : null)} className={campoCls}>
+          <select
+            value={contactoId ?? ''}
+            disabled={bloqueado('proyecto')}
+            onChange={(e) => setContactoId(e.target.value ? Number(e.target.value) : null)}
+            className={campoCls}
+          >
             <option value="">Sin contacto</option>
             {contactos.map((k) => (
               <option key={k.id} value={k.id}>
@@ -119,23 +204,30 @@ export function NuevoIngreso() {
       <Campo label="Fecha">
         <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={campoCls} />
       </Campo>
-      <Campo label="Monto (antes de IVA)">
+      <Campo label={etiquetaMonto}>
         <input inputMode="decimal" placeholder="0.00" value={monto} onChange={(e) => setMonto(e.target.value)} className={campoCls} />
       </Campo>
+      {enUsd && !esReembolso && (
+        <Campo label="Tipo de cambio">
+          <input inputMode="decimal" value={tipoCambio} onChange={(e) => setTipoCambio(e.target.value)} className={campoCls} />
+        </Campo>
+      )}
       <div className="flex flex-col justify-end gap-2 text-[13px] text-on-surface">
-        {categoria === 'factura' && (
+        {factura && (
           <>
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={conIva} onChange={(e) => setConIva(e.target.checked)} /> Más 16% IVA
+              <input type="checkbox" checked={conIva} disabled={bloqueado('categoria')} onChange={(e) => setConIva(e.target.checked)} /> Más 16% IVA
             </label>
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={facturado} onChange={(e) => setFacturado(e.target.checked)} /> Ya facturado
+              <input type="checkbox" checked={facturado} disabled={bloqueado('facturacion')} onChange={(e) => setFacturado(e.target.checked)} /> Ya facturado
             </label>
           </>
         )}
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={pagado} onChange={(e) => setPagado(e.target.checked)} /> Pagado en esa fecha
-        </label>
+        {editando === undefined && (
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={pagado} onChange={(e) => setPagado(e.target.checked)} /> Pagado en esa fecha
+          </label>
+        )}
       </div>
       <Campo label="Notas">
         <textarea value={notas} onChange={(e) => setNotas(e.target.value)} className={`${campoCls} h-20 py-2`} />

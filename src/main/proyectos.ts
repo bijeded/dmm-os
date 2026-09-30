@@ -7,7 +7,7 @@ import { cancelar, RegistroVinculadoError } from './db/cancelacion'
 import { contactos, cotizaciones, ingresos, proyectos, ubicacionesArchivo } from './db/schema'
 import { folioDe } from './cotizar'
 import { rutaDeProyecto } from './paths'
-import { accionesProyecto, completarEsperaPago, exigirProyecto, type AccionPorEstado } from './ciclo-proyecto'
+import { accionesProyecto, completarEsperaPago, exigirFechaFin, exigirProyecto, type AccionPorEstado } from './ciclo-proyecto'
 import { opcionesCobro, planCobro, registrarCobro } from './completar-con-cobro'
 import { CATEGORIAS, ESTADOS_PROYECTO, type CarpetaProyecto, type Categoria, type CobroAlCompletar, type EstadoProyecto, type FichaProyecto, type ListaProyectos, type ProyectoNuevo } from '../shared/dominio'
 
@@ -192,8 +192,15 @@ export function guardarProyecto(db: Db, root: string, p: ProyectoNuevo, hoy: str
     valores.contactoId = actual.contactoId
   }
   const id = p.id
+  // A completed Proyecto's fecha de fin is corrected here; unchanged, it is left as stored.
+  const fechaFin =
+    p.fechaFin !== undefined && (p.fechaFin || null) !== actual.fechaFin
+      ? exigirFechaFin({ estado: actual.estado, fechaInicio: valores.fechaInicio }, p.fechaFin || null, hoy)
+      : actual.fechaFin
+  if (valores.fechaInicio !== actual.fechaInicio && valores.fechaInicio !== null && fechaFin !== null && valores.fechaInicio > fechaFin)
+    throw new Error('La fecha de inicio no puede ser posterior a la fecha de fin')
   db.transaction((tx) => {
-    tx.update(proyectos).set(valores).where(eq(proyectos.id, id)).run()
+    tx.update(proyectos).set({ ...valores, fechaFin }).where(eq(proyectos.id, id)).run()
     // A Proyecto sin Contacto that gets one gives it to its Ingresos that have none.
     if (actual.contactoId === null && valores.contactoId !== null)
       tx.update(ingresos)
@@ -238,6 +245,13 @@ export function completarConCobro(db: Db, root: string, id: number, cobro: Cobro
     exigirProyecto('completar', p.estado, estadoCobro(tx, id))
     tx.update(proyectos).set({ estado: 'completado', fechaFin: hoy }).where(eq(proyectos.id, id)).run()
   })
+  return fichaProyecto(db, root, id)
+}
+
+/** Corrects the fecha de fin of a cancelled Proyecto, the only thing about it that still changes. */
+export function cambiarFechaFin(db: Db, root: string, id: number, fecha: string, hoy: string): FichaProyecto {
+  const p = leerPara(db, 'cambiarFechaFin', id)
+  db.update(proyectos).set({ fechaFin: exigirFechaFin(p, fecha, hoy) }).where(eq(proyectos.id, id)).run()
   return fichaProyecto(db, root, id)
 }
 

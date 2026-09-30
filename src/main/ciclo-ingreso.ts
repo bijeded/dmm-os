@@ -2,7 +2,7 @@ import { eq, isNotNull } from 'drizzle-orm'
 import type { Db } from './db'
 import { ingresos } from './db/schema'
 import { MENSAJE_REEMBOLSO_EXCEDIDO, monedaDe, montoEn } from './dinero'
-import type { AccionIngreso, FilaIngreso } from '../shared/dominio'
+import type { AccionIngreso, CampoBloqueado, FilaIngreso } from '../shared/dominio'
 
 export type Ingreso = typeof ingresos.$inferSelect
 
@@ -23,7 +23,7 @@ const reembolsableIngreso = (i: Ingreso) => i.estado === 'pagado' && i.total > 0
  * What is left to give back of an Ingreso after its Reembolsos: in pesos, its IVA and retenciones, and in its own
  * currency (`original`, USD cents for a USD Ingreso, else the same as `total`).
  */
-function restante(i: Ingreso, reembolsos: Ingreso[]) {
+export function restante(i: Ingreso, reembolsos: Ingreso[]) {
   const moneda = monedaDe(i)
   const suma = (f: (r: Ingreso) => number) => [i, ...reembolsos].reduce((s, r) => s + f(r), 0)
   return { moneda, total: suma((r) => r.total), iva: suma((r) => r.iva), retenciones: suma((r) => r.retenciones), original: suma((r) => montoEn(r, moneda)) }
@@ -48,10 +48,27 @@ function rechazo(accion: AccionIngreso, i: Ingreso, ctx: ContextoIngreso): strin
     case 'asignarProyecto':
       if (i.cfdiUuid === null || i.reembolsoDeId !== null) return 'Solo una factura importada se asigna a un proyecto'
       return i.estado === 'cancelado' ? 'Una factura cancelada no se asigna a un proyecto' : null
+    // An imported invoice is its own record (ADR-0002); Asignar proyecto is how it moves.
+    case 'editar':
+      if (i.cfdiUuid !== null) return 'Una factura importada no se edita'
+      return i.estado === 'cancelado' ? 'Un ingreso cancelado no se edita' : null
   }
 }
 
-const ACCIONES: AccionIngreso[] = ['pagar', 'cancelar', 'borrar', 'reembolsar', 'asignarProyecto']
+const ACCIONES: AccionIngreso[] = ['pagar', 'cancelar', 'borrar', 'reembolsar', 'asignarProyecto', 'editar']
+
+/**
+ * What Editar ingreso cannot change on `i`. A Reembolso follows the Ingreso it gives money back
+ * from in everything but its amount and fecha. An Ingreso from a Plan de cobro or a periodo stays on
+ * its Cotización's Proyecto. One with Reembolsos keeps its categoría and IVA, which they were split by.
+ */
+export function bloqueosIngreso(i: Ingreso, ctx: ContextoIngreso): CampoBloqueado[] {
+  if (i.reembolsoDeId !== null) return ['categoria', 'facturacion', 'proyecto', 'tipoCambio']
+  return [
+    ...(ctx.reembolsos.length > 0 ? (['categoria'] as const) : []),
+    ...(origenIngreso(i) !== 'manual' ? (['proyecto'] as const) : [])
+  ]
+}
 
 /**
  * What each of `filas` offers on its Finanzas row: exactly the actions `exigirIngreso` accepts, and
@@ -79,11 +96,15 @@ export function accionesIngresos(db: Db, filas: Ingreso[]): Map<number, { accion
  * Ingreso `id`, once its lifecycle allows `accion` on it, and what is left to give back of it;
  * throws the refusal otherwise.
  */
-export function exigirIngreso(db: Db, accion: AccionIngreso, id: number): { ingreso: Ingreso; queda: ReturnType<typeof restante> } {
+export function exigirIngreso(
+  db: Db,
+  accion: AccionIngreso,
+  id: number
+): { ingreso: Ingreso; queda: ReturnType<typeof restante>; reembolsos: Ingreso[] } {
   const ingreso = db.select().from(ingresos).where(eq(ingresos.id, id)).get()
   if (!ingreso) throw new Error(`El ingreso ${id} no existe`)
   const ctx = { reembolsos: db.select().from(ingresos).where(eq(ingresos.reembolsoDeId, id)).all() }
   const mensaje = rechazo(accion, ingreso, ctx)
   if (mensaje) throw new Error(mensaje)
-  return { ingreso, queda: restante(ingreso, ctx.reembolsos) }
+  return { ingreso, queda: restante(ingreso, ctx.reembolsos), reembolsos: ctx.reembolsos }
 }

@@ -560,10 +560,11 @@ describe('proyectos', () => {
   const personal = () =>
     h.proyectos.guardar({ nombre: `P${++n}`, etiqueta: 'personal', contactoId: null, clienteFinal: null, categoria: 'website', fechaInicio: '', fechaEntrega: null, notas: null })
   const llevarA = { en_curso: [], pausado: ['pausar'], completado: ['completar'], cancelado: ['cancelar'] } as const
-  const hacer = async (a: Exclude<AccionProyecto, 'cambiarContacto'>, f: FichaProyecto) => (a === 'editar' ? h.proyectos.guardar({ ...f, notas: 'x' }) : h.proyectos[a](f.id))
+  const hacer = async (a: Exclude<AccionProyecto, 'cambiarContacto'>, f: FichaProyecto) =>
+    a === 'editar' ? h.proyectos.guardar({ ...f, notas: 'x' }) : a === 'cambiarFechaFin' ? h.proyectos.cambiarFechaFin(f.id, f.fechaInicio ?? '') : h.proyectos[a](f.id)
 
   it.each(ESTADOS_PROYECTO)('offers in the Ficha exactly the actions a %s Proyecto accepts', async (estado) => {
-    for (const accion of ['editar', 'borrar', 'pausar', 'reanudar', 'completar', 'cancelar'] as const) {
+    for (const accion of ['editar', 'borrar', 'pausar', 'reanudar', 'completar', 'cancelar', 'cambiarFechaFin'] as const) {
       let f = await personal()
       for (const paso of llevarA[estado]) f = await h.proyectos[paso](f.id)
       const ofrecida = (await h.proyectos.ficha(f.id)).acciones.includes(accion)
@@ -662,7 +663,8 @@ describe('Finanzas offers on each row exactly the actions its command accepts', 
     cancelar: 'Solo se cancela un ingreso pendiente',
     borrar: 'Este ingreso tiene registros vinculados; cancélalo en lugar de borrarlo',
     reembolsar: 'Solo se reembolsa un ingreso pagado',
-    asignarProyecto: 'Solo una factura importada se asigna a un proyecto'
+    asignarProyecto: 'Solo una factura importada se asigna a un proyecto',
+    editar: 'Una factura importada no se edita'
   }
   const RECHAZOS_COSTO: Record<AccionCosto, string> = {
     pagar: 'Solo se marca pagado un costo pendiente',
@@ -674,19 +676,20 @@ describe('Finanzas offers on each row exactly the actions its command accepts', 
   /** Each seeded row, the actions it offers, and a refusal that differs from its action's usual one. */
   type Caso<A extends string> = [nombre: string, acciones: A[], opciones?: { fueraDelResumen?: true; rechazos?: Partial<Record<A, string>> }]
   const INGRESOS: Caso<AccionIngreso>[] = [
-    ['pendiente', ['pagar', 'cancelar', 'borrar']],
-    ['pagado', ['borrar', 'reembolsar']],
+    ['pendiente', ['pagar', 'cancelar', 'borrar', 'editar']],
+    ['pagado', ['borrar', 'reembolsar', 'editar']],
     // Finanzas lists no cancelled Ingreso; its command still accepts only what the lifecycle allows.
-    ['cancelado', ['borrar'], { fueraDelResumen: true }],
-    ['con un Reembolso', ['reembolsar']],
-    ['Reembolso parcial', ['borrar']],
-    ['reembolsado del todo', [], { rechazos: { reembolsar: MENSAJE_REEMBOLSO_EXCEDIDO } }],
-    ['Reembolso total', ['borrar']],
+    ['cancelado', ['borrar'], { fueraDelResumen: true, rechazos: { editar: 'Un ingreso cancelado no se edita' } }],
+    ['con un Reembolso', ['reembolsar', 'editar']],
+    ['Reembolso parcial', ['borrar', 'editar']],
+    ['reembolsado del todo', ['editar'], { rechazos: { reembolsar: MENSAJE_REEMBOLSO_EXCEDIDO } }],
+    ['Reembolso total', ['borrar', 'editar']],
     ['USD pagado y reembolsado en parte', ['reembolsar', 'asignarProyecto']],
-    ['Reembolso en USD', ['borrar']],
+    // A Reembolso of an invoice is not the invoice: it is recorded by hand, so it is edited.
+    ['Reembolso en USD', ['borrar', 'editar']],
     ['de un CFDI', ['reembolsar', 'asignarProyecto']],
-    ['de un Periodo', ['pagar', 'cancelar']],
-    ['de un Periodo cancelado', [], { fueraDelResumen: true }]
+    ['de un Periodo', ['pagar', 'cancelar', 'editar']],
+    ['de un Periodo cancelado', [], { fueraDelResumen: true, rechazos: { editar: 'Un ingreso cancelado no se edita' } }]
   ]
   const COSTOS: Caso<AccionCosto>[] = [
     ['único pendiente', ['pagar', 'cancelar', 'borrar']],
@@ -699,8 +702,14 @@ describe('Finanzas offers on each row exactly the actions its command accepts', 
     ['anual', ['pagar', 'cancelar', 'detener']]
   ]
 
-  const hacerIngreso = (hh: DmmHandlers, a: AccionIngreso, id: number) =>
-    a === 'reembolsar' ? hh.finanzas.reembolsar(id, 1) : a === 'asignarProyecto' ? hh.finanzas.asignarProyecto(id, null) : hh.finanzas[`${a}Ingreso` as const](id)
+  const hacerIngreso = async (hh: DmmHandlers, a: AccionIngreso, id: number) =>
+    a === 'reembolsar'
+      ? hh.finanzas.reembolsar(id, 1)
+      : a === 'asignarProyecto'
+        ? hh.finanzas.asignarProyecto(id, null)
+        : a === 'editar'
+          ? hh.finanzas.editarIngreso(id, await hh.finanzas.ingresoParaEditar(id))
+          : hh.finanzas[`${a}Ingreso` as const](id)
   const hacerCosto = (hh: DmmHandlers, a: AccionCosto, id: number) => hh.finanzas[`${a}Costo` as const](id)
 
   /** Every seeded row by its name in the table, through the handlers as the owner would. */
@@ -1095,6 +1104,7 @@ describe('Every ledger command works Al día', () => {
       cancelar: 'orden',
       borrar: 'orden',
       cambiarContacto: 'orden',
+      cambiarFechaFin: 'orden',
       abrirCarpeta: 'orden'
     },
     finanzas: {
@@ -1113,7 +1123,9 @@ describe('Every ledger command works Al día', () => {
       borrarCosto: 'orden',
       detenerCosto: 'orden',
       opcionesAsignar: 'orden',
-      asignarProyecto: 'orden'
+      asignarProyecto: 'orden',
+      ingresoParaEditar: 'orden',
+      editarIngreso: 'orden'
     },
     inicio: { resumen: () => h.inicio.resumen() },
     // Usage and files on disk, not money.

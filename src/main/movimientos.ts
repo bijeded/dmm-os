@@ -1,12 +1,12 @@
-import { eq } from 'drizzle-orm'
+import { and, eq, ne } from 'drizzle-orm'
 import type { Db } from './db'
 import { costos, definicionesCosto, ingresos, proyectos, vigenciasPrecio } from './db/schema'
-import { monedaDe, montos, reembolso, tasaDe } from './dinero'
+import { monedaDe, montoEn, montos, reembolso, subtotalEn, tasaDe } from './dinero'
 import { exigirCosto } from './ciclo-costo'
-import { exigirIngreso } from './ciclo-ingreso'
-import { transaccionConPeriodos } from './ledger'
+import { bloqueosIngreso, exigirIngreso, restante, type Ingreso } from './ciclo-ingreso'
+import { fechaIngreso, transaccionConPeriodos } from './ledger'
 import { exigirCentavos } from '../shared/montos'
-import type { CostoNuevo, IngresoNuevo } from '../shared/dominio'
+import { CATEGORIAS_INGRESO, type CampoBloqueado, type CostoNuevo, type IngresoEditable, type IngresoEditado, type IngresoNuevo } from '../shared/dominio'
 import { periodoDe } from '../shared/fechas'
 
 // Movimientos: Ingresos and Costos entered, paid, cancelled, deleted, refunded or stopped. Which of
@@ -42,6 +42,133 @@ export function nuevoIngreso(db: Db, n: IngresoNuevo, hoy: string) {
       notas: n.notas?.trim() || null
     })
     .run()
+}
+
+/** Ingreso `i` as Editar ingreso opens it, in its own currency, with what it cannot change. */
+function editable(i: Ingreso, reembolsos: Ingreso[]): IngresoEditable {
+  const moneda = monedaDe(i)
+  const esReembolso = i.reembolsoDeId !== null
+  return {
+    id: i.id,
+    moneda,
+    estado: i.estado,
+    reembolsoDeId: i.reembolsoDeId,
+    bloqueados: bloqueosIngreso(i, { reembolsos }),
+    fecha: fechaIngreso(i) ?? '',
+    // A Reembolso is edited as what it gives back, as it was recorded.
+    monto: esReembolso ? 0 - montoEn(i, moneda) : subtotalEn(i),
+    tipoCambio: esReembolso ? null : tasaDe(i),
+    categoria: i.categoria,
+    conIva: i.iva !== 0,
+    facturado: i.estadoFacturacion === 'facturado',
+    proyectoId: i.proyectoId,
+    contactoId: i.contactoId,
+    notas: i.notas
+  }
+}
+
+/** Editar ingreso opens: Ingreso `id`'s current values, once its lifecycle allows editing it. */
+export function ingresoParaEditar(db: Db, id: number): IngresoEditable {
+  const { ingreso, reembolsos } = exigirIngreso(db, 'editar', id)
+  return editable(ingreso, reembolsos)
+}
+
+/** What Editar ingreso sends over IPC, checked field by field and taken without anything else. */
+export function ingresoEditadoValido(x: unknown): IngresoEditado {
+  const e = (typeof x === 'object' && x !== null ? x : {}) as Partial<Record<keyof IngresoEditado, unknown>>
+  const idONull = (v: unknown) => v === null || (typeof v === 'number' && Number.isInteger(v) && v > 0)
+  if (
+    typeof e.fecha !== 'string' ||
+    typeof e.monto !== 'number' ||
+    !(e.tipoCambio === null || (typeof e.tipoCambio === 'number' && Number.isFinite(e.tipoCambio))) ||
+    !CATEGORIAS_INGRESO.includes(e.categoria as IngresoEditado['categoria']) ||
+    typeof e.conIva !== 'boolean' ||
+    typeof e.facturado !== 'boolean' ||
+    !idONull(e.proyectoId) ||
+    !idONull(e.contactoId) ||
+    !(e.notas === null || typeof e.notas === 'string')
+  )
+    throw new Error('Ingreso no válido')
+  const { fecha, monto, tipoCambio, categoria, conIva, facturado, proyectoId, contactoId, notas } = e as IngresoEditado
+  return { fecha, monto, tipoCambio, categoria, conIva, facturado, proyectoId, contactoId, notas }
+}
+
+const MENSAJE_BLOQUEADO: Record<CampoBloqueado, string> = {
+  categoria: 'Este ingreso no cambia de tipo ni de IVA',
+  facturacion: 'Este ingreso no cambia su estado de facturación',
+  proyecto: 'Este ingreso no cambia de proyecto ni de contacto',
+  tipoCambio: 'Este ingreso no cambia su tipo de cambio'
+}
+
+/**
+ * Editar ingreso: saves `e` over Ingreso `id` in place. What is unchanged stays exactly as stored:
+ * amounts are recomputed only when an amount, rate, categoría or IVA changed, and both dates only
+ * when the fecha did. Its estado and periodo never change. Its Reembolsos follow its Proyecto,
+ * Contacto and Estado de facturación.
+ */
+export function editarIngreso(db: Db, id: number, e: IngresoEditado, hoy: string) {
+  exigirFecha(e.fecha)
+  exigirCentavos(e.monto)
+  const { ingreso: i, reembolsos } = exigirIngreso(db, 'editar', id)
+  const antes = editable(i, reembolsos)
+  const esReembolso = i.reembolsoDeId !== null
+  const moneda = monedaDe(i)
+  const conIva = e.categoria === 'factura' && e.conIva
+  const facturado = e.categoria === 'factura' && e.facturado
+  let proyectoId = e.proyectoId
+  let contactoId = e.contactoId
+  // The Contacto comes from the Proyecto: a new one gives its own, the same one keeps what is stored.
+  if (proyectoId !== null && proyectoId === antes.proyectoId) contactoId = antes.contactoId
+  else if (proyectoId !== null) {
+    const p = db.select().from(proyectos).where(eq(proyectos.id, proyectoId)).get()
+    if (!p) throw new Error(`El proyecto ${proyectoId} no existe`)
+    contactoId = p.contactoId
+  }
+  const tipoCambio = moneda === 'USD' && !esReembolso ? e.tipoCambio : null
+
+  const cambia: Record<CampoBloqueado, boolean> = {
+    categoria: e.categoria !== antes.categoria || conIva !== antes.conIva,
+    facturacion: e.categoria === 'factura' && facturado !== antes.facturado,
+    proyecto: proyectoId !== antes.proyectoId || contactoId !== antes.contactoId,
+    tipoCambio: tipoCambio !== antes.tipoCambio
+  }
+  for (const campo of antes.bloqueados) if (cambia[campo]) throw new Error(MENSAJE_BLOQUEADO[campo])
+  if (esReembolso) [proyectoId, contactoId] = [i.proyectoId, i.contactoId]
+  if (e.fecha !== antes.fecha && i.fechaPago !== null && e.fecha > hoy)
+    throw new Error('Un ingreso pagado no puede tener fecha posterior a hoy')
+
+  let registrados: Partial<ReturnType<typeof montos>> = {}
+  if (e.monto !== antes.monto || cambia.categoria || cambia.tipoCambio) {
+    if (esReembolso) {
+      const original = db.select().from(ingresos).where(eq(ingresos.id, i.reembolsoDeId!)).get()!
+      const otros = db
+        .select()
+        .from(ingresos)
+        .where(and(eq(ingresos.reembolsoDeId, original.id), ne(ingresos.id, i.id)))
+        .all()
+      registrados = reembolso(e.monto, { de: original, queda: restante(original, otros), tasaUsd: tasaDe(original) })
+    } else {
+      if (moneda === 'USD' && !(tipoCambio !== null && tipoCambio > 0)) throw new Error('Escribe un tipo de cambio mayor a cero')
+      registrados = montos(e.monto, { iva: conIva, retenciones: moneda === 'MXN' ? i.retenciones : 0, tasaUsd: tipoCambio })
+      const devuelto = 0 - reembolsos.reduce((s, r) => s + montoEn(r, moneda), 0)
+      if (montoEn({ ...i, ...registrados }, moneda) < devuelto) throw new Error('El monto no puede ser menor a lo ya reembolsado')
+    }
+  }
+
+  const estadoFacturacion = e.categoria === 'factura' ? (facturado ? 'facturado' : 'por_facturar') : null
+  db.transaction((tx) => {
+    tx.update(ingresos)
+      .set({
+        ...registrados,
+        ...(!esReembolso && { categoria: e.categoria, estadoFacturacion, proyectoId, contactoId }),
+        ...(e.fecha !== antes.fecha && { fechaRegistro: e.fecha, fechaPago: i.fechaPago === null ? null : e.fecha }),
+        notas: e.notas?.trim() || null
+      })
+      .where(eq(ingresos.id, id))
+      .run()
+    if (!esReembolso && reembolsos.length > 0)
+      tx.update(ingresos).set({ estadoFacturacion, proyectoId, contactoId }).where(eq(ingresos.reembolsoDeId, id)).run()
+  })
 }
 
 /** A one-time Costo, or the definition of a monthly, MSI or annual one and its first price. */

@@ -1,5 +1,5 @@
 import type { Moneda } from '../shared/dominio'
-import { ivaDe } from '../shared/montos'
+import { ivaDe, TASA_IVA } from '../shared/montos'
 import type { ingresos } from './db/schema'
 
 type Montos = Pick<typeof ingresos.$inferSelect, 'total' | 'montoOriginal' | 'monedaOriginal'>
@@ -27,6 +27,19 @@ export function montoEn(i: Montos, moneda: Moneda, tipoCambio?: number | null) {
   if (moneda === 'MXN') return i.total
   if (monedaDe(i) === 'USD') return i.montoOriginal ?? 0
   return tipoCambio ? convertir(i.total, 'MXN', 'USD', tipoCambio) : 0
+}
+
+/**
+ * An Ingreso's subtotal in its own currency: centavos, or USD cents for a USD one. Only the USD
+ * total is kept, so a USD subtotal with IVA is the one whose 16% on top gives that total; when
+ * none does, the total itself.
+ */
+export function subtotalEn(i: Montos & Pick<typeof ingresos.$inferSelect, 'subtotal' | 'iva'>) {
+  if (monedaDe(i) === 'MXN') return i.subtotal
+  const original = i.montoOriginal ?? 0
+  if (i.iva === 0) return original
+  const cerca = Math.round(original / (1 + TASA_IVA))
+  return [cerca, cerca - 1, cerca + 1].find((s) => s + ivaDe(s, true) === original) ?? original
 }
 
 /** An amount as recorded: subtotal, IVA, retenciones and total in MXN, and the USD total it came from, if any. */

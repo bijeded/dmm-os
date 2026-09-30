@@ -121,7 +121,8 @@ function handlers() {
       abrirCarpeta: vi.fn(async () => {}),
       opcionesCobro: sinFicha,
       completarConCobro: sinFicha,
-      cambiarContacto: sinFicha
+      cambiarContacto: sinFicha,
+      cambiarFechaFin: sinFicha
     },
     finanzas: {
       coberturaCostos: vi.fn(() => [{ anio: 2025, sinDatos: true }]),
@@ -138,7 +139,11 @@ function handlers() {
       borrarCosto: vi.fn(),
       detenerCosto: vi.fn(),
       opcionesAsignar: vi.fn(() => ({ actual: null, sinContacto: false, proyectos: [] })),
-      asignarProyecto: vi.fn()
+      asignarProyecto: vi.fn(),
+      ingresoParaEditar: vi.fn(() => {
+        throw new Error('sin ingreso')
+      }),
+      editarIngreso: vi.fn()
     },
     tareas: {
       listar: vi.fn(() => ({ pendientes: [], hechas: [], diasHechas: 30 })),

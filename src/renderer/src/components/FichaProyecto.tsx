@@ -4,10 +4,11 @@ import { MENSAJE_SIN_PAGAR, NOMBRES_CATEGORIA, NOMBRES_ESTADO_PROYECTO, type Fic
 import { dia, folioDmm, monto, pesos } from '../../../shared/formato'
 import { CambiarContacto } from './Atribucion'
 import { CompletarConCobro } from './CompletarConCobro'
+import { Dialogo } from './Dialogo'
 import { NOMBRES_CARPETA } from './Proyectos'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
-import { tituloCls } from './estilos'
+import { campoCls, tituloCls } from './estilos'
 import { useRuta } from './ruta'
 
 /**
@@ -20,6 +21,8 @@ export function FichaProyecto() {
   const [ficha, setFicha] = useState<Ficha | null>(null)
   const [cobrando, setCobrando] = useState(false)
   const [cambiandoContacto, setCambiandoContacto] = useState(false)
+  /** The fecha de fin being typed in Cambiar fecha de fin, while its dialog is open. */
+  const [fin, setFin] = useState<string | null>(null)
   const { error, ocupado, correr } = useAccion()
 
   useEffect(() => {
@@ -54,6 +57,11 @@ export function FichaProyecto() {
             {puede('editar') && (
               <Button variant="secondary" disabled={ocupado} onClick={() => navigate(`/proyectos/${id}/editar`)}>
                 Editar
+              </Button>
+            )}
+            {puede('cambiarFechaFin') && (
+              <Button variant="secondary" disabled={ocupado} onClick={() => setFin(f.fechaFin ?? '')}>
+                Cambiar fecha de fin
               </Button>
             )}
             {puede('cambiarContacto') && (
@@ -96,6 +104,31 @@ export function FichaProyecto() {
             setCambiandoContacto(false)
           }}
         />
+      )}
+      {fin !== null && (
+        <Dialogo id="cambiar-fin" titulo="Cambiar fecha de fin">
+          <Aviso error={error} />
+          <label className="flex flex-col gap-1.5 text-[13px] text-on-surface">
+            Fecha de fin
+            <input type="date" value={fin} onChange={(e) => setFin(e.target.value)} className={campoCls} />
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" disabled={ocupado} onClick={() => setFin(null)}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={ocupado}
+              onClick={() =>
+                correr(async () => {
+                  setFicha(await api.cambiarFechaFin(id, fin))
+                  setFin(null)
+                })
+              }
+            >
+              Guardar
+            </Button>
+          </div>
+        </Dialogo>
       )}
       {cobrando && (
         <CompletarConCobro

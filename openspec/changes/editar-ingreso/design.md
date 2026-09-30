@@ -70,7 +70,7 @@ Both go through `alDiaDb()` in `handlers.ts` and are added to the handler test's
 
 - A pure `exigirFechaFin(p, fecha, hoy)` in `ciclo-proyecto.ts`: estado *completado* or *cancelado*, not empty, ≤ `hoy`, ≥ `fecha_inicio` when set.
 - `ProyectoNuevo` gains optional `fechaFin`. `guardarProyecto` writes it only on a *completado* Proyecto, through `exigirFechaFin`. It also checks that an edited `fecha_inicio` is not after an existing `fecha_fin`.
-- A *cancelado* Proyecto stays refused by `REGLAS.editar`. A new `AccionProyecto` `'cambiarFechaFin'` (`en: ['completado', 'cancelado']`) and a channel `proyectos.cambiarFechaFin(id, fecha)` let the Ficha of a cancelado Proyecto open a small dialog with only that field.
+- A *cancelado* Proyecto stays refused by `REGLAS.editar`. A new `AccionProyecto` `'cambiarFechaFin'` (`en: ['cancelado']`, since a completado one already has Editar) and a channel `proyectos.cambiarFechaFin(id, fecha)` let the Ficha of a cancelado Proyecto open a small dialog with only that field.
 
 *Alternative:* allow Editar on cancelado with every other field disabled. Rejected because it weakens `REGLAS.editar` for one field.
 

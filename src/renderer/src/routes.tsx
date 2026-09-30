@@ -47,6 +47,7 @@ export const routes: RouteObject[] = [
       { path: 'proyectos/:id', element: <FichaProyecto /> },
       { path: 'proyectos/:id/editar', element: <NuevoProyecto /> },
       { path: 'finanzas/ingresos/nuevo', element: <NuevoIngreso /> },
+      { path: 'finanzas/ingresos/:id/editar', element: <NuevoIngreso /> },
       { path: 'finanzas/costos/nuevo', element: <NuevoCosto /> }
     ]
   }
