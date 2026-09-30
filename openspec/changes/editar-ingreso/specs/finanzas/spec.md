@@ -20,7 +20,7 @@ In the Finanzas Ingresos list, the row of every Ingreso that was not imported fr
 - **THEN** the Ingreso keeps every value it had
 
 ### Requirement: Editar ingreso changes the fecha
-Saving a new fecha SHALL date the Ingreso on it: a *pagado* Ingreso (a Reembolso included) SHALL have both its fecha de registro and fecha de pago set to it, and a *pendiente* or Incobrable one its fecha de registro. The fecha of a *pagado* Ingreso SHALL NOT be later than today. The Ingreso SHALL count in the period of its new fecha and no longer in the old one. An Ingreso generated for a periodo SHALL keep its periodo, and no other Ingreso SHALL be generated for that periodo. A Reembolso SHALL count on its new fecha.
+Saving a new fecha SHALL date the Ingreso on it: a *pagado* Ingreso (a Reembolso included) SHALL have both its fecha de registro and fecha de pago set to it, and a *pendiente* or Incobrable one its fecha de registro. The fecha of a *pagado* Ingreso SHALL NOT be later than today, nor a day that does not exist. A Reembolso SHALL NOT be dated before the Ingreso it gives money back from, nor an Ingreso after any of its Reembolsos. The Ingreso SHALL count in the period of its new fecha and no longer in the old one. An Ingreso generated for a periodo SHALL keep its periodo, and no other Ingreso SHALL be generated for that periodo. A Reembolso SHALL count on its new fecha.
 
 #### Scenario: Payment from 2019 recorded today
 - **WHEN** the owner sets Ingreso 884's fecha to 2019-03-15 and saves
@@ -30,6 +30,10 @@ Saving a new fecha SHALL date the Ingreso on it: a *pagado* Ingreso (a Reembolso
 #### Scenario: Paid date in the future refused
 - **WHEN** the owner sets a *pagado* Ingreso's fecha to a day after today
 - **THEN** saving is refused and the Ingreso keeps its fecha
+
+#### Scenario: Reembolso before its payment refused
+- **WHEN** an Ingreso paid 2026-06-10 has a Reembolso dated 2026-07-01, and the owner sets the Reembolso's fecha to 2026-03-01, or the Ingreso's to 2026-08-01
+- **THEN** saving is refused and both keep their fechas
 
 #### Scenario: Pending Ingreso moved to next month
 - **WHEN** a *pendiente* Plan de cobro Parcialidad dated this month is set to a date next month
@@ -44,7 +48,7 @@ Saving a new fecha SHALL date the Ingreso on it: a *pagado* Ingreso (a Reembolso
 - **THEN** it counts in last month's revenue as a negative amount, and no longer in this month's
 
 ### Requirement: Editar ingreso changes the amount
-An Ingreso's amount SHALL be edited in the currency it was recorded in. For an MXN Ingreso it SHALL be the subtotal, with IVA recomputed from its categoría. For a USD Ingreso it SHALL be the USD amount and its tipo de cambio: the peso amounts SHALL be recomputed at that rate and the USD amount SHALL be kept as its original. The currency SHALL NOT change. The amount SHALL be above zero, and, when the Ingreso has Reembolsos, not less than what they already gave back, in the Ingreso's own currency. Saving it SHALL leave its Reembolsos unchanged.
+An Ingreso's amount SHALL be edited in the currency it was recorded in. For an MXN Ingreso it SHALL be the subtotal, with IVA recomputed from its categoría. For a USD Ingreso it SHALL be the USD amount and its tipo de cambio: the peso amounts SHALL be recomputed at that rate and the USD amount SHALL be kept as its original. The currency SHALL NOT change. A USD Ingreso with Reembolsos SHALL keep its tipo de cambio, which they were converted at. The amount SHALL be above zero, and, when the Ingreso has Reembolsos, not less than what they already gave back, in the Ingreso's own currency. Saving it SHALL leave its Reembolsos unchanged.
 
 #### Scenario: MXN amount corrected
 - **WHEN** a hand-entered `sin_factura` Ingreso of $8,000 is edited to $8,500
@@ -57,6 +61,10 @@ An Ingreso's amount SHALL be edited in the currency it was recorded in. For an M
 #### Scenario: Only the rate corrected
 - **WHEN** a USD 1,000.00 Ingreso recorded at 18.00 is edited to a tipo de cambio of 17.50
 - **THEN** it stays USD 1,000.00 and records $17,500.00
+
+#### Scenario: Rate kept once refunded
+- **WHEN** a USD 100.00 Ingreso recorded at 20.00 has a Reembolso, and the owner changes its tipo de cambio
+- **THEN** saving is refused and it stays $2,000.00
 
 #### Scenario: Below what was refunded
 - **WHEN** a *pagado* $10,000 Ingreso has a $3,000 Reembolso and the owner edits it to $2,500

@@ -28,8 +28,8 @@ Add `'editar'` to `AccionIngreso`. `rechazo('editar', …)` refuses a CFDI Ingre
 
 | Ingreso | Locked |
 |---|---|
-| `manual` (Completar con cobro included) | categoría and IVA once it has Reembolsos |
-| `cotizacion`, `periodo` | Proyecto, Contacto; categoría and IVA once it has Reembolsos |
+| `manual` (Completar con cobro included) | categoría, IVA and tipo de cambio once it has Reembolsos |
+| `cotizacion`, `periodo` | Proyecto, Contacto; categoría, IVA and tipo de cambio once it has Reembolsos |
 | Reembolso | categoría, IVA, Estado de facturación, Proyecto, Contacto, tipo de cambio |
 
 The row gets `'editar'` from `accionesIngresos` like any action. The form reads the locks, and the command refuses a locked field sent with a new value. The row and the command then agree without re-deriving the table in the renderer.
@@ -51,9 +51,13 @@ It sits beside `nuevoIngreso`, `reembolsar` and the others, and runs in one tran
 
 *Alternative:* delete and re-insert. Rejected because it breaks `reembolso_de_id` links and changes ids.
 
-### 3. The USD subtotal shown in the form
+### 3. The USD subtotal shown in the form, and the rate sent back
 
-The stored original is the USD **total**. For a `sin_factura` Ingreso (no IVA) the USD subtotal is that total. For a `factura` one with IVA it is `montoOriginal − ivaDe(…)` solved back: `round(montoOriginal / 1.16)`, checked against `montos()` giving the same total, and falling back to the total when it does not. Since amounts are only recomputed on change (decision 2.4), a slightly off displayed subtotal is never written unless the owner edits it. This read belongs to `dinero.ts` (`subtotalEn(i, moneda)`), beside `montoEn`.
+The stored original is the USD **total**. For a `sin_factura` Ingreso (no IVA) the USD subtotal is that total. For one with IVA it is that total in the proportion its pesos were recorded in, `round(montoOriginal × subtotal ÷ (subtotal + IVA))`: within a cent, and never the total itself (a Parcialidad split apart from the 16% rule would otherwise get IVA added on top of its IVA). Since amounts are only recomputed on change (decision 2.4), a subtotal a cent off is never written unless the owner edits the amount, rate or categoría. This read belongs to `dinero.ts` (`subtotalEn`), beside `montoEn`.
+
+The form sends `tipoCambio: null` unless the owner typed a different rate, and `null` keeps the stored one. The server never compares a rounded display value with the stored float.
+
+A Reembolso is never dated before its Ingreso, nor an Ingreso after its Reembolsos (found in code review: otherwise a period could show money given back before it was received).
 
 ### 4. IPC: two channels in `contrato.ts`
 

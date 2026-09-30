@@ -16,12 +16,13 @@ describe('dinero', () => {
     expect([montoEn(enPesos, 'USD', 18), montoEn(enPesos, 'USD'), montoEn(enPesos, 'USD', null)]).toEqual([100, 0, 0])
   })
 
-  it('reads an Ingreso’s subtotal in its own currency, solving a USD one’s IVA back from its USD total', () => {
+  it('reads an Ingreso’s subtotal in its own currency, a USD one’s in the proportion of its pesos', () => {
     expect(subtotalEn(montos(10_000, { iva: true }))).toBe(10_000)
     expect(subtotalEn(montos(26_000, { iva: false, tasaUsd: 19.2308 }))).toBe(26_000)
     for (const usd of [333, 1003, 1004, 25_000]) expect(subtotalEn(montos(usd, { iva: true, tasaUsd: 18.5 }))).toBe(usd)
-    // IVA recorded apart from the 16% rule: no USD subtotal gives the total, so the total stands in.
-    expect(subtotalEn({ subtotal: 1800, iva: 100, total: 1900, montoOriginal: 105, monedaOriginal: 'USD' })).toBe(105)
+    // A Parcialidad of a USD quote with IVA, split apart from the 16% rule: its subtotal, never its total.
+    const [primera] = enParcialidades(montos(100_000, { iva: true, tasaUsd: 18.5 }), [{ pagado: 38_668, saldo: 77_332 }])
+    expect(Math.abs(subtotalEn(primera.montos) - 33_334)).toBeLessThanOrEqual(1)
   })
 
   it('converts between pesos and USD by one rule, rounding to the centavo', () => {

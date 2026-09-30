@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Db } from './db'
+import { esFecha } from '../shared/fechas'
 import { estadoCobro, estadosCobro } from './cobranza'
 import { cancelar, RegistroVinculadoError } from './db/cancelacion'
 import { contactos, cotizaciones, ingresos, proyectos, ubicacionesArchivo } from './db/schema'
@@ -150,7 +151,7 @@ export function crearCarpeta(db: Db, root: string, id: number, hoy: string): voi
 }
 
 const fecha = (f: string | null) => {
-  if (f && !/^\d{4}-\d{2}-\d{2}$/.test(f)) throw new Error('Fecha inválida')
+  if (f && !esFecha(f)) throw new Error('Fecha inválida')
   return f || null
 }
 

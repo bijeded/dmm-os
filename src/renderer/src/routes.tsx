@@ -46,8 +46,9 @@ export const routes: RouteObject[] = [
       { path: 'proyectos/nuevo', element: <NuevoProyecto /> },
       { path: 'proyectos/:id', element: <FichaProyecto /> },
       { path: 'proyectos/:id/editar', element: <NuevoProyecto /> },
-      { path: 'finanzas/ingresos/nuevo', element: <NuevoIngreso /> },
-      { path: 'finanzas/ingresos/:id/editar', element: <NuevoIngreso /> },
+      // Keyed apart, so going from Editar to Nuevo ingreso starts a blank form, never the edited one.
+      { path: 'finanzas/ingresos/nuevo', element: <NuevoIngreso key="nuevo" /> },
+      { path: 'finanzas/ingresos/:id/editar', element: <NuevoIngreso key="editar" /> },
       { path: 'finanzas/costos/nuevo', element: <NuevoCosto /> }
     ]
   }

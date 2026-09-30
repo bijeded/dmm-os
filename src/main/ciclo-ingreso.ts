@@ -60,12 +60,14 @@ const ACCIONES: AccionIngreso[] = ['pagar', 'cancelar', 'borrar', 'reembolsar', 
 /**
  * What Editar ingreso cannot change on `i`. A Reembolso follows the Ingreso it gives money back
  * from in everything but its amount and fecha. An Ingreso from a Plan de cobro or a periodo stays on
- * its Cotización's Proyecto. One with Reembolsos keeps its categoría and IVA, which they were split by.
+ * its Cotización's Proyecto. One with Reembolsos keeps its categoría, IVA and tipo de cambio, which they
+ * were split and converted by.
  */
 export function bloqueosIngreso(i: Ingreso, ctx: ContextoIngreso): CampoBloqueado[] {
   if (i.reembolsoDeId !== null) return ['categoria', 'facturacion', 'proyecto', 'tipoCambio']
   return [
-    ...(ctx.reembolsos.length > 0 ? (['categoria'] as const) : []),
+    // Its Reembolsos were converted at its rate, so it keeps it too.
+    ...(ctx.reembolsos.length > 0 ? (['categoria', 'tipoCambio'] as const) : []),
     ...(origenIngreso(i) !== 'manual' ? (['proyecto'] as const) : [])
   ]
 }

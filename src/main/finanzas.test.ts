@@ -507,7 +507,7 @@ describe('Editar ingreso', () => {
       const { ingreso, reembolsos } = bloqueos(id)
       return bloqueosIngreso(ingreso, { reembolsos })
     }
-    expect(de(o.manual.id)).toEqual(['categoria'])
+    expect(de(o.manual.id)).toEqual(['categoria', 'tipoCambio'])
     expect(de(o.conCobro.id)).toEqual([])
     expect(de(o.planDeCobro.id)).toEqual(['proyecto'])
     expect(de(o.periodo.id)).toEqual(['proyecto'])
@@ -565,12 +565,28 @@ describe('Editar ingreso', () => {
     })
 
     it('counts a Reembolso on its new fecha', () => {
-      const i = fila({})
+      const i = fila({ fechaRegistro: '2026-07-20', fechaPago: '2026-07-20' })
       reembolsar(db, i.id, 100_000, hoy)
       const r = db.select().from(ingresos).where(eq(ingresos.reembolsoDeId, i.id)).get()!
+      expect(resumenFinanzas(db, 'mes', hoy, 30).actual.ingresos).toBe(-100_000)
       editar(r.id, { fecha: '2026-08-03' })
-      expect(resumenFinanzas(db, 'mes', hoy, 30).actual.ingresos).toBe(800_000)
+      expect(resumenFinanzas(db, 'mes', hoy, 30).actual.ingresos).toBe(0)
       expect(resumenFinanzas(db, 'mes', '2026-08-31', 30).actual.ingresos).toBe(-100_000)
+    })
+
+    it('keeps a Reembolso after the payment it gives back, and an Ingreso before its Reembolsos', () => {
+      const i = fila({ fechaRegistro: '2026-06-10', fechaPago: '2026-06-10' })
+      reembolsar(db, i.id, 1000, hoy)
+      const r = db.select().from(ingresos).where(eq(ingresos.reembolsoDeId, i.id)).get()!
+      editar(r.id, { fecha: '2026-07-01' })
+      expect(() => editar(r.id, { fecha: '2026-03-01' })).toThrow('anterior al ingreso que devuelve')
+      expect(() => editar(i.id, { fecha: '2026-08-01' })).toThrow('posterior a sus reembolsos')
+      editar(i.id, { fecha: '2026-06-01' })
+      expect([leer(i.id).fechaPago, leer(r.id).fechaPago]).toEqual(['2026-06-01', '2026-07-01'])
+    })
+
+    it('refuses a day that does not exist', () => {
+      expect(() => editar(fila({}).id, { fecha: '2026-02-31' })).toThrow('La fecha no es válida')
     })
 
     it('leaves both dates as they were when the fecha is unchanged', () => {
@@ -595,10 +611,26 @@ describe('Editar ingreso', () => {
       expect(leer(i.id)).toMatchObject({ total: 480_770, montoOriginal: 25_000, monedaOriginal: 'USD' })
     })
 
-    it('changes only the rate of a USD Ingreso', () => {
+    it('changes only the rate of a USD Ingreso, and keeps it when none is given', () => {
       const i = fila({ subtotal: 1_800_000, total: 1_800_000, montoOriginal: 100_000, monedaOriginal: 'USD' })
       editar(i.id, { tipoCambio: 17.5 })
       expect(leer(i.id)).toMatchObject({ total: 1_750_000, montoOriginal: 100_000 })
+      editar(i.id, { monto: 200_000, tipoCambio: null })
+      expect(leer(i.id)).toMatchObject({ total: 3_500_000, montoOriginal: 200_000 })
+    })
+
+    it('keeps the rate of a USD Ingreso with a Reembolso, which was converted at it', () => {
+      const i = fila({ subtotal: 2_000_000, total: 2_000_000, montoOriginal: 100_000, monedaOriginal: 'USD' })
+      reembolsar(db, i.id, 100_000, hoy)
+      expect(() => editar(i.id, { tipoCambio: 18 })).toThrow('no cambia su tipo de cambio')
+      expect(leer(i.id).total).toBe(2_000_000)
+    })
+
+    it('keeps the subtotal of a USD Parcialidad with IVA, never adding IVA on its total', () => {
+      const i = fila({ categoria: 'factura', estadoFacturacion: 'facturado', subtotal: 616_679, iva: 98_679, total: 715_358, montoOriginal: 38_668, monedaOriginal: 'USD' })
+      expect(ingresoParaEditar(db, i.id)).toMatchObject({ monto: 33_334, conIva: true })
+      editar(i.id, { tipoCambio: 18.5 })
+      expect(Math.abs(leer(i.id).montoOriginal! - 38_668)).toBeLessThanOrEqual(1)
     })
 
     it('never goes below what its Reembolsos gave back', () => {

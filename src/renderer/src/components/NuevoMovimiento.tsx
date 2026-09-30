@@ -107,6 +107,8 @@ export function NuevoIngreso() {
   const [fecha, setFecha] = useState(hoy)
   const [monto, setMonto] = useState('')
   const [tipoCambio, setTipoCambio] = useState('')
+  /** The rate as the form first showed it: left as is, the Ingreso keeps the one it was recorded at. */
+  const [tasaInicial, setTasaInicial] = useState('')
   const [conIva, setConIva] = useState(false)
   const [pagado, setPagado] = useState(true)
   const [notas, setNotas] = useState('')
@@ -122,7 +124,9 @@ export function NuevoIngreso() {
       setContactoId(i.contactoId)
       setFecha(i.fecha)
       setMonto((i.monto / 100).toFixed(2))
-      setTipoCambio(i.tipoCambio === null ? '' : String(Math.round(i.tipoCambio * 10_000) / 10_000))
+      const tasa = i.tipoCambio === null ? '' : String(Math.round(i.tipoCambio * 10_000) / 10_000)
+      setTipoCambio(tasa)
+      setTasaInicial(tasa)
       setConIva(i.conIva)
       setNotas(i.notas ?? '')
     })
@@ -136,13 +140,13 @@ export function NuevoIngreso() {
 
   const guardar = () =>
     correr(async () => {
-      if (original) {
-        // An untouched rate goes back exactly as stored, so nothing is recomputed from its rounding.
-        const tasaSinCambio = original.tipoCambio === null ? '' : String(Math.round(original.tipoCambio * 10_000) / 10_000)
+      if (editando !== undefined) {
+        // Never a new Ingreso from the Editar route: without the one it opens, nothing is saved.
+        if (original?.id !== editando) throw new Error('El ingreso no se ha abierto')
         await window.dmm.finanzas.editarIngreso(original.id, {
           fecha,
           monto: centavosDe(monto),
-          tipoCambio: original.tipoCambio === null ? null : tipoCambio === tasaSinCambio ? original.tipoCambio : tasaDe(tipoCambio),
+          tipoCambio: enUsd && !esReembolso && tipoCambio !== tasaInicial ? tasaDe(tipoCambio) : null,
           categoria,
           conIva: factura && conIva,
           facturado: factura && facturado,

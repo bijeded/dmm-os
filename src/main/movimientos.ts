@@ -7,13 +7,13 @@ import { bloqueosIngreso, exigirIngreso, restante, type Ingreso } from './ciclo-
 import { fechaIngreso, transaccionConPeriodos } from './ledger'
 import { exigirCentavos } from '../shared/montos'
 import { CATEGORIAS_INGRESO, type CampoBloqueado, type CostoNuevo, type IngresoEditable, type IngresoEditado, type IngresoNuevo } from '../shared/dominio'
-import { periodoDe } from '../shared/fechas'
+import { esFecha, periodoDe } from '../shared/fechas'
 
 // Movimientos: Ingresos and Costos entered, paid, cancelled, deleted, refunded or stopped. Which of
 // those each one allows now is its lifecycle's (ciclo-ingreso, ciclo-costo), as the Finanzas rows show.
 
 function exigirFecha(fecha: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) throw new Error('La fecha no es válida')
+  if (!esFecha(fecha)) throw new Error('La fecha no es válida')
 }
 
 /** A hand-entered Ingreso; given a Proyecto, its Contacto is the Proyecto's. */
@@ -115,7 +115,7 @@ export function editarIngreso(db: Db, id: number, e: IngresoEditado, hoy: string
   const moneda = monedaDe(i)
   const conIva = e.categoria === 'factura' && e.conIva
   const facturado = e.categoria === 'factura' && e.facturado
-  let proyectoId = e.proyectoId
+  const proyectoId = e.proyectoId
   let contactoId = e.contactoId
   // The Contacto comes from the Proyecto: a new one gives its own, the same one keeps what is stored.
   if (proyectoId !== null && proyectoId === antes.proyectoId) contactoId = antes.contactoId
@@ -124,18 +124,25 @@ export function editarIngreso(db: Db, id: number, e: IngresoEditado, hoy: string
     if (!p) throw new Error(`El proyecto ${proyectoId} no existe`)
     contactoId = p.contactoId
   }
-  const tipoCambio = moneda === 'USD' && !esReembolso ? e.tipoCambio : null
+  // A USD Ingreso's rate: a new one when given, otherwise the one it was recorded at.
+  const tasaNueva = moneda === 'USD' && !esReembolso ? e.tipoCambio : null
+  const tipoCambio = tasaNueva ?? antes.tipoCambio
 
   const cambia: Record<CampoBloqueado, boolean> = {
     categoria: e.categoria !== antes.categoria || conIva !== antes.conIva,
     facturacion: e.categoria === 'factura' && facturado !== antes.facturado,
     proyecto: proyectoId !== antes.proyectoId || contactoId !== antes.contactoId,
-    tipoCambio: tipoCambio !== antes.tipoCambio
+    tipoCambio: tasaNueva !== null && tasaNueva !== antes.tipoCambio
   }
   for (const campo of antes.bloqueados) if (cambia[campo]) throw new Error(MENSAJE_BLOQUEADO[campo])
-  if (esReembolso) [proyectoId, contactoId] = [i.proyectoId, i.contactoId]
-  if (e.fecha !== antes.fecha && i.fechaPago !== null && e.fecha > hoy)
-    throw new Error('Un ingreso pagado no puede tener fecha posterior a hoy')
+  if (e.fecha !== antes.fecha) {
+    if (i.fechaPago !== null && e.fecha > hoy) throw new Error('Un ingreso pagado no puede tener fecha posterior a hoy')
+    // Money is given back after it was received: a Reembolso never predates its Ingreso.
+    const pagadoEl = esReembolso ? fechaIngreso(db.select().from(ingresos).where(eq(ingresos.id, i.reembolsoDeId!)).get()!) : null
+    if (pagadoEl !== null && e.fecha < pagadoEl) throw new Error('Un reembolso no puede ser anterior al ingreso que devuelve')
+    const devueltoEl = reembolsos.map((r) => fechaIngreso(r)).filter((f) => f !== null)
+    if (devueltoEl.some((f) => e.fecha > f)) throw new Error('Un ingreso no puede ser posterior a sus reembolsos')
+  }
 
   let registrados: Partial<ReturnType<typeof montos>> = {}
   if (e.monto !== antes.monto || cambia.categoria || cambia.tipoCambio) {
@@ -149,7 +156,7 @@ export function editarIngreso(db: Db, id: number, e: IngresoEditado, hoy: string
       registrados = reembolso(e.monto, { de: original, queda: restante(original, otros), tasaUsd: tasaDe(original) })
     } else {
       if (moneda === 'USD' && !(tipoCambio !== null && tipoCambio > 0)) throw new Error('Escribe un tipo de cambio mayor a cero')
-      registrados = montos(e.monto, { iva: conIva, retenciones: moneda === 'MXN' ? i.retenciones : 0, tasaUsd: tipoCambio })
+      registrados = montos(e.monto, { iva: conIva, retenciones: moneda === 'MXN' ? i.retenciones : 0, tasaUsd: moneda === 'USD' ? tipoCambio : null })
       const devuelto = 0 - reembolsos.reduce((s, r) => s + montoEn(r, moneda), 0)
       if (montoEn({ ...i, ...registrados }, moneda) < devuelto) throw new Error('El monto no puede ser menor a lo ya reembolsado')
     }

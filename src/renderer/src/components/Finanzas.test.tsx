@@ -431,7 +431,7 @@ describe('Editar ingreso', () => {
     await waitFor(() => expect(api.ingresoParaEditar).toHaveBeenCalledWith(3))
   })
 
-  it('opens a USD Ingreso in USD and saves its new fecha, the untouched rate exactly as stored', async () => {
+  it('opens a USD Ingreso in USD and saves its new fecha, keeping the untouched rate', async () => {
     montar('/finanzas/ingresos/884/editar')
     const monto = await screen.findByLabelText('Monto en USD (antes de IVA)')
     await waitFor(() => expect((monto as HTMLInputElement).value).toBe('260.00'))
@@ -443,7 +443,7 @@ describe('Editar ingreso', () => {
       expect(api.editarIngreso).toHaveBeenCalledWith(884, {
         fecha: '2019-03-15',
         monto: 26_000,
-        tipoCambio: 500_001 / 26_000,
+        tipoCambio: null,
         categoria: 'sin_factura',
         conIva: false,
         facturado: false,
@@ -471,6 +471,19 @@ describe('Editar ingreso', () => {
     expect(screen.getByRole('combobox', { name: 'Proyecto' })).toHaveProperty('disabled', true)
     expect(screen.getByRole('combobox', { name: 'Tipo' })).toHaveProperty('disabled', true)
     expect(screen.queryByLabelText('Tipo de cambio')).toBeNull()
+  })
+
+  it('saves nothing when the Ingreso could not be opened', async () => {
+    api.ingresoParaEditar = vi.fn(async () => {
+      throw new Error('Un ingreso cancelado no se edita')
+    })
+    montar('/finanzas/ingresos/884/editar')
+    expect((await screen.findByRole('alert')).textContent).toContain('Un ingreso cancelado no se edita')
+    fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '100' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('El ingreso no se ha abierto')
+    expect(api.editarIngreso).not.toHaveBeenCalled()
+    expect(api.nuevoIngreso).not.toHaveBeenCalled()
   })
 
   it('changes nothing when cancelled', async () => {

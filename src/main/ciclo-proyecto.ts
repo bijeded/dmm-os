@@ -1,3 +1,4 @@
+import { esFecha } from '../shared/fechas'
 import { MENSAJE_SIN_PAGAR, type AccionProyecto, type Categoria, type EstadoProyecto, type EtiquetaProyecto } from '../shared/dominio'
 
 export { MENSAJE_SIN_PAGAR }
@@ -48,7 +49,7 @@ const REGLAS: Record<AccionPorEstado, { en: readonly EstadoProyecto[]; mensaje: 
 export function exigirFechaFin(p: { estado: EstadoProyecto; fechaInicio: string | null }, fecha: string | null, hoy: string): string {
   if (p.estado !== 'completado' && p.estado !== 'cancelado') throw new Error('Solo un proyecto completado o cancelado tiene fecha de fin')
   if (!fecha) throw new Error('La fecha de fin no puede quedar vacía')
-  if (typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) throw new Error('Fecha inválida')
+  if (!esFecha(fecha)) throw new Error('Fecha inválida')
   if (fecha > hoy) throw new Error('La fecha de fin no puede ser posterior a hoy')
   if (p.fechaInicio !== null && fecha < p.fechaInicio) throw new Error('La fecha de fin no puede ser anterior a la fecha de inicio')
   return fecha

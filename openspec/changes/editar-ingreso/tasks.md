@@ -31,6 +31,6 @@
 
 ## 6. Review and checks
 
-- [ ] 6.1 Run `/code-review` on the branch diff and fix what it confirms.
-- [ ] 6.2 Run `/security-review`, since the change adds IPC channels (`contrato.ts`, `handlers.ts`) that write to the database, and fix what it confirms.
-- [ ] 6.3 Run `npm run typecheck`, `npm run lint` and `npm test`; all pass.
+- [x] 6.1 Run `/code-review` on the branch diff and fix what it confirms.
+- [x] 6.2 Run `/security-review`, since the change adds IPC channels (`contrato.ts`, `handlers.ts`) that write to the database, and fix what it confirms.
+- [x] 6.3 Run `npm run typecheck`, `npm run lint` and `npm test`; all pass.

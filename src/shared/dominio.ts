@@ -1032,7 +1032,10 @@ export interface IngresoEditado {
   fecha: string
   /** The subtotal, before IVA; for a Reembolso, the total it gives back. */
   monto: number
-  /** Pesos per USD of a USD Ingreso; `null` for one in pesos and for a Reembolso, which keeps its original's. */
+  /**
+   * Pesos per USD of a USD Ingreso: a new rate to record it at, or `null` to keep the one it was
+   * recorded at. Ignored for one in pesos and for a Reembolso, which keeps its original's.
+   */
   tipoCambio: number | null
   categoria: CategoriaIngreso
   /** 16% IVA on top; ignored for `sin_factura`. */
