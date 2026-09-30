@@ -7,6 +7,7 @@ import type { DmmApi } from '../../../shared/contrato'
 import { Cotizaciones } from './Cotizaciones'
 import { FichaCotizacion } from './FichaCotizacion'
 import { NuevaCotizacion } from './NuevaCotizacion'
+import { olvidarRecordado } from './recordado'
 
 const fila = (id: number, folio: string | null, contacto: string, cambios: Partial<FilaCotizacion> = {}): FilaCotizacion => ({
   id,
@@ -75,6 +76,7 @@ const montar = (ruta: string) => {
 }
 
 beforeEach(() => {
+  olvidarRecordado()
   api = {
     listar: vi.fn(async () => lista),
     ficha: vi.fn(async () => ficha),
@@ -131,6 +133,63 @@ describe('Cotizaciones', () => {
     fireEvent.click(within(filas()[1]).getByRole('button', { name: 'PDF' }))
     await waitFor(() => expect(api.abrirPdf).toHaveBeenCalledWith(2))
     expect(router.state.location.pathname).toBe('/cotizaciones')
+  })
+})
+
+describe('Cotizaciones, 20 a page', () => {
+  // 45 Cotizaciones, each with its own Contacto: the first 25 aceptadas, the rest enviadas.
+  const muchas = (sin: number[] = []): ListaCotizaciones => ({
+    ...lista,
+    cotizaciones: Array.from({ length: 45 }, (_, i) => fila(i + 1, String(100 + i + 1), `Contacto ${i + 1}`, { estado: i < 25 ? 'aceptada' : 'enviada' })).filter(
+      (c) => !sin.includes(c.id)
+    )
+  })
+  const rango = (texto: string) => screen.findByText(texto)
+  const siguiente = () => fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
+  const valor = (name: string) => (screen.getByRole('combobox', { name }) as HTMLSelectElement).value
+
+  beforeEach(() => {
+    vi.mocked(api.listar).mockResolvedValue(muchas())
+    montar('/cotizaciones')
+  })
+
+  it('pages the list at 20', async () => {
+    await rango('1–20 de 45')
+    expect(filas()).toHaveLength(20)
+    siguiente()
+    expect(screen.getByText('21–40 de 45')).toBeTruthy()
+  })
+
+  it('goes back to page 1 when a filter changes', async () => {
+    await rango('1–20 de 45')
+    siguiente()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Estado' }), { target: { value: 'aceptada' } })
+    expect(screen.getByText('1–20 de 25')).toBeTruthy()
+  })
+
+  it('opens as it was left after visiting a Cotización', async () => {
+    await rango('1–20 de 45')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Categoría' }), { target: { value: 'website' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Estado' }), { target: { value: 'aceptada' } })
+    siguiente()
+    expect(screen.getByText('21–25 de 25')).toBeTruthy()
+    fireEvent.click(filas()[0])
+    await waitFor(() => expect(router.state.location.pathname).toBe('/cotizaciones/21'))
+    await router.navigate('/cotizaciones')
+    await rango('21–25 de 25')
+    expect(valor('Categoría')).toBe('website')
+    expect(valor('Estado')).toBe('aceptada')
+  })
+
+  it('shows Todos for a remembered Contacto no longer in the list', async () => {
+    await rango('1–20 de 45')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Contacto' }), { target: { value: '1' } })
+    expect(screen.getByText('1–1 de 1')).toBeTruthy()
+    cleanup()
+    vi.mocked(api.listar).mockResolvedValue(muchas([1]))
+    montar('/cotizaciones')
+    await rango('1–20 de 44')
+    expect(valor('Contacto')).toBe('')
   })
 })
 

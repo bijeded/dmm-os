@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { ArchivoEnLab, ArchivoLab, CarpetaLab, VistaPreviaLab } from '../../../shared/dominio'
 import { diaLocal } from '../../../shared/fechas'
 import { dia } from '../../../shared/formato'
+import { PiePaginacion, usePaginacion } from './Paginacion'
+import { useRecordado } from './recordado'
 import { Aviso, mensaje, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { celdaCls, etiquetaCls, tituloCls } from './estilos'
@@ -26,9 +28,9 @@ interface Elegido {
 export function Lab() {
   const api = window.dmm.lab
   const [carpetas, setCarpetas] = useState<CarpetaLab[] | null>(null)
-  const [carpeta, setCarpeta] = useState<string | null>(null)
+  const [carpeta, setCarpeta] = useRecordado<string | null>('lab.carpeta', null)
   const [archivos, setArchivos] = useState<ArchivoLab[] | null>(null)
-  const [busqueda, setBusqueda] = useState('')
+  const [busqueda, setBusqueda] = useRecordado('lab.busqueda', '')
   const [encontrados, setEncontrados] = useState<ArchivoEnLab[] | null>(null)
   const [elegido, setElegido] = useState<Elegido | null>(null)
   const { error, setError, ocupado, correr } = useAccion()
@@ -37,39 +39,46 @@ export function Lab() {
   const ultimoElegido = useRef<string | null>(null)
 
   // Lab is re-read on every pick, so a folder added on disk shows up without leaving the screen.
-  // The first folder is picked on arrival.
+  // On arrival it opens the folder it was left on, or the first when that one is gone.
   const leer = async (nombre?: string) => {
     const c = await api.carpetas()
     setCarpetas(c)
-    const elegida = nombre ?? c[0]?.nombre
+    const elegida = nombre ?? (c.some((x) => x.nombre === carpeta) ? carpeta : c[0]?.nombre)
     if (!elegida) return
     setCarpeta(elegida)
     setArchivos(null)
     setArchivos(await api.archivos(elegida))
   }
 
-  useEffect(() => {
-    correr(() => leer())
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
-  }, [])
-
   const consulta = busqueda.trim()
 
-  // Searched as typed, like the other sections; not through `correr`, so typing never locks the screen.
-  const buscar = (valor: string) => {
-    setBusqueda(valor)
+  const consultar = (q: string) => {
     const n = ++ultimaBusqueda.current
-    const q = valor.trim()
-    if (!q) {
-      setEncontrados(null)
-      return
-    }
-    setError(null)
     api.buscar(q).then(
       (r) => n === ultimaBusqueda.current && setEncontrados(r),
       (e) => n === ultimaBusqueda.current && setError(mensaje(e))
     )
   }
+
+  // Searched as typed, like the other sections; not through `correr`, so typing never locks the screen.
+  const buscar = (valor: string) => {
+    setBusqueda(valor)
+    const q = valor.trim()
+    if (!q) {
+      ++ultimaBusqueda.current
+      setEncontrados(null)
+      return
+    }
+    setError(null)
+    consultar(q)
+  }
+
+  useEffect(() => {
+    correr(() => leer())
+    // A search it was left with is run again, so its results reflect the disk as it is now.
+    if (consulta) consultar(consulta)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
+  }, [])
 
   const elegirCarpeta = (nombre: string) => {
     buscar('')
@@ -91,6 +100,7 @@ export function Lab() {
   const abrir = (ruta: string) => correr(() => api.abrir(ruta))
 
   const filas: ArchivoEnLab[] | null = consulta ? encontrados : (archivos?.map((a) => ({ carpeta: carpeta ?? '', ...a })) ?? null)
+  const { visibles, pie } = usePaginacion(filas ?? [], 'lab', [carpeta, consulta])
 
   return (
     <>
@@ -165,7 +175,7 @@ export function Lab() {
                 </tr>
               </thead>
               <tbody>
-                {filas.map((a) => {
+                {visibles.map((a) => {
                   const ruta = `${a.carpeta}/${a.nombre}`
                   const esElegido = ruta === elegido?.ruta
                   return (
@@ -213,6 +223,7 @@ export function Lab() {
           {consulta && encontrados?.length === 0 && <p className="m-0 text-[13px] text-on-surface-muted">Ningún archivo coincide.</p>}
           {!consulta && archivos?.length === 0 && <p className="m-0 text-[13px] text-on-surface-muted">Sin archivos en esta carpeta todavía.</p>}
           {carpetas?.length === 0 && <p className="m-0 text-[13px] text-on-surface-muted">Lab/ no tiene carpetas todavía.</p>}
+          {(consulta || carpeta) && <PiePaginacion pie={pie} />}
 
           {(consulta || carpeta) && (
             <section

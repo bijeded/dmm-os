@@ -3,12 +3,11 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { ESTADOS_CONTACTO, NOMBRES_ESTADO_CONTACTO, type EstadoContacto, type ListaContactos } from '../../../shared/dominio'
 import { normalizar, pesos } from '../../../shared/formato'
 import { FormContacto } from './FormContacto'
+import { PiePaginacion, usePaginacion } from './Paginacion'
+import { useRecordado } from './recordado'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { celdaCls, etiquetaCls, tituloCls } from './estilos'
-
-const POR_PAGINA = 10
-
 
 const plurales: Record<EstadoContacto, string> = {
   lead_frio: 'Leads fríos',
@@ -21,9 +20,8 @@ const plurales: Record<EstadoContacto, string> = {
 export function Contactos() {
   const navigate = useNavigate()
   const [lista, setLista] = useState<ListaContactos | null>(null)
-  const [busqueda, setBusqueda] = useState('')
-  const [estado, setEstado] = useState<EstadoContacto | ''>('')
-  const [pagina, setPagina] = useState(0)
+  const [busqueda, setBusqueda] = useRecordado('contactos.busqueda', '')
+  const [estado, setEstado] = useRecordado<EstadoContacto | ''>('contactos.estado', '')
   const [params, setParams] = useSearchParams()
   // Inicio's Nuevo contacto lands here with the form open; the flag is dropped so back or reload won't reopen it.
   const [nuevo, setNuevo] = useState(params.has('nuevo'))
@@ -42,9 +40,7 @@ export function Contactos() {
     )
   }, [lista, busqueda, estado])
 
-  const paginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA))
-  const actual = Math.min(pagina, paginas - 1)
-  const visibles = filtrados.slice(actual * POR_PAGINA, (actual + 1) * POR_PAGINA)
+  const { visibles, pie } = usePaginacion(filtrados, 'contactos', [busqueda, estado])
 
   const exportar = () =>
     correr(async () => {
@@ -88,19 +84,13 @@ export function Contactos() {
               type="search"
               placeholder="Buscar nombre, email…"
               value={busqueda}
-              onChange={(e) => {
-                setBusqueda(e.target.value)
-                setPagina(0)
-              }}
+              onChange={(e) => setBusqueda(e.target.value)}
               className="srch h-9 w-64 rounded-control border border-border-strong bg-surface-sunken px-3 text-[13px] text-on-surface"
             />
             <select
               aria-label="Estado"
               value={estado}
-              onChange={(e) => {
-                setEstado(e.target.value as EstadoContacto | '')
-                setPagina(0)
-              }}
+              onChange={(e) => setEstado(e.target.value as EstadoContacto | '')}
               className="h-9 rounded-control border border-border-strong bg-surface-sunken px-2 text-[13px] text-on-surface"
             >
               <option value="">Estado: Todos</option>
@@ -142,19 +132,7 @@ export function Contactos() {
           </table>
           {lista && filtrados.length === 0 && <p className="m-0 text-[13px] text-on-surface-muted">Ningún contacto coincide.</p>}
 
-          <div className="flex items-center justify-between gap-3 text-[12px] text-on-surface-muted">
-            <span>
-              {filtrados.length > 0 ? `${actual * POR_PAGINA + 1}–${actual * POR_PAGINA + visibles.length} de ${filtrados.length}` : ''}
-            </span>
-            <div className="flex gap-2">
-              <Button variant="ghost" disabled={actual === 0} onClick={() => setPagina(actual - 1)}>
-                Anterior
-              </Button>
-              <Button variant="ghost" disabled={actual >= paginas - 1} onClick={() => setPagina(actual + 1)}>
-                Siguiente
-              </Button>
-            </div>
-          </div>
+          <PiePaginacion pie={pie} />
           <Aviso error={error} />
         </section>
 

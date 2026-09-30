@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ArchivoEnLab, ArchivoLab, CarpetaLab } from '../../../shared/dominio'
 import type { DmmApi } from '../../../shared/contrato'
 import { dia } from '../../../shared/formato'
 import { Lab } from './Lab'
+import { olvidarRecordado } from './recordado'
 
 const carpetas: CarpetaLab[] = [
   { nombre: 'Benchmarks', archivos: 2 },
@@ -41,6 +42,7 @@ const filas = () => within(screen.getByRole('table')).getAllByRole('row').slice(
 const vistaPrevia = () => screen.getByRole('region', { name: 'Vista previa' })
 const buscar = (consulta: string) => fireEvent.change(screen.getByRole('searchbox'), { target: { value: consulta } })
 
+beforeEach(olvidarRecordado)
 afterEach(cleanup)
 
 describe('Lab', () => {
@@ -195,5 +197,59 @@ describe('Lab', () => {
     await screen.findByText('benchmark-landing-hoteles.md')
     fireEvent.click(screen.getByRole('button', { name: 'benchmark-landing-hoteles.md' }))
     expect(screen.getByRole('button', { name: 'Abrir en Finder' }).hasAttribute('disabled')).toBe(false)
+  })
+})
+
+describe('Lab, 20 a page', () => {
+  const archivo = (n: number): ArchivoLab => ({ nombre: `nota-${String(n).padStart(2, '0')}.md`, tipo: 'MD', bytes: 512, modificado: new Date(2026, 8, 1, 12).toISOString() })
+  // Benchmarks holds 25 files, Design Systems 22; the search finds 21.
+  const archivos = vi.fn(async (carpeta: string) => Array.from({ length: carpeta === 'Benchmarks' ? 25 : 22 }, (_, i) => archivo(i + 1)))
+  const busca = vi.fn(async () => Array.from({ length: 21 }, (_, i) => ({ carpeta: 'Newsletter', ...archivo(i + 1) })))
+  const siguiente = () => fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
+
+  beforeEach(async () => {
+    montar({ archivos, buscar: busca })
+    await screen.findByText('1–20 de 25')
+  })
+
+  it('pages a folder at 20', () => {
+    expect(filas()).toHaveLength(20)
+    siguiente()
+    expect(screen.getByText('21–25 de 25')).toBeTruthy()
+  })
+
+  it('goes back to page 1 when another folder is picked', async () => {
+    siguiente()
+    fireEvent.click(screen.getByRole('button', { name: /Design Systems/ }))
+    expect(await screen.findByText('1–20 de 22')).toBeTruthy()
+  })
+
+  it('opens on the folder, search and page it was left on', async () => {
+    fireEvent.click(screen.getByRole('button', { name: /Design Systems/ }))
+    await screen.findByText('1–20 de 22')
+    siguiente()
+    cleanup()
+    montar({ archivos, buscar: busca })
+    expect(await screen.findByText('21–22 de 22')).toBeTruthy()
+    expect(api.archivos).toHaveBeenLastCalledWith('Design Systems')
+
+    buscar('nota')
+    await screen.findByText('1–20 de 21')
+    siguiente()
+    cleanup()
+    montar({ archivos, buscar: busca })
+    expect(await screen.findByText('21–21 de 21')).toBeTruthy()
+    expect(api.buscar).toHaveBeenCalledWith('nota')
+    expect((screen.getByRole('searchbox') as HTMLInputElement).value).toBe('nota')
+  })
+
+  it('picks the first folder when the one it was left on is gone', async () => {
+    fireEvent.click(screen.getByRole('button', { name: /Design Systems/ }))
+    await screen.findByText('1–20 de 22')
+    siguiente()
+    cleanup()
+    montar({ archivos, buscar: busca, carpetas: vi.fn(async () => carpetas.filter((c) => c.nombre !== 'Design Systems')) })
+    expect(await screen.findByText('1–20 de 25')).toBeTruthy()
+    expect(api.archivos).toHaveBeenLastCalledWith('Benchmarks')
   })
 })

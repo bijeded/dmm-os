@@ -20,7 +20,9 @@ import {
   type UsoTokens
 } from '../../../shared/dominio'
 import { dia, monto, normalizar, pesos } from '../../../shared/formato'
+import { PiePaginacion, usePaginacion } from './Paginacion'
 import { NOMBRES_CARPETA } from './Proyectos'
+import { siHayOpcion, useRecordado } from './recordado'
 import { Aviso, Cifra, fecha, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { campoCls, celdaCls, etiquetaCls, tituloCls } from './estilos'
@@ -39,7 +41,7 @@ const porcentaje = (x: number) => x.toLocaleString('es-MX', { style: 'percent', 
  */
 export function Ai() {
   const api = window.dmm.ai
-  const [periodo, setPeriodo] = useState<PeriodoAi>('mes')
+  const [periodo, setPeriodo] = useRecordado<PeriodoAi>('ai.periodo', 'mes')
   const [resumen, setResumen] = useState<ResumenAi | null>(null)
   const { error, ocupado, correr } = useAccion()
 
@@ -140,7 +142,7 @@ export function Ai() {
 
       {resumen && (
         <Seccion id="ai-proyectos" titulo="Proyectos AI">
-          <ProyectosAi filas={resumen.proyectos} sinProyecto={resumen.sinProyecto} />
+          <ProyectosAi filas={resumen.proyectos} sinProyecto={resumen.sinProyecto} periodo={periodo} />
         </Seccion>
       )}
 
@@ -275,14 +277,14 @@ const costoApi = (u: UsoTokens) => (u.costoApiMxn === null ? monto(u.costoUsd, '
  * filterable. Usage in no Proyecto's folder closes the list as Sin proyecto while nothing is
  * filtered. A row opens its Proyecto; Abrir reveals its folder.
  */
-function ProyectosAi({ filas, sinProyecto }: Pick<ResumenAi, 'sinProyecto'> & { filas: FilaProyectoAi[] }) {
+function ProyectosAi({ filas, sinProyecto, periodo }: Pick<ResumenAi, 'sinProyecto'> & { filas: FilaProyectoAi[]; periodo: PeriodoAi }) {
   const navigate = useNavigate()
-  const [busqueda, setBusqueda] = useState('')
-  const [cliente, setCliente] = useState('')
-  const [anio, setAnio] = useState('')
-  const [etiqueta, setEtiqueta] = useState<EtiquetaProyecto | ''>('')
-  const [uso, setUso] = useState<keyof typeof USOS_TOKENS | ''>('')
-  const [estado, setEstado] = useState<EstadoProyecto | ''>('')
+  const [busqueda, setBusqueda] = useRecordado('ai.busqueda', '')
+  const [clienteGuardado, setCliente] = useRecordado('ai.cliente', '')
+  const [anioGuardado, setAnio] = useRecordado('ai.anio', '')
+  const [etiqueta, setEtiqueta] = useRecordado<EtiquetaProyecto | ''>('ai.etiqueta', '')
+  const [uso, setUso] = useRecordado<keyof typeof USOS_TOKENS | ''>('ai.uso', '')
+  const [estado, setEstado] = useRecordado<EstadoProyecto | ''>('ai.estado', '')
   const { error, correr } = useAccion()
 
   const clientes = useMemo(
@@ -290,6 +292,8 @@ function ProyectosAi({ filas, sinProyecto }: Pick<ResumenAi, 'sinProyecto'> & { 
     [filas]
   )
   const anios = useMemo(() => [...new Set(filas.flatMap((p) => (p.fechaInicio ? [p.fechaInicio.slice(0, 4)] : [])))].sort().reverse(), [filas])
+  const cliente = siHayOpcion(clienteGuardado, ['personal', ...clientes.map(([id]) => String(id))])
+  const anio = siHayOpcion(anioGuardado, anios)
   const q = normalizar(busqueda.trim())
   const filtrando = Boolean(q || cliente || anio || etiqueta || uso || estado)
   const filtrados = filas.filter(
@@ -301,6 +305,8 @@ function ProyectosAi({ filas, sinProyecto }: Pick<ResumenAi, 'sinProyecto'> & { 
       (!estado || p.estado === estado) &&
       (!q || [p.referencia, p.nombre, p.contacto, p.clienteFinal].some((v) => v && normalizar(v).includes(q)))
   )
+
+  const { visibles, pie } = usePaginacion(filtrados, 'ai.proyectos', [periodo, q, cliente, anio, etiqueta, uso, estado])
 
   if (filas.length === 0) return <p className="m-0 text-[13px] text-on-surface-muted">Ningún proyecto en la categoría AI.</p>
   return (
@@ -367,7 +373,7 @@ function ProyectosAi({ filas, sinProyecto }: Pick<ResumenAi, 'sinProyecto'> & { 
           </tr>
         </thead>
         <tbody>
-          {filtrados.map((p) => (
+          {visibles.map((p) => (
             <tr key={p.id} className="cursor-pointer" onClick={() => navigate(`/proyectos/${p.id}`)}>
               <td data-label="Proyecto" className={celdaCls}>
                 {p.nombre}
@@ -437,6 +443,7 @@ function ProyectosAi({ filas, sinProyecto }: Pick<ResumenAi, 'sinProyecto'> & { 
         </tbody>
       </table>
       {filtrados.length === 0 && <p className="m-0 text-[13px] text-on-surface-muted">Ningún proyecto AI coincide.</p>}
+      <PiePaginacion pie={pie} />
       <Aviso error={error} />
     </>
   )
