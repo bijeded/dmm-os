@@ -26,18 +26,22 @@ A paginated table SHALL show at most 20 rows at a time. Below the table it SHALL
 - **THEN** the table shows 20 rows and the footer reads `1–20 de 110`
 
 ### Requirement: Which tables page
-These tables SHALL be paginated: the Contactos list; the Cotizaciones list; the Proyectos list; in Finanzas, Cobrado, Por cobrar, Costos pendientes, Ingresos del periodo and Costos del periodo, each with its own footer and page; the Lab file list, for both a folder and search results; the Historial on the Ficha del Contacto; and Proyectos AI in AI. No other table or list SHALL change.
+These tables SHALL be paginated: the Contactos list; the Cotizaciones list; the Proyectos list; in Finanzas, Cobrado, Por cobrar, Costos pendientes, Ingresos del periodo and Costos del periodo, each with its own footer and page; the Lab file list, for both a folder and search results; the Historial on the Ficha del Contacto; Proyectos AI in AI; and on Inicio, Cobros, Costos pendientes, Proyectos en curso, Cotizaciones abiertas and Tareas, each with its own footer and page. No other table or list SHALL change.
 
 #### Scenario: Finanzas tables page on their own
 - **WHEN** the owner moves Ingresos del periodo to page 3
 - **THEN** Cobrado, Por cobrar, Costos pendientes and Costos del periodo stay on the page each was on
 
 #### Scenario: Short lists stay whole
-- **WHEN** the owner opens Contactos, Finanzas or Inicio
-- **THEN** Top 10 por valor, Próximos pagos and Inicio's cards show their rows as before, with no footer
+- **WHEN** the owner opens Contactos or Finanzas
+- **THEN** Top 10 por valor and Próximos pagos show their rows as before, with no footer
+
+#### Scenario: Inicio's cards page
+- **WHEN** Inicio has 30 Proyectos en curso and 5 Cotizaciones abiertas
+- **THEN** Proyectos en curso shows 20 rows with `1–20 de 30`, and Cotizaciones abiertas shows all 5 with `1–5 de 5`
 
 ### Requirement: Changing what a table shows goes back to page 1
-Changing a table's search text, one of its filters, Finanzas' or AI's Periodo, Por cobrar's Actual/Vencida choice, the Historial filter, or the Lab folder SHALL show that table from page 1. A Periodo or Finanzas search change SHALL do so for every table it narrows. Paging SHALL NOT change the search or filters.
+Changing a table's search text, one of its filters, Finanzas' or AI's Periodo, Por cobrar's Actual/Vencida choice, the Historial filter, the Lab folder, or Inicio's Cobros or Tareas tab SHALL show that table from page 1. A Periodo or Finanzas search change SHALL do so for every table it narrows. Paging SHALL NOT change the search or filters.
 
 #### Scenario: Filtering from a later page
 - **WHEN** the owner is on page 4 of Cotizaciones and picks `Estado: Aceptada`
@@ -47,12 +51,16 @@ Changing a table's search text, one of its filters, Finanzas' or AI's Periodo, P
 - **WHEN** Cobrado and Ingresos del periodo are on page 2 and the owner changes the Periodo
 - **THEN** every Finanzas table shows page 1 of the new Periodo
 
+#### Scenario: Switching an Inicio tab
+- **WHEN** Tareas is on page 2 of Pendientes and the owner picks Hechas
+- **THEN** Tareas shows page 1 of Hechas
+
 #### Scenario: A filter on one Finanzas table leaves the others
 - **WHEN** Ingresos del periodo is on page 2 and the owner switches Por cobrar to Vencida
 - **THEN** Por cobrar shows page 1 and Ingresos del periodo stays on page 2
 
 ### Requirement: A table opens as it was left while the app is open
-Leaving a section and coming back, by the header path, the sidebar, or from a record opened out of the table, SHALL show each table with the search, filters and page it had. Finanzas SHALL also keep its Periodo and Por cobrar's Actual/Vencida choice, and AI its Periodo. The Historial SHALL keep its filter and page per Contacto, so another Contacto's Ficha opens its own Historial as it was left, or on page 1 with the Todo filter the first time. Lab SHALL keep its folder, search text and page, and SHALL re-read them on return, so files added or removed on disk show. Coming back SHALL NOT move a table to page 1.
+Leaving a section and coming back, by the header path, the sidebar, or from a record opened out of the table, SHALL show each table with the search, filters and page it had. Finanzas SHALL also keep its Periodo and Por cobrar's Actual/Vencida choice, AI its Periodo, and Inicio its Cobros and Tareas tabs. The Historial SHALL keep its filter and page per Contacto, so another Contacto's Ficha opens its own Historial as it was left, or on page 1 with the Todo filter the first time. Lab SHALL keep its folder, search text and page, and SHALL re-read them on return, so files added or removed on disk show. Coming back SHALL NOT move a table to page 1.
 
 #### Scenario: Back from a Cotización
 - **WHEN** the owner, on page 3 of Cotizaciones filtered to `Categoría: Website`, opens a Cotización and returns through `Cotizaciones` in the header path

@@ -8,6 +8,8 @@ import {
   type ResumenFinanzas
 } from '../../../shared/dominio'
 import { dia, folioDmm, pesos } from '../../../shared/formato'
+import { PiePaginacion, usePaginacion } from './Paginacion'
+import { useRecordado } from './recordado'
 import { Aviso, Cifra, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { celdaCls, etiquetaCls, tituloCls } from './estilos'
@@ -26,9 +28,11 @@ export function Inicio() {
   const [proyectos, setProyectos] = useState<FilaProyecto[]>([])
   const [cotizaciones, setCotizaciones] = useState<FilaCotizacion[]>([])
   const [tareas, setTareas] = useState<ListaTareas | null>(null)
-  const [cobros, setCobros] = useState<Cobros>('mes')
-  const [hechas, setHechas] = useState(false)
+  const [cobros, setCobros] = useRecordado<Cobros>('inicio.vistaCobros', 'mes')
+  const [hechas, setHechas] = useRecordado('inicio.hechas', false)
   const [nueva, setNueva] = useState('')
+  // The Tarea just added, so its page is shown even when it lands past the one in view.
+  const [agregada, setAgregada] = useState<number | null>(null)
   const { error, ocupado, correr } = useAccion()
 
   useEffect(() => {
@@ -52,6 +56,7 @@ export function Inicio() {
     tarea(async () => {
       const lista = await window.dmm.tareas.agregar(nueva)
       setNueva('')
+      setAgregada(lista.pendientes.find((t) => !tareas?.pendientes.some((p) => p.id === t.id))?.id ?? null)
       return lista
     })
   }
@@ -99,6 +104,8 @@ export function Inicio() {
               ))}
             </div>
             <Tabla
+              clave="inicio.cobros"
+              filtros={[cobros]}
               vacio={{ mes: 'Nada por cobrar este mes.', vencidos: 'Nada vencido.', porFacturar: 'Nada por facturar.' }[cobros]}
               columnas={['Fecha', 'Contacto', MONTO]}
               filas={(resumen?.cobros[cobros] ?? []).map((i) => ({
@@ -117,6 +124,7 @@ export function Inicio() {
 
           <Tarjeta id="inicio-costos" titulo="Costos pendientes">
             <Tabla
+              clave="inicio.costos"
               vacio="Nada por pagar."
               columnas={['Vence', 'Costo', MONTO]}
               filas={(resumen?.costosPendientes ?? []).map((c) => ({
@@ -135,6 +143,7 @@ export function Inicio() {
 
           <Tarjeta id="inicio-proyectos" titulo="Proyectos en curso">
             <Tabla
+              clave="inicio.proyectos"
               vacio="Ningún proyecto en curso."
               columnas={['Ref.', 'Proyecto', 'Contacto']}
               filas={proyectos.map((p) => ({
@@ -147,6 +156,7 @@ export function Inicio() {
 
           <Tarjeta id="inicio-cotizaciones" titulo="Cotizaciones abiertas">
             <Tabla
+              clave="inicio.cotizaciones"
               vacio="Ninguna cotización abierta."
               columnas={['Folio', 'Cotización', 'Estado', MONTO]}
               filas={cotizaciones.map((c) => ({
@@ -194,33 +204,32 @@ export function Inicio() {
               </Button>
             </form>
           )}
-          {hechas ? (
-            <Tabla
-              vacio={`Nada hecho en los últimos ${tareas?.diasHechas ?? 0} días.`}
-              columnas={['Tarea', 'Registrada', 'Hecha']}
-              filas={(tareas?.hechas ?? []).map((t) => ({ key: t.id, celdas: [t.texto, dia(t.fechaRegistro), dia(t.fechaHecha!)] }))}
-            />
-          ) : (
-            <Tabla
-              vacio="Nada pendiente."
-              columnas={['Tarea', 'Registrada', '']}
-              filas={(tareas?.pendientes ?? []).map((t) => ({
-                key: t.id,
-                celdas: [
-                  t.texto,
-                  dia(t.fechaRegistro),
-                  <span className="flex gap-3">
-                    <button type="button" disabled={ocupado} className={accionCls} onClick={() => tarea(() => window.dmm.tareas.completar(t.id))}>
-                      Hecha
-                    </button>
-                    <button type="button" disabled={ocupado} className={accionCls} onClick={() => tarea(() => window.dmm.tareas.borrar(t.id))}>
-                      Borrar
-                    </button>
-                  </span>
-                ]
-              }))}
-            />
-          )}
+          <Tabla
+            clave="inicio.tareas"
+            filtros={[hechas]}
+            enfocar={hechas ? null : agregada}
+            vacio={hechas ? `Nada hecho en los últimos ${tareas?.diasHechas ?? 0} días.` : 'Nada pendiente.'}
+            columnas={hechas ? ['Tarea', 'Registrada', 'Hecha'] : ['Tarea', 'Registrada', '']}
+            filas={
+              hechas
+                ? (tareas?.hechas ?? []).map((t) => ({ key: t.id, celdas: [t.texto, dia(t.fechaRegistro), dia(t.fechaHecha!)] }))
+                : (tareas?.pendientes ?? []).map((t) => ({
+                    key: t.id,
+                    celdas: [
+                      t.texto,
+                      dia(t.fechaRegistro),
+                      <span className="flex gap-3">
+                        <button type="button" disabled={ocupado} className={accionCls} onClick={() => tarea(() => window.dmm.tareas.completar(t.id))}>
+                          Hecha
+                        </button>
+                        <button type="button" disabled={ocupado} className={accionCls} onClick={() => tarea(() => window.dmm.tareas.borrar(t.id))}>
+                          Borrar
+                        </button>
+                      </span>
+                    ]
+                  }))
+            }
+          />
         </Tarjeta>
       </div>
     </>
@@ -244,30 +253,57 @@ const MONTO: Columna = { titulo: 'Monto', monto: true }
 const titulo = (c: Columna) => (typeof c === 'string' ? c : c.titulo)
 const esMonto = (c: Columna | undefined) => typeof c === 'object'
 
-function Tabla({ columnas, filas, vacio }: { columnas: Columna[]; filas: { key: number; celdas: ReactNode[]; ir?: () => void }[]; vacio: string }) {
-  if (filas.length === 0) return <p className="m-0 text-[13px] text-on-surface-muted">{vacio}</p>
+/** Pages itself under `clave`; changing `filtros` (a tab) shows page 1, and a new `enfocar` row key shows that row's page. */
+function Tabla({
+  clave,
+  filtros = [],
+  enfocar = null,
+  columnas,
+  filas,
+  vacio
+}: {
+  clave: string
+  filtros?: unknown[]
+  enfocar?: number | null
+  columnas: Columna[]
+  filas: { key: number; celdas: ReactNode[]; ir?: () => void }[]
+  vacio: string
+}) {
+  const { visibles, pie, mostrar } = usePaginacion(filas, clave, filtros)
+  const indice = enfocar === null ? -1 : filas.findIndex((f) => f.key === enfocar)
+  useEffect(() => {
+    if (indice >= 0) mostrar(indice)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when a new row is to be shown, not on every reorder
+  }, [enfocar])
   return (
-    <table className="tbl w-full border-collapse text-[13px]">
-      <thead>
-        <tr className={etiquetaCls}>
-          {columnas.map((c, k) => (
-            <th key={k} className={`${celdaCls} ${esMonto(c) ? 'text-right' : ''}`}>
-              {titulo(c)}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {filas.map((f) => (
-          <tr key={f.key} className={f.ir ? 'cursor-pointer' : undefined} onClick={f.ir}>
-            {f.celdas.map((celda, k) => (
-              <td key={k} data-label={(columnas[k] && titulo(columnas[k])) || undefined} className={`${celdaCls} ${esMonto(columnas[k]) ? 'text-right font-mono text-[12px]' : ''}`}>
-                {celda}
-              </td>
+    <>
+      {filas.length === 0 ? (
+        <p className="m-0 text-[13px] text-on-surface-muted">{vacio}</p>
+      ) : (
+        <table className="tbl w-full border-collapse text-[13px]">
+          <thead>
+            <tr className={etiquetaCls}>
+              {columnas.map((c, k) => (
+                <th key={k} className={`${celdaCls} ${esMonto(c) ? 'text-right' : ''}`}>
+                  {titulo(c)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {visibles.map((f) => (
+              <tr key={f.key} className={f.ir ? 'cursor-pointer' : undefined} onClick={f.ir}>
+                {f.celdas.map((celda, k) => (
+                  <td key={k} data-label={(columnas[k] && titulo(columnas[k])) || undefined} className={`${celdaCls} ${esMonto(columnas[k]) ? 'text-right font-mono text-[12px]' : ''}`}>
+                    {celda}
+                  </td>
+                ))}
+              </tr>
             ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+          </tbody>
+        </table>
+      )}
+      <PiePaginacion pie={pie} />
+    </>
   )
 }

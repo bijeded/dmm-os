@@ -60,8 +60,19 @@
   - A filter or Periodo change shows page 1
   - Filters, Periodo and page survive a remount
 
-## 5. Review and final checks
+## 5. Inicio
 
-- [x] 5.1 Run `/code-review` on the branch diff, and fix what it confirms
-- [x] 5.2 Run `/security-review`, since the change touches the Lab screen (folder and search reads through `window.dmm.lab`), and fix what it confirms
-- [x] 5.3 Run `npm run typecheck`, `npm run lint` and `npm test`. All three must pass
+- [x] 5.1 Give Inicio's `Tabla` `clave` and `filtros` props so Cobros, Costos pendientes, Proyectos en curso, Cotizaciones abiertas and Tareas each page on their own, and keep the Cobros and Tareas tabs with `useRecordado` (design D4). Verify in `src/renderer/src/components/Inicio.test.tsx`:
+  - Each card pages at 20 and shows its footer, even with a few rows
+  - Switching the Cobros tab or the Tareas tab shows page 1
+  - Marking a Tarea Hecha keeps the page
+  - Adding a Tarea shows the page that holds it
+  - Tabs and pages survive a remount
+
+## 6. Review and final checks
+
+- [x] 6.1 Run `/code-review` on the branch diff, and fix what it confirms
+- [x] 6.2 Run `/security-review`, since the change touches the Lab screen (folder and search reads through `window.dmm.lab`), and fix what it confirms
+- [x] 6.3 Run `npm run typecheck`, `npm run lint` and `npm test`. All three must pass
+- [x] 6.4 Run `/code-review` on the Inicio diff, and fix what it confirms (no `/security-review`: Inicio touches no sensitive area)
+- [x] 6.5 Run `npm run typecheck`, `npm run lint` and `npm test` again. All three must pass

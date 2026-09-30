@@ -7,7 +7,7 @@ Every long table in the app should read 20 rows at a time and open where the own
 ## What Changes
 
 - One pager for every long table: 20 rows per page and a footer that always shows `a–b de N` · `Anterior` · `Siguiente`, the one Contactos has today.
-- Tables that get it: Contactos, Cotizaciones, Proyectos; in Finanzas, Cobrado, Por cobrar, Costos pendientes, Ingresos del periodo and Costos del periodo; the Lab file list; the Historial on the Ficha del Contacto; Proyectos AI.
+- Tables that get it: Contactos, Cotizaciones, Proyectos; in Finanzas, Cobrado, Por cobrar, Costos pendientes, Ingresos del periodo and Costos del periodo; the Lab file list; the Historial on the Ficha del Contacto; Proyectos AI; and on Inicio, Cobros, Costos pendientes, Proyectos en curso, Cotizaciones abiertas and Tareas.
 - **BREAKING (UI)**: Contactos goes from 10 rows per page to 20.
 - Each table remembers its search, filters and page while the app is open. It opens as it was left, however the owner comes back (header path, sidebar). Finanzas and AI also remember their Periodo, and Finanzas remembers its Por cobrar Actual/Vencida choice. The Historial page is remembered per Contacto.
 - Changing a search, filter or Periodo goes back to page 1. Coming back to a table does not.
@@ -29,7 +29,7 @@ None. No existing spec states how many rows a table shows or whether its filters
 - Loading pages from the main process. The lists are already read whole over IPC, and the renderer slices them.
 - A page-size selector, page-number buttons, or jumping to a page.
 - Remembering transient UI: an open dialog, the inline Reembolso form, the Lab preview, a half-filled form.
-- Paginating short fixed lists: Inicio's cards, Próximos pagos, Top 10 por valor, Por categoría, AI Suscripciones and Asignación, the Ficha's Archivos, Logs.
+- Paginating short fixed lists: Próximos pagos, Top 10 por valor, Por categoría, AI Suscripciones and Asignación, the Ficha's Archivos, Logs.
 - The cramped Cobrado layout in Finanzas (dates and row actions wrapping in the narrow column).
 
 ## Terms
