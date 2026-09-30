@@ -15,16 +15,20 @@ import type { EleccionAceptacionTardia, FichaCotizacion, OpcionesAceptacionTardi
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 
 /** The Proyectos an imported Cotización may have led to: its Contacto's, with no Cotización and not cancelled. */
+const elegible = (contactoId: number) => and(eq(proyectos.contactoId, contactoId), isNull(proyectos.cotizacionId), ne(proyectos.estado, 'cancelado'))
+
 const proyectosSinCotizacion = (db: Db | Tx, contactoId: number) =>
   db
     .select({ id: proyectos.id, nombre: proyectos.nombre, estado: proyectos.estado })
     .from(proyectos)
-    .where(and(eq(proyectos.contactoId, contactoId), isNull(proyectos.cotizacionId), ne(proyectos.estado, 'cancelado')))
+    .where(elegible(contactoId))
     .orderBy(asc(proyectos.nombre), asc(proyectos.id))
     .all()
 
+/** What the dialog offers; only for a Cotización the Aceptación tardía allows, so the two never disagree. */
 export function opcionesAceptacionTardia(db: Db, id: number): OpcionesAceptacionTardia {
   const c = leer(db, id)
+  exigirCotizacion('aceptarTarde', c.estado, contexto(db, id))
   return { importado: c.importado, moneda: c.moneda, proyectos: c.importado ? proyectosSinCotizacion(db, c.contactoId) : [] }
 }
 
@@ -39,16 +43,24 @@ export function aceptarTarde(db: Db, root: string, id: number, hoy: string, elec
 
   if (!('proyectoId' in eleccion)) throw new Error('Elige el proyecto al que llevó la cotización')
   db.transaction((tx) => {
-    tx.update(cotizaciones).set({ estado: 'aceptada' }).where(eq(cotizaciones.id, id)).run()
+    const { changes } = tx
+      .update(cotizaciones)
+      .set({ estado: 'aceptada' })
+      .where(and(eq(cotizaciones.id, id), eq(cotizaciones.estado, c.estado)))
+      .run()
+    if (changes !== 1) throw new Error('La cotización cambió; vuelve a abrirla')
     if (eleccion.proyectoId === 'nuevo') {
       proyectoDeCotizacionAceptada(tx, c)
     } else {
       // Checked inside the transaction: the Proyecto may have taken a Cotización since the dialog opened.
-      const elegido = proyectosSinCotizacion(tx, c.contactoId).find((p) => p.id === eleccion.proyectoId)
+      const elegido = tx
+        .select()
+        .from(proyectos)
+        .where(and(eq(proyectos.id, eleccion.proyectoId), elegible(c.contactoId)))
+        .get()
       if (!elegido) throw new Error('Ese proyecto ya no se puede elegir')
-      const p = tx.select().from(proyectos).where(eq(proyectos.id, elegido.id)).get()
       tx.update(proyectos)
-        .set({ cotizacionId: id, ...heredarDeCotizacion(p, c) })
+        .set({ cotizacionId: id, ...heredarDeCotizacion(elegido, c) })
         .where(eq(proyectos.id, elegido.id))
         .run()
     }

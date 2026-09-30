@@ -174,7 +174,13 @@ export function registrarAceptacion(db: Db, root: string, c: typeof cotizaciones
   const plan = planCobro(c, hoy, tipoCambio)
 
   transaccionConPeriodos(db, hoy, (tx) => {
-    tx.update(cotizaciones).set({ estado: 'aceptada', tipoCambio: plan.tipoCambio }).where(eq(cotizaciones.id, id)).run()
+    // Only from the estado its caller's guard judged: a quote accepted or cancelled since is left alone.
+    const { changes } = tx
+      .update(cotizaciones)
+      .set({ estado: 'aceptada', tipoCambio: plan.tipoCambio })
+      .where(and(eq(cotizaciones.id, id), eq(cotizaciones.estado, c.estado)))
+      .run()
+    if (changes !== 1) throw new Error('La cotización cambió; vuelve a abrirla')
     const proyectoId = tx
       .insert(proyectos)
       .values({ nombre: c.nombre ?? `Cotización ${folioDe(c)}`, contactoId: c.contactoId, cotizacionId: id, categoria: c.categoria, fechaInicio: hoy })

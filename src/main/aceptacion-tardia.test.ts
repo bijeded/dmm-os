@@ -99,6 +99,11 @@ describe('opciones de la Aceptación tardía', () => {
     proyectoDe()
     expect(opcionesAceptacionTardia(db, await expirada())).toEqual({ importado: false, moneda: 'MXN', proyectos: [] })
   })
+
+  it('refuses a Cotización the Aceptación tardía does not allow, as the action does', () => {
+    proyectoDe()
+    expect(() => opcionesAceptacionTardia(db, importada({ estado: 'aceptada' }))).toThrow('expirada o rechazada')
+  })
 })
 
 describe('Aceptación tardía de una Cotización hecha en la app', () => {

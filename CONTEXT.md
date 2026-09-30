@@ -59,7 +59,7 @@ Taxes the payer withholds from an invoice (TotalImpuestosRetenidos), kept apart 
 The recorded amounts of an Ingreso or Costo: subtotal, IVA, retenciones, total (subtotal + IVA − retenciones), and the USD original when there is one. Built only by the money module (`dinero`), which also splits an amount into parts that add up. The 16% IVA rule sits beside it in the shared money rules (`shared/montos`) so the Cotización preview uses the same one.
 
 **Aceptación tardía**:
-Marking an expirada or rechazada Cotización aceptada, from its Ficha (*Marcar como aceptada…*), when the Contacto took it after all. One made in the app is accepted as a sent one is, with its Plan de cobro dated that day, a Proyecto en curso and its folder. An imported one records no Ingresos or Costos (ADR-0002, ADR-0004): it links one of its Contacto's Proyectos that has no Cotización, or creates a completado Proyecto, as the folder scan does for an accepted Cotización with no folder, with its Sugerencias *ubicación* and *partidas*. Once aceptada, Al día never expires it again.
+Marking an expirada or rechazada Cotización aceptada, from its Ficha (*Marcar como aceptada…*), when the Contacto took it after all. One made in the app is accepted as a sent one is, with its Plan de cobro dated that day, a Proyecto en curso and its folder. An imported one records no Ingresos or Costos (ADR-0002, ADR-0004): it links one of its Contacto's Proyectos that has no Cotización, or creates a completado Proyecto, as the folder scan does for an accepted Cotización with no folder but without a Cliente final from the Mapa de nombres, with its Sugerencias *ubicación* and *partidas*. Once aceptada, Al día never expires it again.
 _Avoid_: reabrir (it never goes back to enviada)
 
 **Folio** assignment:

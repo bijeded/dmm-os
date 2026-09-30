@@ -248,26 +248,43 @@ describe('Ficha de cotización', () => {
       await waitFor(() => expect(api.aceptarTarde).toHaveBeenCalledWith(2, { tipoCambio: 18.5 }))
     })
 
-    it('asks an imported quote for its Proyecto, a new one by default', async () => {
+    it('asks an imported quote for its Proyecto, with no tipo de cambio', async () => {
       api.ficha = vi.fn(async () => expirada)
       vi.mocked(api.opcionesAceptarTarde).mockResolvedValue({ importado: true, moneda: 'USD', proyectos: [{ id: 5, nombre: 'Zamora Live', estado: 'completado' }] })
       montar('/cotizaciones/2')
       const dialogo = await abrir()
-      await within(dialogo).findByText(/no se registran ingresos ni costos\. El proyecto nuevo queda completado/)
+      await within(dialogo).findByText(/no se registran ingresos ni costos\.$/)
       expect(within(dialogo).queryByRole('spinbutton', { name: 'Tipo de cambio' })).toBeNull()
       fireEvent.change(within(dialogo).getByRole('combobox', { name: 'Proyecto' }), { target: { value: '5' } })
       fireEvent.click(within(dialogo).getByRole('button', { name: 'Marcar como aceptada' }))
       await waitFor(() => expect(api.aceptarTarde).toHaveBeenCalledWith(2, { proyectoId: 5 }))
     })
 
-    it('creates a Proyecto nuevo for an imported quote when none is chosen', async () => {
+    it('waits for an imported quote’s Proyecto to be chosen, Proyecto nuevo included', async () => {
       api.ficha = vi.fn(async () => expirada)
-      vi.mocked(api.opcionesAceptarTarde).mockResolvedValue({ importado: true, moneda: 'MXN', proyectos: [] })
+      vi.mocked(api.opcionesAceptarTarde).mockResolvedValue({ importado: true, moneda: 'MXN', proyectos: [{ id: 5, nombre: 'Zamora Live', estado: 'completado' }] })
       montar('/cotizaciones/2')
       const dialogo = await abrir()
+      const confirmar = within(dialogo).getByRole('button', { name: 'Marcar como aceptada' }) as HTMLButtonElement
       await within(dialogo).findByRole('combobox', { name: 'Proyecto' })
-      fireEvent.click(within(dialogo).getByRole('button', { name: 'Marcar como aceptada' }))
+      expect(confirmar.disabled).toBe(true)
+      fireEvent.change(within(dialogo).getByRole('combobox', { name: 'Proyecto' }), { target: { value: 'nuevo' } })
+      await within(dialogo).findByText(/El proyecto nuevo queda completado/)
+      fireEvent.click(confirmar)
       await waitFor(() => expect(api.aceptarTarde).toHaveBeenCalledWith(2, { proyectoId: 'nuevo' }))
+    })
+
+    it('keeps the dialog open while the acceptance is on its way', async () => {
+      api.ficha = vi.fn(async () => expirada)
+      let responder: (f: Ficha) => void = () => {}
+      vi.mocked(api.aceptarTarde).mockReturnValue(new Promise((r) => (responder = r)))
+      montar('/cotizaciones/2')
+      const dialogo = await abrir()
+      await within(dialogo).findByText(/proyecto en curso con su carpeta/)
+      fireEvent.click(within(dialogo).getByRole('button', { name: 'Marcar como aceptada' }))
+      await waitFor(() => expect((within(dialogo).getByRole('button', { name: 'Cancelar' }) as HTMLButtonElement).disabled).toBe(true))
+      responder({ ...expirada, estado: 'aceptada', proyectoId: 4, acciones: [] })
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     })
 
     it('changes nothing when the dialog is closed', async () => {
@@ -277,7 +294,7 @@ describe('Ficha de cotización', () => {
       fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }))
       expect(screen.queryByRole('dialog')).toBeNull()
       expect(api.aceptarTarde).not.toHaveBeenCalled()
-      expect(screen.getByText('Expirada')).toBeTruthy()
+      expect(await screen.findByText('Expirada')).toBeTruthy()
     })
   })
 

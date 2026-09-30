@@ -124,7 +124,11 @@ export function FichaCotizacion() {
       {aceptandoTarde && f && (
         <AceptacionTardia
           ficha={f}
-          onCerrar={() => setAceptandoTarde(false)}
+          onCerrar={() => {
+            setAceptandoTarde(false)
+            // Read again: a refused call may still have left something behind (a folder that could not be created).
+            correr(async () => setFicha(await api.ficha(id)))
+          }}
           onAceptada={(nueva) => {
             setFicha(nueva)
             setAceptandoTarde(false)
@@ -217,6 +221,7 @@ export function FichaCotizacion() {
 
 const textoCls = 'm-0 text-[13px] text-on-surface-muted'
 const NUEVO = 'nuevo'
+const SIN_ELEGIR = ''
 
 /**
  * Aceptación tardía: the Contacto took an expirada or rechazada quote after all. One made in the app
@@ -225,8 +230,10 @@ const NUEVO = 'nuevo'
  */
 function AceptacionTardia({ ficha, onAceptada, onCerrar }: { ficha: Ficha; onAceptada: (ficha: Ficha) => void; onCerrar: () => void }) {
   const [opciones, setOpciones] = useState<OpcionesAceptacionTardia | null>(null)
-  const [proyecto, setProyecto] = useState(NUEVO)
+  const [proyecto, setProyecto] = useState(SIN_ELEGIR)
   const [tipoCambio, setTipoCambio] = useState('')
+  // While the acceptance is on its way, closing would not stop it: Cancelar waits for the answer.
+  const [enviando, setEnviando] = useState(false)
   const { error, ocupado, correr } = useAccion()
   const api = window.dmm.cotizaciones
 
@@ -244,7 +251,12 @@ function AceptacionTardia({ ficha, onAceptada, onCerrar }: { ficha: Ficha; onAce
         : usd
           ? { tipoCambio: Number(tipoCambio) }
           : {}
-      onAceptada(await api.aceptarTarde(ficha.id, eleccion))
+      setEnviando(true)
+      try {
+        onAceptada(await api.aceptarTarde(ficha.id, eleccion))
+      } finally {
+        setEnviando(false)
+      }
     })
 
   return (
@@ -252,7 +264,7 @@ function AceptacionTardia({ ficha, onAceptada, onCerrar }: { ficha: Ficha; onAce
       {opciones && !opciones.importado && (
         <>
           <p className={textoCls}>
-            Se registra como si se aceptara hoy: se crea el proyecto en curso con su carpeta, los ingresos pendientes y los costos estimados.
+            Se registra como si se aceptara hoy: se crea el proyecto en curso con su carpeta, su plan de cobro (ingresos pendientes o cobro mensual) y los costos estimados.
           </p>
           {usd && (
             <Campo label="Tipo de cambio">
@@ -265,6 +277,9 @@ function AceptacionTardia({ ficha, onAceptada, onCerrar }: { ficha: Ficha; onAce
         <>
           <Campo label="Proyecto">
             <select value={proyecto} onChange={(e) => setProyecto(e.target.value)} className={campoCls}>
+              <option value={SIN_ELEGIR} disabled>
+                Elige un proyecto
+              </option>
               <option value={NUEVO}>Proyecto nuevo (completado)</option>
               {opciones.proyectos.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -281,10 +296,13 @@ function AceptacionTardia({ ficha, onAceptada, onCerrar }: { ficha: Ficha; onAce
       )}
       <Aviso error={error} />
       <div className="flex justify-end gap-2">
-        <Button variant="ghost" onClick={onCerrar}>
+        <Button variant="ghost" disabled={enviando} onClick={onCerrar}>
           Cancelar
         </Button>
-        <Button disabled={ocupado || opciones === null || (usd && !opciones.importado && !tipoCambio)} onClick={aceptar}>
+        <Button
+          disabled={ocupado || opciones === null || (opciones.importado ? proyecto === SIN_ELEGIR : usd && !tipoCambio)}
+          onClick={aceptar}
+        >
           Marcar como aceptada
         </Button>
       </div>
