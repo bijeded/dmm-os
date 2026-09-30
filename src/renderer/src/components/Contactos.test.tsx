@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router'
 import type { FilaContacto, ListaContactos } from '../../../shared/dominio'
 import type { DmmApi } from '../../../shared/contrato'
 import { Contactos } from './Contactos'
+import { olvidarRecordado } from './recordado'
 
 const fila = (id: number, nombre: string, estado: FilaContacto['estado'] = 'lead_frio'): FilaContacto => ({
   id,
@@ -20,9 +21,9 @@ const lista: ListaContactos = {
   contactos: [
     fila(1, 'Café Nómada', 'cliente_activo'),
     fila(2, 'Clínica Sol', 'lead_caliente'),
-    ...Array.from({ length: 11 }, (_, i) => fila(10 + i, `Zeta ${String(i).padStart(2, '0')}`))
+    ...Array.from({ length: 21 }, (_, i) => fila(10 + i, `Zeta ${String(i).padStart(2, '0')}`))
   ],
-  conteo: { lead_frio: 11, lead_caliente: 1, cliente_activo: 1, cliente_inactivo: 0 },
+  conteo: { lead_frio: 21, lead_caliente: 1, cliente_activo: 1, cliente_inactivo: 0 },
   top: [{ id: 1, nombre: 'Café Nómada', valor: 29_600_000, porcentaje: 100 }]
 }
 
@@ -30,6 +31,7 @@ let api: DmmApi['contactos']
 let router: ReturnType<typeof createMemoryRouter>
 
 beforeEach(() => {
+  olvidarRecordado()
   api = { listar: vi.fn(async () => lista), ficha: vi.fn(), guardar: vi.fn(async () => 42), borrar: vi.fn(), fusionar: vi.fn(), previaCambio: vi.fn(), csv: vi.fn(async () => 'nombre\r\n') }
   window.dmm = { contactos: api } as unknown as DmmApi
   router = createMemoryRouter(
@@ -48,8 +50,8 @@ const filas = () => within(screen.getByRole('table')).getAllByRole('row').slice(
 describe('Contactos', () => {
   it('shows a stat card per estado and the total', async () => {
     const stats = await screen.findByRole('list', { name: 'Resumen' })
-    expect(within(stats).getByText('Leads fríos').nextSibling?.textContent).toBe('11')
-    expect(within(stats).getByText('Total contactos').nextSibling?.textContent).toBe('13')
+    expect(within(stats).getByText('Leads fríos').nextSibling?.textContent).toBe('21')
+    expect(within(stats).getByText('Total contactos').nextSibling?.textContent).toBe('23')
   })
 
   it('puts Exportar CSV and Nuevo contacto in the title row, one secondary and one primary', async () => {
@@ -63,12 +65,41 @@ describe('Contactos', () => {
     expect(within(tarjeta).getAllByRole('button').map((b) => b.textContent)).toEqual(['Anterior', 'Siguiente'])
   })
 
-  it('pages the table ten at a time', async () => {
+  it('pages the table twenty at a time', async () => {
     await screen.findByText('Clínica Sol')
-    expect(filas()).toHaveLength(10)
+    expect(filas()).toHaveLength(20)
     fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
     expect(filas()).toHaveLength(3)
-    expect(screen.getByText('11–13 de 13')).toBeTruthy()
+    expect(screen.getByText('21–23 de 23')).toBeTruthy()
+  })
+
+  it('opens as it was left: search, Estado and page', async () => {
+    await screen.findByText('Clínica Sol')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Estado' }), { target: { value: 'lead_frio' } })
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zeta' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
+    expect(screen.getByText('21–21 de 21')).toBeTruthy()
+    fireEvent.click(filas()[0])
+    await waitFor(() => expect(router.state.location.pathname).toBe('/contactos/30'))
+    await router.navigate('/contactos')
+    expect(await screen.findByText('21–21 de 21')).toBeTruthy()
+    expect((screen.getByRole('searchbox') as HTMLInputElement).value).toBe('zeta')
+    expect((screen.getByRole('combobox', { name: 'Estado' }) as HTMLSelectElement).value).toBe('lead_frio')
+  })
+
+  it('keeps the page when the search only changes in case or spacing', async () => {
+    await screen.findByText('Clínica Sol')
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zeta' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Zeta ' } })
+    expect(screen.getByText('21–21 de 21')).toBeTruthy()
+  })
+
+  it('goes back to page 1 when a filter changes', async () => {
+    await screen.findByText('Clínica Sol')
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zeta' } })
+    expect(screen.getByText('1–20 de 21')).toBeTruthy()
   })
 
   it('searches by name or email, and filters by estado', async () => {

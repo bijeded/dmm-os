@@ -6,6 +6,7 @@ import type { FilaCosto, FilaIngreso, ListaContactos, ListaProyectos, ResumenFin
 import type { DmmApi } from '../../../shared/contrato'
 import { Finanzas } from './Finanzas'
 import { NuevoCosto, NuevoIngreso } from './NuevoMovimiento'
+import { olvidarRecordado } from './recordado'
 import { MENSAJE_MONTO } from '../../../shared/montos'
 
 const ingreso = (id: number, cambios: Partial<FilaIngreso> = {}): FilaIngreso => ({
@@ -91,6 +92,7 @@ const proyectos = { proyectos: [], conteo: {}, porCategoria: {} } as unknown as 
 const contactos = { contactos: [{ id: 7, nombre: 'Clínica Sol' }], conteo: {}, top: [] } as unknown as ListaContactos
 
 beforeEach(() => {
+  olvidarRecordado()
   api = {
     coberturaCostos: vi.fn(),
     resumen: vi.fn(async () => resumen()),
@@ -278,6 +280,96 @@ describe('Finanzas', () => {
     expect(within(proximos).getByText('Hosting anual')).toBeTruthy()
     fireEvent.click(screen.getAllByRole('button', { name: 'Detener serie' })[0])
     await waitFor(() => expect(api.detenerCosto).toHaveBeenCalledWith(10))
+  })
+})
+
+describe('Finanzas, 20 a page', () => {
+  const serie = <T,>(n: number, desde: number, f: (id: number) => T) => Array.from({ length: n }, (_, i) => f(desde + i))
+  // 25 cobrados, 21 por cobrar plus 3 vencidas, 1 costo pendiente, 45 ingresos and 25 costos in the period.
+  const grande = (cambios: Partial<ResumenFinanzas> = {}) =>
+    resumen({
+      cobrado: serie(25, 100, (id) => ingreso(id, { estado: 'pagado', acciones: [] })),
+      cobranza: [...serie(21, 200, (id) => ingreso(id)), ...serie(3, 300, (id) => ingreso(id, { vencida: true, acciones: [] }))],
+      costosPendientes: [costo(10)],
+      ingresos: serie(45, 400, (id) => ingreso(id, { estado: 'pagado', acciones: ['borrar'] })),
+      costos: serie(25, 500, (id) => costo(id, { acciones: [] })),
+      ...cambios
+    })
+  const tarjeta = (titulo: string) => screen.getByRole('heading', { name: titulo }).closest('section')!
+  const rango = (titulo: string, texto: string) => expect(within(tarjeta(titulo)).getByText(texto)).toBeTruthy()
+  const siguiente = (titulo: string) => fireEvent.click(within(tarjeta(titulo)).getByRole('button', { name: 'Siguiente' }))
+
+  beforeEach(async () => {
+    api.resumen = vi.fn(async () => grande())
+    montar()
+    await screen.findByText('1–20 de 45')
+  })
+
+  it('gives each table its own footer, even one that fits on a page', () => {
+    rango('Cobrado', '1–20 de 25')
+    rango('Por cobrar', '1–20 de 21')
+    rango('Ingresos del periodo', '1–20 de 45')
+    rango('Costos del periodo', '1–20 de 25')
+    rango('Costos pendientes', '1–1 de 1')
+    for (const name of ['Anterior', 'Siguiente']) expect((within(tarjeta('Costos pendientes')).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('pages each table on its own', () => {
+    siguiente('Ingresos del periodo')
+    rango('Ingresos del periodo', '21–40 de 45')
+    rango('Cobrado', '1–20 de 25')
+  })
+
+  it('goes back to page 1 of Por cobrar only when Vencida is picked', () => {
+    siguiente('Ingresos del periodo')
+    siguiente('Por cobrar')
+    rango('Por cobrar', '21–21 de 21')
+    fireEvent.click(within(tarjeta('Por cobrar')).getByRole('button', { name: 'Vencida (3)' }))
+    rango('Por cobrar', '1–3 de 3')
+    rango('Ingresos del periodo', '21–40 de 45')
+  })
+
+  it('goes back to page 1 of every table when the Periodo changes', async () => {
+    siguiente('Cobrado')
+    siguiente('Ingresos del periodo')
+    fireEvent.click(screen.getByRole('button', { name: 'Este año' }))
+    await waitFor(() => expect(api.resumen).toHaveBeenCalledWith('anio'))
+    rango('Cobrado', '1–20 de 25')
+    rango('Ingresos del periodo', '1–20 de 45')
+  })
+
+  it('keeps the page after a row action', async () => {
+    siguiente('Ingresos del periodo')
+    api.resumen = vi.fn(async () => grande({ ingresos: serie(44, 401, (id) => ingreso(id, { estado: 'pagado', acciones: ['borrar'] })) }))
+    fireEvent.click(within(tarjeta('Ingresos del periodo')).getAllByRole('button', { name: 'Borrar' })[0])
+    await waitFor(() => expect(api.borrarIngreso).toHaveBeenCalledWith(420))
+    expect(await within(tarjeta('Ingresos del periodo')).findByText('21–40 de 44')).toBeTruthy()
+  })
+
+  it('shows the last page with rows when the last row of the last page leaves', async () => {
+    siguiente('Por cobrar')
+    rango('Por cobrar', '21–21 de 21')
+    api.resumen = vi.fn(async () => grande({ cobranza: serie(20, 200, (id) => ingreso(id)) }))
+    fireEvent.click(within(tarjeta('Por cobrar')).getByRole('button', { name: 'Pagado' }))
+    await waitFor(() => expect(api.pagarIngreso).toHaveBeenCalledWith(220))
+    expect(await within(tarjeta('Por cobrar')).findByText('1–20 de 20')).toBeTruthy()
+  })
+
+  it('opens as it was left: Periodo, search and pages', async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Este año' }))
+    await waitFor(() => expect(api.resumen).toHaveBeenCalledWith('anio'))
+    siguiente('Costos del periodo')
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'hosting' } })
+    siguiente('Costos del periodo')
+    cleanup()
+    api.resumen = vi.fn(async () => grande())
+    montar()
+    await waitFor(() => expect(api.resumen).toHaveBeenCalledWith('anio'))
+    await screen.findByRole('heading', { name: 'Costos del periodo' })
+    expect(await within(tarjeta('Costos del periodo')).findByText('21–25 de 25')).toBeTruthy()
+    expect(api.resumen).not.toHaveBeenCalledWith('mes')
+    expect(screen.getByRole('button', { name: 'Este año' }).getAttribute('aria-pressed')).toBe('true')
+    expect((screen.getByRole('searchbox') as HTMLInputElement).value).toBe('hosting')
   })
 })
 

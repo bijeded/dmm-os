@@ -8,6 +8,7 @@ import { hoy } from '../../../shared/fechas'
 import { FichaProyecto } from './FichaProyecto'
 import { NuevoProyecto } from './NuevoProyecto'
 import { Proyectos } from './Proyectos'
+import { olvidarRecordado } from './recordado'
 
 const fila = (id: number, nombre: string, cambios: Partial<FilaProyecto> = {}): FilaProyecto => ({
   id,
@@ -96,6 +97,7 @@ const montar = (ruta: string) => {
 }
 
 beforeEach(() => {
+  olvidarRecordado()
   api = {
     listar: vi.fn(async () => lista),
     ficha: vi.fn(async () => ficha),
@@ -150,6 +152,46 @@ describe('Proyectos', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Estado' }), { target: { value: '' } })
     fireEvent.change(screen.getByPlaceholderText(/Buscar/), { target: { value: 'hotel' } })
     expect(screen.getAllByRole('row')).toHaveLength(2)
+  })
+})
+
+describe('Proyectos, 20 a page', () => {
+  // 45 Proyectos: the first 25 completados with Sin ingresos registrados.
+  const muchos: ListaProyectos = {
+    ...lista,
+    proyectos: Array.from({ length: 45 }, (_, i) => fila(i + 1, `Proyecto ${i + 1}`, i < 25 ? { estado: 'completado', sinIngresosRegistrados: true } : {}))
+  }
+  const siguiente = () => fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
+  const sinIngresos = () => screen.getByRole('checkbox', { name: 'Sin ingresos registrados' }) as HTMLInputElement
+
+  beforeEach(() => {
+    vi.mocked(api.listar).mockResolvedValue(muchos)
+    montar('/proyectos')
+  })
+
+  it('pages the list at 20', async () => {
+    await screen.findByText('1–20 de 45')
+    expect(screen.getAllByRole('row').slice(1)).toHaveLength(20)
+    siguiente()
+    expect(screen.getByText('21–40 de 45')).toBeTruthy()
+  })
+
+  it('goes back to page 1 when Sin ingresos registrados is ticked', async () => {
+    await screen.findByText('1–20 de 45')
+    siguiente()
+    fireEvent.click(sinIngresos())
+    expect(screen.getByText('1–20 de 25')).toBeTruthy()
+  })
+
+  it('opens as it was left when the owner comes back', async () => {
+    await screen.findByText('1–20 de 45')
+    fireEvent.click(sinIngresos())
+    siguiente()
+    expect(screen.getByText('21–25 de 25')).toBeTruthy()
+    cleanup()
+    montar('/proyectos')
+    expect(await screen.findByText('21–25 de 25')).toBeTruthy()
+    expect(sinIngresos().checked).toBe(true)
   })
 })
 

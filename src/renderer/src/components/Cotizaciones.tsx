@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { CATEGORIAS, ESTADOS_COTIZACION, NOMBRES_CATEGORIA, NOMBRES_ESTADO_COTIZACION, type Categoria, type EstadoCotizacion, type ListaCotizaciones } from '../../../shared/dominio'
 import { dia, folioDmm, normalizar, pesos } from '../../../shared/formato'
+import { PiePaginacion, usePaginacion } from './Paginacion'
+import { useFiltroRecordado, useRecordado } from './recordado'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { campoCls, celdaCls, etiquetaCls, tituloCls } from './estilos'
@@ -21,11 +23,9 @@ const COLORES: Record<Categoria, string> = {
 export function Cotizaciones() {
   const navigate = useNavigate()
   const [lista, setLista] = useState<ListaCotizaciones | null>(null)
-  const [busqueda, setBusqueda] = useState('')
-  const [cliente, setCliente] = useState('')
-  const [anio, setAnio] = useState('')
-  const [categoria, setCategoria] = useState<Categoria | ''>('')
-  const [estado, setEstado] = useState<EstadoCotizacion | ''>('')
+  const [busqueda, setBusqueda] = useRecordado('cotizaciones.busqueda', '')
+  const [categoria, setCategoria] = useRecordado<Categoria | ''>('cotizaciones.categoria', '')
+  const [estado, setEstado] = useRecordado<EstadoCotizacion | ''>('cotizaciones.estado', '')
   const { error, correr } = useAccion()
 
   useEffect(() => {
@@ -36,8 +36,10 @@ export function Cotizaciones() {
   const todas = useMemo(() => lista?.cotizaciones ?? [], [lista])
   const clientes = useMemo(() => [...new Map(todas.map((c) => [c.contactoId, c.contacto])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'es')), [todas])
   const anios = useMemo(() => [...new Set(todas.map((c) => c.fecha.slice(0, 4)))].sort().reverse(), [todas])
+  const [cliente, setCliente] = useFiltroRecordado('cotizaciones.cliente', lista && clientes.map(([id]) => String(id)))
+  const [anio, setAnio] = useFiltroRecordado('cotizaciones.anio', lista && anios)
+  const q = normalizar(busqueda.trim())
   const filtradas = useMemo(() => {
-    const q = normalizar(busqueda.trim())
     return todas.filter(
       (c) =>
         (!cliente || String(c.contactoId) === cliente) &&
@@ -46,7 +48,8 @@ export function Cotizaciones() {
         (!estado || c.estado === estado) &&
         (!q || [c.folio, c.contacto, c.nombre].some((v) => v && normalizar(v).includes(q)))
     )
-  }, [todas, busqueda, cliente, anio, categoria, estado])
+  }, [todas, q, cliente, anio, categoria, estado])
+  const { visibles, pie } = usePaginacion(filtradas, 'cotizaciones', [q, cliente, anio, categoria, estado])
 
   const r = lista?.resumen
   const abrirPdf = (id: number) => correr(() => window.dmm.cotizaciones.abrirPdf(id))
@@ -132,7 +135,7 @@ export function Cotizaciones() {
               </tr>
             </thead>
             <tbody>
-              {filtradas.map((c) => (
+              {visibles.map((c) => (
                 <tr key={c.id} className="cursor-pointer" onClick={() => navigate(`/cotizaciones/${c.id}`)}>
                   <td data-label="Ref." className={`${celdaCls} font-mono text-[12px]`}>
                     {c.folio ? folioDmm(c.folio) : '—'}
@@ -173,6 +176,7 @@ export function Cotizaciones() {
             </tbody>
           </table>
           {lista && filtradas.length === 0 && <p className="m-0 text-[13px] text-on-surface-muted">Ninguna cotización coincide.</p>}
+          <PiePaginacion pie={pie} />
           <Aviso error={error} />
         </section>
 

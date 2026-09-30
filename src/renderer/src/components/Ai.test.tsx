@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import type { AgenteOSkill, AsignacionCosto, FilaProyectoAi, FilaSuscripcion, PeriodoAi, ResumenAi, UsoModelo } from '../../../shared/dominio'
@@ -7,6 +7,7 @@ import type { DmmApi } from '../../../shared/contrato'
 import { dia, monto } from '../../../shared/formato'
 import { fecha } from './Seccion'
 import { Ai } from './Ai'
+import { olvidarRecordado } from './recordado'
 
 const ESCANEO = '2026-09-12T15:14:00.000Z'
 
@@ -144,6 +145,7 @@ const agente = (nombre: string) => within(screen.getByRole('list', { name: 'Agen
 
 const tarjeta = (label: RegExp) => within(screen.getByRole('list', { name: 'Resumen' })).getByText(label).closest('li') as HTMLElement
 
+beforeEach(olvidarRecordado)
 afterEach(cleanup)
 
 describe('AI', () => {
@@ -485,5 +487,48 @@ describe('Asignación de costo', () => {
       ['Sin asignar', '—', '—', '$270.00']
     ])
     expect(screen.getByText('Cada mes se reparte por separado: por uso de tokens; sin datos de uso, partes iguales entre los proyectos AI abiertos en el mes; sin ninguno, queda sin asignar.')).toBeTruthy()
+  })
+})
+
+describe('Proyectos AI, 20 a page', () => {
+  // 25 Proyectos AI: 22 en curso, then 3 completados.
+  const muchos = Array.from({ length: 25 }, (_, i) => proyectoAi(i + 1, `Agente ${i + 1}`, { estado: i < 22 ? 'en_curso' : 'completado' }))
+  const siguiente = () => fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
+  const abrir = async () => {
+    montar({ resumen: vi.fn(async (periodo: PeriodoAi) => resumen(periodo, { proyectos: muchos })) })
+    await screen.findByRole('table', { name: 'Proyectos AI' })
+  }
+
+  beforeEach(abrir)
+
+  it('pages the Proyectos AI at 20', () => {
+    expect(screen.getByText('1–20 de 25')).toBeTruthy()
+    expect(filasProyectos().filter(([nombre]) => nombre !== 'Sin proyecto')).toHaveLength(20)
+    siguiente()
+    expect(screen.getByText('21–25 de 25')).toBeTruthy()
+  })
+
+  it('goes back to page 1 when a filter or the Periodo changes', async () => {
+    siguiente()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Estado' }), { target: { value: 'en_curso' } })
+    expect(screen.getByText('1–20 de 22')).toBeTruthy()
+    siguiente()
+    fireEvent.click(screen.getByRole('button', { name: 'Todo el tiempo' }))
+    await waitFor(() => expect(api.resumen).toHaveBeenCalledWith('todo'))
+    expect(await screen.findByText('1–20 de 22')).toBeTruthy()
+  })
+
+  it('opens as it was left: Periodo, filters and page', async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Todo el tiempo' }))
+    await waitFor(() => expect(api.resumen).toHaveBeenCalledWith('todo'))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Estado' }), { target: { value: 'en_curso' } })
+    siguiente()
+    expect(screen.getByText('21–22 de 22')).toBeTruthy()
+    cleanup()
+    await abrir()
+    expect(await screen.findByText('21–22 de 22')).toBeTruthy()
+    expect(api.resumen).toHaveBeenCalledWith('todo')
+    expect(api.resumen).not.toHaveBeenCalledWith('mes')
+    expect((screen.getByRole('combobox', { name: 'Estado' }) as HTMLSelectElement).value).toBe('en_curso')
   })
 })

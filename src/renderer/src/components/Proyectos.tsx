@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router'
 import { CATEGORIAS, ESTADOS_PROYECTO, NOMBRES_CATEGORIA, NOMBRES_ESTADO_PROYECTO, type CarpetaProyecto, type Categoria, type EstadoProyecto, type ListaProyectos } from '../../../shared/dominio'
 import { dia, normalizar } from '../../../shared/formato'
 import { PorCategoria } from './Cotizaciones'
+import { PiePaginacion, usePaginacion } from './Paginacion'
+import { useFiltroRecordado, useRecordado } from './recordado'
 import { Aviso, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { campoCls, celdaCls, etiquetaCls, tituloCls } from './estilos'
@@ -19,12 +21,10 @@ export const NOMBRES_CARPETA: Record<CarpetaProyecto['estado'], string> = {
 export function Proyectos() {
   const navigate = useNavigate()
   const [lista, setLista] = useState<ListaProyectos | null>(null)
-  const [busqueda, setBusqueda] = useState('')
-  const [contacto, setContacto] = useState('')
-  const [anio, setAnio] = useState('')
-  const [categoria, setCategoria] = useState<Categoria | ''>('')
-  const [estado, setEstado] = useState<EstadoProyecto | ''>('')
-  const [soloSinIngresos, setSoloSinIngresos] = useState(false)
+  const [busqueda, setBusqueda] = useRecordado('proyectos.busqueda', '')
+  const [categoria, setCategoria] = useRecordado<Categoria | ''>('proyectos.categoria', '')
+  const [estado, setEstado] = useRecordado<EstadoProyecto | ''>('proyectos.estado', '')
+  const [soloSinIngresos, setSoloSinIngresos] = useRecordado('proyectos.soloSinIngresos', false)
   const { error, correr } = useAccion()
 
   useEffect(() => {
@@ -41,8 +41,10 @@ export function Proyectos() {
     [todos]
   )
   const anios = useMemo(() => [...new Set(todos.flatMap((p) => (p.fechaInicio ? [p.fechaInicio.slice(0, 4)] : [])))].sort().reverse(), [todos])
+  const [contacto, setContacto] = useFiltroRecordado('proyectos.contacto', lista && ['personal', 'sin_contacto', ...contactos.map(([id]) => String(id))])
+  const [anio, setAnio] = useFiltroRecordado('proyectos.anio', lista && anios)
+  const q = normalizar(busqueda.trim())
   const filtrados = useMemo(() => {
-    const q = normalizar(busqueda.trim())
     return todos.filter(
       (p) =>
         (!contacto ||
@@ -57,7 +59,8 @@ export function Proyectos() {
         (!soloSinIngresos || p.sinIngresosRegistrados) &&
         (!q || [p.referencia, p.nombre, p.contacto, p.clienteFinal].some((v) => v && normalizar(v).includes(q)))
     )
-  }, [todos, busqueda, contacto, anio, categoria, estado, soloSinIngresos])
+  }, [todos, q, contacto, anio, categoria, estado, soloSinIngresos])
+  const { visibles, pie } = usePaginacion(filtrados, 'proyectos', [q, contacto, anio, categoria, estado, soloSinIngresos])
 
   const c = lista?.conteo
   const abrir = (id: number) => correr(() => window.dmm.proyectos.abrirCarpeta(id))
@@ -149,7 +152,7 @@ export function Proyectos() {
               </tr>
             </thead>
             <tbody>
-              {filtrados.map((p) => (
+              {visibles.map((p) => (
                 <tr key={p.id} className="cursor-pointer" onClick={() => navigate(`/proyectos/${p.id}`)}>
                   <td data-label="Ref." className={`${celdaCls} font-mono text-[12px]`}>
                     {p.referencia}
@@ -206,6 +209,7 @@ export function Proyectos() {
             </tbody>
           </table>
           {lista && filtrados.length === 0 && <p className="m-0 text-[13px] text-on-surface-muted">Ningún proyecto coincide.</p>}
+          <PiePaginacion pie={pie} />
           <Aviso error={error} />
         </section>
 

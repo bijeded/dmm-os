@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import type { FichaContacto as Ficha } from '../../../shared/dominio'
 import type { DmmApi } from '../../../shared/contrato'
 import { FichaContacto } from './FichaContacto'
+import { olvidarRecordado } from './recordado'
 
 const ficha: Ficha = {
   contacto: {
@@ -36,6 +37,7 @@ let api: DmmApi['contactos']
 let router: ReturnType<typeof createMemoryRouter>
 
 beforeEach(() => {
+  olvidarRecordado()
   api = {
     listar: vi.fn(async () => ({ contactos: [{ id: 7, nombre: 'Hotel Aura' }, { id: 9, nombre: 'Grupo Aura' }] }) as never),
     ficha: vi.fn(async () => ficha),
@@ -155,5 +157,59 @@ describe('Fusionar en…', () => {
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancelar' }))
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(api.fusionar).not.toHaveBeenCalled()
+  })
+})
+
+describe('Historial, 20 a page', () => {
+  // 25 movements: 22 Pagos, then 3 Cotizaciones.
+  const largo: Ficha = {
+    ...ficha,
+    historial: Array.from({ length: 25 }, (_, i) =>
+      i < 22
+        ? { tipo: 'pago' as const, id: i + 1, fecha: '2026-09-05', referencia: null, detalle: `Pago ${i + 1}`, monto: 100_000, estado: 'pagado' }
+        : { tipo: 'cotizacion' as const, id: i + 1, fecha: '2026-08-20', referencia: String(400 + i), detalle: 'Sitio', monto: 100_000, estado: 'enviada' }
+    )
+  }
+  const historial = () => screen.getByRole('table', { name: 'Historial' }).closest('section')!
+  const siguiente = () => fireEvent.click(within(historial()).getByRole('button', { name: 'Siguiente' }))
+
+  beforeEach(async () => {
+    vi.mocked(api.ficha).mockImplementation(async (id: number) => ({ ...largo, contacto: { ...largo.contacto, id } }))
+    await router.navigate('/contactos/8')
+    await screen.findByText('1–20 de 25')
+  })
+
+  it('pages the Historial at 20', () => {
+    expect(within(screen.getByRole('table', { name: 'Historial' })).getAllByRole('row').slice(1)).toHaveLength(20)
+    siguiente()
+    expect(within(historial()).getByText('21–25 de 25')).toBeTruthy()
+  })
+
+  it('goes back to page 1 when the filter changes', () => {
+    siguiente()
+    fireEvent.click(within(historial()).getByRole('tab', { name: 'Pagos' }))
+    expect(within(historial()).getByText('1–20 de 22')).toBeTruthy()
+  })
+
+  it('does not page the previous Contacto’s Historial while the next one loads', async () => {
+    siguiente()
+    let cargar: (f: Ficha) => void = () => {}
+    vi.mocked(api.ficha).mockImplementationOnce(() => new Promise<Ficha>((r) => (cargar = r)))
+    await router.navigate('/contactos/9')
+    await waitFor(() => expect(within(screen.getByRole('table', { name: 'Historial' })).getAllByRole('row')).toHaveLength(1))
+    cargar({ ...largo, contacto: { ...largo.contacto, id: 9 } })
+    expect(await within(historial()).findByText('1–20 de 25')).toBeTruthy()
+  })
+
+  it('keeps the filter and page per Contacto', async () => {
+    fireEvent.click(within(historial()).getByRole('tab', { name: 'Pagos' }))
+    siguiente()
+    expect(within(historial()).getByText('21–22 de 22')).toBeTruthy()
+    await router.navigate('/contactos/9')
+    expect(await within(historial()).findByText('1–20 de 25')).toBeTruthy()
+    expect(within(historial()).getByRole('tab', { name: 'Todo' }).getAttribute('aria-selected')).toBe('true')
+    await router.navigate('/contactos/8')
+    expect(await within(historial()).findByText('21–22 de 22')).toBeTruthy()
+    expect(within(historial()).getByRole('tab', { name: 'Pagos' }).getAttribute('aria-selected')).toBe('true')
   })
 })

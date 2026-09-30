@@ -4,6 +4,8 @@ import { NOMBRES_CATEGORIA_COSTO, NOMBRES_ESTADO_INGRESO, NOMBRES_PERIODO_FINANZ
 import { dia, normalizar, pesos } from '../../../shared/formato'
 import { centavosDe } from '../../../shared/montos'
 import { AsignarProyecto } from './Atribucion'
+import { PiePaginacion, usePaginacion } from './Paginacion'
+import { useRecordado } from './recordado'
 import { Aviso, Cifra, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { celdaCls, etiquetaCls, inputCls, tituloCls } from './estilos'
@@ -28,10 +30,10 @@ const origenCosto: Record<FilaCosto['origen'], string> = { cfdi: 'CFDI', recurre
 /** Finanzas: the shape of money over a period, against the same span a period earlier. */
 export function Finanzas() {
   const navigate = useNavigate()
-  const [periodo, setPeriodo] = useState<PeriodoFinanzas>('mes')
+  const [periodo, setPeriodo] = useRecordado<PeriodoFinanzas>('finanzas.periodo', 'mes')
   const [resumen, setResumen] = useState<ResumenFinanzas | null>(null)
-  const [busqueda, setBusqueda] = useState('')
-  const [vencidas, setVencidas] = useState(false)
+  const [busqueda, setBusqueda] = useRecordado('finanzas.busqueda', '')
+  const [vencidas, setVencidas] = useRecordado('finanzas.vencidas', false)
   const [reembolso, setReembolso] = useState<{ id: number; monto: string; moneda: 'MXN' | 'USD' } | null>(null)
   const [asignando, setAsignando] = useState<number | null>(null)
   const { error, ocupado, correr } = useAccion()
@@ -56,6 +58,8 @@ export function Finanzas() {
   const cobrado = (resumen?.cobrado ?? []).filter((i) => coincide(i.contacto, i.proyecto, i.notas))
   const cobranza = (resumen?.cobranza ?? []).filter((i) => i.vencida === vencidas && coincide(i.contacto, i.proyecto, i.notas))
   const costosPendientes = (resumen?.costosPendientes ?? []).filter((c) => coincide(c.nombre, c.proveedor, c.proyecto))
+  // What narrows every table: changing either shows them all from page 1.
+  const filtros = [periodo, consulta]
 
   const accionesIngreso = (i: FilaIngreso) => (
     <span className="flex flex-wrap gap-3">
@@ -223,7 +227,7 @@ export function Finanzas() {
             <h2 id="cobrado" className={`m-0 ${etiquetaCls}`}>
               Cobrado
             </h2>
-            <TablaIngresos filas={cobrado} acciones={accionesIngreso} vacio="Nada cobrado en el periodo." />
+            <TablaIngresos filas={cobrado} clave="finanzas.cobrado" filtros={filtros} acciones={accionesIngreso} vacio="Nada cobrado en el periodo." />
           </section>
 
           <section className={cardCls} aria-labelledby="por-cobrar">
@@ -245,7 +249,7 @@ export function Finanzas() {
                 ))}
               </div>
             </div>
-            <TablaIngresos filas={cobranza} acciones={accionesIngreso} vacio={vencidas ? 'Nada vencido.' : 'Nada por cobrar.'} />
+            <TablaIngresos filas={cobranza} clave="finanzas.porCobrar" filtros={[...filtros, vencidas]} acciones={accionesIngreso} vacio={vencidas ? 'Nada vencido.' : 'Nada por cobrar.'} />
             {resumen && (
               <label className="flex items-center gap-2 text-[12px] text-on-surface-muted">
                 Vencida después de
@@ -267,7 +271,7 @@ export function Finanzas() {
             <h2 id="costos-pendientes" className={`m-0 ${etiquetaCls}`}>
               Costos pendientes
             </h2>
-            <TablaCostos filas={costosPendientes} acciones={accionesCosto} vacio="Nada pendiente de pago." />
+            <TablaCostos filas={costosPendientes} clave="finanzas.costosPendientes" filtros={filtros} acciones={accionesCosto} vacio="Nada pendiente de pago." />
           </section>
         </div>
 
@@ -314,101 +318,117 @@ export function Finanzas() {
             </Button>
           </div>
         )}
-        <TablaIngresos filas={ingresos} acciones={accionesIngreso} vacio="Ningún ingreso coincide." />
+        <TablaIngresos filas={ingresos} clave="finanzas.ingresos" filtros={filtros} acciones={accionesIngreso} vacio="Ningún ingreso coincide." />
       </section>
 
       <section className={cardCls} aria-labelledby="costos-periodo">
         <h2 id="costos-periodo" className={`m-0 ${etiquetaCls}`}>
           Costos del periodo
         </h2>
-        <TablaCostos filas={costos} acciones={accionesCosto} vacio="Ningún costo coincide." />
+        <TablaCostos filas={costos} clave="finanzas.costos" filtros={filtros} acciones={accionesCosto} vacio="Ningún costo coincide." />
       </section>
     </>
   )
 }
 
-function TablaIngresos({ filas, acciones, vacio }: { filas: FilaIngreso[]; acciones: (i: FilaIngreso) => React.ReactNode; vacio: string }) {
-  if (filas.length === 0) return <p className="m-0 text-[13px] text-on-surface-muted">{vacio}</p>
+/** Pages itself under `clave`; `filtros` are what narrows it (Periodo, search…), and changing them shows page 1. */
+function TablaIngresos({ filas, clave, filtros, acciones, vacio }: { filas: FilaIngreso[]; clave: string; filtros: unknown[]; acciones: (i: FilaIngreso) => React.ReactNode; vacio: string }) {
+  const { visibles, pie } = usePaginacion(filas, clave, filtros)
   return (
-    <table className="tbl w-full border-collapse text-[13px]">
-      <thead>
-        <tr className={etiquetaCls}>
-          <th className={celdaCls}>Fecha</th>
-          <th className={celdaCls}>Contacto</th>
-          <th className={celdaCls}>Origen</th>
-          <th className={celdaCls}>Estado</th>
-          <th className={`${celdaCls} text-right`}>Subtotal</th>
-          <th className={celdaCls} />
-        </tr>
-      </thead>
-      <tbody>
-        {filas.map((i) => (
-          <tr key={i.id}>
-            <td data-label="Fecha" className={`${celdaCls} font-mono text-[12px]`}>
-              {i.fecha ? dia(i.fecha) : 'Por facturar'}
-            </td>
-            <td data-label="Contacto" className={celdaCls}>
-              {i.contacto ?? '—'}
-              {i.proyecto && <span className="text-on-surface-muted"> · {i.proyecto}</span>}
-            </td>
-            <td data-label="Origen" className={celdaCls}>
-              {i.reembolsoDeId !== null ? 'Reembolso' : origenIngreso[i.origen]}
-              <span className="text-on-surface-muted"> · {i.categoria === 'factura' ? 'Factura' : 'Sin factura'}</span>
-            </td>
-            <td data-label="Estado" className={celdaCls}>
-              {NOMBRES_ESTADO_INGRESO[i.estado]}
-              {i.vencida && <span className="ml-2 rounded-control border border-error px-1.5 py-0.5 text-[11px] text-error-text">Vencida</span>}
-            </td>
-            <td data-label="Subtotal" className={`${celdaCls} text-right font-mono text-[12px]`}>
-              {pesos(i.subtotal)}
-            </td>
-            <td className={celdaCls}>{acciones(i)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <>
+      {filas.length === 0 ? (
+        <p className="m-0 text-[13px] text-on-surface-muted">{vacio}</p>
+      ) : (
+        <table className="tbl w-full border-collapse text-[13px]">
+          <thead>
+            <tr className={etiquetaCls}>
+              <th className={celdaCls}>Fecha</th>
+              <th className={celdaCls}>Contacto</th>
+              <th className={celdaCls}>Origen</th>
+              <th className={celdaCls}>Estado</th>
+              <th className={`${celdaCls} text-right`}>Subtotal</th>
+              <th className={celdaCls} />
+            </tr>
+          </thead>
+          <tbody>
+            {visibles.map((i) => (
+              <tr key={i.id}>
+                <td data-label="Fecha" className={`${celdaCls} font-mono text-[12px]`}>
+                  {i.fecha ? dia(i.fecha) : 'Por facturar'}
+                </td>
+                <td data-label="Contacto" className={celdaCls}>
+                  {i.contacto ?? '—'}
+                  {i.proyecto && <span className="text-on-surface-muted"> · {i.proyecto}</span>}
+                </td>
+                <td data-label="Origen" className={celdaCls}>
+                  {i.reembolsoDeId !== null ? 'Reembolso' : origenIngreso[i.origen]}
+                  <span className="text-on-surface-muted"> · {i.categoria === 'factura' ? 'Factura' : 'Sin factura'}</span>
+                </td>
+                <td data-label="Estado" className={celdaCls}>
+                  {NOMBRES_ESTADO_INGRESO[i.estado]}
+                  {i.vencida && <span className="ml-2 rounded-control border border-error px-1.5 py-0.5 text-[11px] text-error-text">Vencida</span>}
+                </td>
+                <td data-label="Subtotal" className={`${celdaCls} text-right font-mono text-[12px]`}>
+                  {pesos(i.subtotal)}
+                </td>
+                <td className={celdaCls}>{acciones(i)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <PiePaginacion pie={pie} />
+    </>
   )
 }
 
-function TablaCostos({ filas, acciones, vacio }: { filas: FilaCosto[]; acciones: (c: FilaCosto) => React.ReactNode; vacio: string }) {
-  if (filas.length === 0) return <p className="m-0 text-[13px] text-on-surface-muted">{vacio}</p>
+/** Pages itself under `clave`; `filtros` are what narrows it (Periodo, search…), and changing them shows page 1. */
+function TablaCostos({ filas, clave, filtros, acciones, vacio }: { filas: FilaCosto[]; clave: string; filtros: unknown[]; acciones: (c: FilaCosto) => React.ReactNode; vacio: string }) {
+  const { visibles, pie } = usePaginacion(filas, clave, filtros)
   return (
-    <table className="tbl w-full border-collapse text-[13px]">
-      <thead>
-        <tr className={etiquetaCls}>
-          <th className={celdaCls}>Fecha</th>
-          <th className={celdaCls}>Costo</th>
-          <th className={celdaCls}>Tipo</th>
-          <th className={celdaCls}>Estado</th>
-          <th className={`${celdaCls} text-right`}>Subtotal</th>
-          <th className={celdaCls} />
-        </tr>
-      </thead>
-      <tbody>
-        {filas.map((c) => (
-          <tr key={c.id}>
-            <td data-label="Fecha" className={`${celdaCls} font-mono text-[12px]`}>
-              {dia(c.fecha)}
-            </td>
-            <td data-label="Costo" className={celdaCls}>
-              {c.nombre}
-              {c.proveedor && <span className="text-on-surface-muted"> · {c.proveedor}</span>}
-            </td>
-            <td data-label="Tipo" className={celdaCls}>
-              {NOMBRES_CATEGORIA_COSTO[c.categoria]}
-              <span className="text-on-surface-muted"> · {c.estimado ? 'Estimado' : origenCosto[c.origen]}</span>
-            </td>
-            <td data-label="Estado" className={`${celdaCls} capitalize`}>
-              {c.estado}
-            </td>
-            <td data-label="Subtotal" className={`${celdaCls} text-right font-mono text-[12px]`}>
-              {pesos(c.subtotal)}
-            </td>
-            <td className={celdaCls}>{acciones(c)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <>
+      {filas.length === 0 ? (
+        <p className="m-0 text-[13px] text-on-surface-muted">{vacio}</p>
+      ) : (
+        <table className="tbl w-full border-collapse text-[13px]">
+          <thead>
+            <tr className={etiquetaCls}>
+              <th className={celdaCls}>Fecha</th>
+              <th className={celdaCls}>Costo</th>
+              <th className={celdaCls}>Tipo</th>
+              <th className={celdaCls}>Estado</th>
+              <th className={`${celdaCls} text-right`}>Subtotal</th>
+              <th className={celdaCls} />
+            </tr>
+          </thead>
+          <tbody>
+            {visibles.map((c) => (
+              <tr key={c.id}>
+                <td data-label="Fecha" className={`${celdaCls} font-mono text-[12px]`}>
+                  {dia(c.fecha)}
+                </td>
+                <td data-label="Costo" className={celdaCls}>
+                  {c.nombre}
+                  {c.proveedor && <span className="text-on-surface-muted"> · {c.proveedor}</span>}
+                </td>
+                <td data-label="Tipo" className={celdaCls}>
+                  {NOMBRES_CATEGORIA_COSTO[c.categoria]}
+                  <span className="text-on-surface-muted"> · {c.estimado ? 'Estimado' : origenCosto[c.origen]}</span>
+                </td>
+                <td data-label="Estado" className={`${celdaCls} capitalize`}>
+                  {c.estado}
+                </td>
+                <td data-label="Subtotal" className={`${celdaCls} text-right font-mono text-[12px]`}>
+                  {pesos(c.subtotal)}
+                </td>
+                <td className={celdaCls}>{acciones(c)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <PiePaginacion pie={pie} />
+    </>
   )
 }
 

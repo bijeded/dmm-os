@@ -5,6 +5,8 @@ import { dia, pesos } from '../../../shared/formato'
 import { FusionarContacto } from './Atribucion'
 import { Dialogo } from './Dialogo'
 import { FormContacto } from './FormContacto'
+import { PiePaginacion, usePaginacion } from './Paginacion'
+import { useRecordado } from './recordado'
 import { Aviso, Datos, Fila, Seccion, useAccion } from './Seccion'
 import { Button } from './ui/button'
 import { celdaCls, etiquetaCls, tituloCls } from './estilos'
@@ -41,7 +43,8 @@ export function FichaContacto() {
   const id = Number(useParams().id)
   const navigate = useNavigate()
   const [ficha, setFicha] = useState<Ficha | null>(null)
-  const [filtro, setFiltro] = useState<(typeof filtros)[number][0]>('todo')
+  // Each Contacto keeps its own Historial filter and page.
+  const [filtro, setFiltro] = useRecordado<(typeof filtros)[number][0]>(`historial.${id}.filtro`, 'todo')
   const [confirmar, setConfirmar] = useState(false)
   const [editando, setEditando] = useState(false)
   const [fusionando, setFusionando] = useState(false)
@@ -68,7 +71,9 @@ export function FichaContacto() {
   }
 
   const c = ficha?.contacto
-  const historial = ficha?.historial.filter((m) => filtro === 'todo' || m.tipo === filtro) ?? []
+  // Until the new Contacto loads, the previous one's Historial is not paged under the new one's state.
+  const historial = ficha?.contacto.id === id ? ficha.historial.filter((m) => filtro === 'todo' || m.tipo === filtro) : []
+  const { visibles, pie } = usePaginacion(historial, `historial.${id}`, [filtro])
   const conversion = ficha && ficha.cotizaciones.total > 0 ? Math.round((ficha.cotizaciones.aceptadas / ficha.cotizaciones.total) * 100) : 0
 
   useRuta(c?.nombre)
@@ -164,7 +169,7 @@ export function FichaContacto() {
                 </tr>
               </thead>
               <tbody>
-                {historial.map((m) => (
+                {visibles.map((m) => (
                   <tr key={`${m.tipo}-${m.id}`}>
                     <td data-label="Fecha" className={`${celdaCls} font-mono text-[12px]`}>
                       {dia(m.fecha)}
@@ -189,6 +194,7 @@ export function FichaContacto() {
               </tbody>
             </table>
             {historial.length === 0 && <p className="m-0 text-[13px] text-on-surface-muted">Nada que mostrar.</p>}
+            <PiePaginacion pie={pie} />
           </Seccion>
 
           <Seccion id="archivos" titulo="Archivos">
