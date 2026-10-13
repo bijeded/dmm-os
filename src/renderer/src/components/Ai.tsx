@@ -383,7 +383,7 @@ function ProyectosAi({ filas, sinProyecto, periodo }: Pick<ResumenAi, 'sinProyec
                 {p.etiqueta === 'personal' ? <span className="text-on-surface-muted">Personal</span> : p.contacto}
                 {p.clienteFinal && <span className="text-on-surface-muted"> · {p.clienteFinal}</span>}
               </td>
-              <td data-label="Modelos" className={`${celdaCls} font-mono text-[12px]`}>
+              <td data-label="Modelos" className={`${celdaCls} font-mono text-[12px] whitespace-normal`}>
                 {p.modelos.length > 0 ? p.modelos.join(', ') : '—'}
               </td>
               <td data-label="Tokens" className={`${celdaCls} text-right font-mono text-[12px]`}>

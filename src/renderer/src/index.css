@@ -65,6 +65,8 @@
 }
 
 @layer base {
+  /* Native controls (date pickers, selects, scrollbars) draw for a dark page */
+  html { color-scheme: dark; scrollbar-gutter: stable; }
   html, body {
     margin: 0;
     background: var(--color-surface);
@@ -152,6 +154,17 @@
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
 }
 .card:hover { border-color: var(--color-border-strong); }
+
+/* Tables (hifi/*.dc.html): refs, amounts and dates stay on one line; a table wider than its card scrolls instead of being cut off */
+.card:has(.tbl) { overflow-x: auto; }
+@layer components { .tbl td.font-mono { white-space: nowrap; } }
+.tbl tbody tr:hover td { background: var(--color-surface-hover); }
+
+/* Responsive (hifi/*.dc.html, 1200 per DESIGN.md). The 900 and 600 steps sit below the window's 960px minimum. */
+@media (max-width: 1200px) {
+  .g-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .g-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 .pg > * { animation: var(--animate-rise); }
 .pg > *:nth-child(1) { animation-delay: 40ms; }

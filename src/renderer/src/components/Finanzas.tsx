@@ -438,8 +438,8 @@ function TablaCostos({ filas, clave, filtros, acciones, vacio }: { filas: FilaCo
 }
 
 const ANCHO = 640
-const ALTO = 220
-const MARGEN = { izq: 8, der: 8, arr: 12, aba: 24 }
+const ALTO = 200
+const MARGEN = { izq: 8, der: 8, arr: 12, aba: 4 }
 
 /** Income vs costs per bucket; the earlier span dashed in the same hue. Hover shows every value of a bucket. */
 function Grafica({ serie, actual, anterior }: { serie: PuntoFinanzas[]; actual: string; anterior: string | null }) {
@@ -488,14 +488,24 @@ function Grafica({ serie, actual, anterior }: { serie: PuntoFinanzas[]; actual: 
             .filter((l) => !l.guion)
             .map((l) => <circle key={l.nombre} cx={x(hover)} cy={y(l.f(serie[hover])!)} r="4" fill={l.color} stroke="var(--color-surface-raised)" strokeWidth="2" />)}
         {serie.map((p, k) => (
-          <g key={p.etiqueta}>
-            <text x={x(k)} y={ALTO - 6} textAnchor="middle" className="fill-on-surface-muted font-mono text-[10px]">
-              {p.etiqueta}
-            </text>
-            <rect x={x(k) - paso / 2} y={0} width={paso} height={ALTO} fill="transparent" onMouseEnter={() => setHover(k)} />
-          </g>
+          <rect key={p.etiqueta} x={x(k) - paso / 2} y={0} width={paso} height={ALTO} fill="transparent" onMouseEnter={() => setHover(k)} />
         ))}
       </svg>
+      {/* Outside the SVG so the labels keep their size however wide the chart is; the end ones align inward to stay inside it */}
+      <div aria-hidden="true" className="relative h-4 font-mono text-[10px] text-on-surface-muted">
+        {serie.map((p, k) => (
+          <span
+            key={p.etiqueta}
+            className="absolute top-0 whitespace-nowrap"
+            style={{
+              left: `${(x(k) / ANCHO) * 100}%`,
+              transform: serie.length === 1 ? 'translateX(-50%)' : k === 0 ? undefined : k === serie.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)'
+            }}
+          >
+            {p.etiqueta}
+          </span>
+        ))}
+      </div>
       {hover !== null && (
         <div
           role="tooltip"
