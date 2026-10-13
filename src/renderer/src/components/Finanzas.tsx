@@ -489,7 +489,8 @@ function Grafica({ serie, actual, anterior }: { serie: PuntoFinanzas[]; actual: 
             .map((l) => <circle key={l.nombre} cx={x(hover)} cy={y(l.f(serie[hover])!)} r="4" fill={l.color} stroke="var(--color-surface-raised)" strokeWidth="2" />)}
         {serie.map((p, k) => (
           <g key={p.etiqueta}>
-            <text x={x(k)} y={ALTO - 6} textAnchor="middle" className="fill-on-surface-muted font-mono text-[10px]">
+            {/* The end labels align inward so they stay inside the chart */}
+            <text x={x(k)} y={ALTO - 6} textAnchor={serie.length === 1 ? 'middle' : k === 0 ? 'start' : k === serie.length - 1 ? 'end' : 'middle'} className="fill-on-surface-muted font-mono text-[10px]">
               {p.etiqueta}
             </text>
             <rect x={x(k) - paso / 2} y={0} width={paso} height={ALTO} fill="transparent" onMouseEnter={() => setHover(k)} />

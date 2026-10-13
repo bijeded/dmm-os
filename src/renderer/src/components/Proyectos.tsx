@@ -171,7 +171,7 @@ export function Proyectos() {
                   <td data-label="Categoría" className={celdaCls}>
                     {NOMBRES_CATEGORIA[p.categoria]}
                   </td>
-                  <td data-label="Inicio" className={celdaCls}>
+                  <td data-label="Inicio" className={`${celdaCls} whitespace-nowrap`}>
                     {p.fechaInicio ? dia(p.fechaInicio) : '—'}
                   </td>
                   <td data-label="Estado" className={celdaCls}>

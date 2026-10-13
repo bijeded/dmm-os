@@ -140,7 +140,7 @@ export function Cotizaciones() {
                   <td data-label="Ref." className={`${celdaCls} font-mono text-[12px]`}>
                     {c.folio ? folioDmm(c.folio) : '—'}
                   </td>
-                  <td data-label="Fecha" className={celdaCls}>
+                  <td data-label="Fecha" className={`${celdaCls} whitespace-nowrap`}>
                     {dia(c.fecha)}
                   </td>
                   <td data-label="Contacto" className={celdaCls}>
